@@ -2963,6 +2963,7 @@ var _waDebTimer = null;
 var _waAthlete  = null;
 var _waDisc     = '100';
 var _waIndoor   = false;
+var _waYear     = new Date().getFullYear();
 var _waResultsCache = [];
 
 var WA_DISCS = [
@@ -3146,6 +3147,12 @@ function waShowResults() {
     + 'background:' + (_waIndoor ? 'var(--accent)' : 'none') + ';border:1px solid ' + (_waIndoor ? 'var(--accent)' : 'var(--border)') + ';'
     + 'color:' + (_waIndoor ? '#000' : 'var(--muted)') + ';">Indoor</button>'
     + '</div>'
+    + '<div style="display:flex;gap:6px;margin-top:8px;align-items:center;">'
+    + '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;">SAISON</span>'
+    + '<select onchange="waSetYear(parseInt(this.value))" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--text);outline:none;cursor:pointer;">'
+    + (function(){ var opts=''; var y=new Date().getFullYear(); for(var i=y;i>=y-5;i--){ opts+='<option value="'+i+'"'+(i===_waYear?' selected':'')+'>'+i+'</option>'; } return opts; })()
+    + '</select>'
+    + '</div>'
     + '</div>'
     + '<div id="waResultsList" style="padding:8px 0;">'
     + '<div style="padding:20px;text-align:center;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);">⏳ Chargement...</div>'
@@ -3167,9 +3174,14 @@ function waSetIndoor(indoor) {
   waShowResults();
 }
 
+function waSetYear(year) {
+  _waYear = year;
+  waShowResults();
+}
+
 function waLoadResults() {
   var athId = _waAthlete.aaAthleteId || _waAthlete.id;
-  var url = WA_PROXY + '/results?athleteId=' + athId + '&discipline=' + _waDisc + '&indoor=' + _waIndoor;
+  var url = WA_PROXY + '/results?athleteId=' + athId + '&discipline=' + _waDisc + '&indoor=' + _waIndoor + '&year=' + _waYear;
 
   fetch(url)
     .then(function(r) { return r.json(); })
