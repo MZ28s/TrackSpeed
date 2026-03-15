@@ -2953,338 +2953,399 @@ function updateSemModalComp(planifId, semNum, semYear, ci, field, val) {
 }
 
 
+
 // ════════════════════════════════════════════════════════════════
-// ══  RECHERCHE WORLD ATHLETICS  ═════════════════════════════════
+// ══  RECHERCHE WORLD ATHLETICS — Widget flottant  ════════════════
 // ════════════════════════════════════════════════════════════════
 
 var WA_PROXY = 'https://sweet-mode-5d24trackspeed-proxy.mattzecca96.workers.dev';
+var _waDebTimer = null;
+var _waAthlete  = null;
+var _waDisc     = '100';
+var _waIndoor   = false;
+var _waResultsCache = [];
 
-var _waDebounceTimer = null;
-var _waSelectedAthlete = null;
-var _waCurrentDiscipline = '100';
-var _waIsIndoor = false;
-var _waResults = [];
-
-var WA_DISCIPLINES = [
-  { code: '60',   label: '60m'   },
-  { code: '100',  label: '100m'  },
-  { code: '200',  label: '200m'  },
-  { code: '400',  label: '400m'  },
-  { code: '60H',  label: '60m H' },
-  { code: '100H', label: '100m H'},
-  { code: '110H', label: '110m H'},
-  { code: '4x100',label: '4x100m'},
+var WA_DISCS = [
+  { code:'60',   label:'60m'    },
+  { code:'100',  label:'100m'   },
+  { code:'200',  label:'200m'   },
+  { code:'400',  label:'400m'   },
+  { code:'60H',  label:'60m H'  },
+  { code:'100H', label:'100m H' },
+  { code:'110H', label:'110m H' },
+  { code:'4x100',label:'4x100m' },
 ];
 
-function waSearchDebounce(val) {
-  clearTimeout(_waDebounceTimer);
-  if (val.length < 2) {
-    document.getElementById('waSearchDropdown').style.display = 'none';
-    return;
-  }
-  _waDebounceTimer = setTimeout(function() { waSearch(val); }, 400);
+// ── Ouvrir le widget ──────────────────────────────────────────
+function openWAWidget() {
+  if (document.getElementById('waWidgetOverlay')) return;
+
+  var overlay = document.createElement('div');
+  overlay.id = 'waWidgetOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9990;'
+    + 'display:flex;align-items:flex-end;justify-content:center;';
+  overlay.onclick = function(e) { if (e.target === overlay) closeWAWidget(); };
+
+  var panel = document.createElement('div');
+  panel.id = 'waWidgetPanel';
+  panel.style.cssText = 'width:100%;max-width:520px;max-height:92vh;overflow-y:auto;'
+    + 'background:var(--bg);border-radius:18px 18px 0 0;display:flex;flex-direction:column;';
+
+  panel.innerHTML = _waHeaderHTML() + _waSearchHTML() + '<div id="waBody" style="flex:1;overflow-y:auto;"></div>';
+
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+
+  // Focus sur l'input
+  setTimeout(function() {
+    var inp = document.getElementById('waNameInput');
+    if (inp) inp.focus();
+  }, 100);
 }
 
-function waSearch(overrideName) {
-  var name = overrideName || document.getElementById('waSearchInput').value;
-  if (!name || name.length < 2) return;
+function closeWAWidget() {
+  var el = document.getElementById('waWidgetOverlay');
+  if (el) el.remove();
+}
 
-  var dropdown = document.getElementById('waSearchDropdown');
-  dropdown.innerHTML = '<div style="padding:12px;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted);text-align:center;">⏳ Recherche...</div>';
-  dropdown.style.display = 'block';
+function _waHeaderHTML() {
+  return '<div style="display:flex;align-items:center;justify-content:space-between;'
+    + 'padding:16px 18px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">'
+    + '<div>'
+    + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:var(--text);letter-spacing:1px;line-height:1;">WORLD ATHLETICS</div>'
+    + '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);margin-top:3px;">Recherche et import de résultats officiels</div>'
+    + '</div>'
+    + '<button onclick="closeWAWidget()" style="background:var(--surface2);border:none;border-radius:50%;'
+    + 'width:32px;height:32px;font-size:16px;color:var(--muted);cursor:pointer;">✕</button>'
+    + '</div>';
+}
+
+function _waSearchHTML() {
+  return '<div style="padding:14px 18px 10px;flex-shrink:0;">'
+    + '<div style="display:flex;gap:8px;">'
+    + '<input id="waNameInput" type="text" placeholder="Nom de l\'athlète..." '
+    + 'style="flex:1;padding:11px 14px;background:var(--surface2);border:1px solid var(--border);'
+    + 'border-radius:8px;color:var(--text);font-family:\'DM Mono\',monospace;font-size:13px;outline:none;" '
+    + 'oninput="waDebounce(this.value)" onkeydown="if(event.key===\'Enter\')waDoSearch()">'
+    + '<button onclick="waDoSearch()" '
+    + 'style="background:var(--accent);border:none;border-radius:8px;padding:11px 16px;'
+    + 'font-family:\'Bebas Neue\',sans-serif;font-size:16px;color:#000;cursor:pointer;letter-spacing:1px;white-space:nowrap;">'
+    + '🔍 GO</button>'
+    + '</div>'
+    + '</div>';
+}
+
+function waDebounce(val) {
+  clearTimeout(_waDebTimer);
+  if (val.length >= 2) _waDebTimer = setTimeout(waDoSearch, 500);
+}
+
+// ── Recherche athlètes ────────────────────────────────────────
+function waDoSearch() {
+  var name = (document.getElementById('waNameInput') || {}).value || '';
+  if (name.length < 2) return;
+
+  _waSetBody('<div style="padding:24px;text-align:center;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);">⏳ Recherche de <strong style="color:var(--text);">' + name + '</strong>...</div>');
 
   fetch(WA_PROXY + '/search?name=' + encodeURIComponent(name))
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      var athletes = data.athletes || [];
-      if (!athletes.length) {
-        dropdown.innerHTML = '<div style="padding:12px;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted);text-align:center;">Aucun résultat pour &quot;' + name + '&quot;</div>';
+      // Debug : afficher ce qu'on reçoit si aucun athlète
+      if (data.debug) {
+        _waSetBody('<div style="padding:16px;font-family:\'DM Mono\',monospace;font-size:9px;color:#ef4444;">'
+          + '<div style="margin-bottom:6px;color:var(--accent);">DEBUG — Réponse brute du Worker :</div>'
+          + '<div style="background:var(--surface2);padding:10px;border-radius:4px;white-space:pre-wrap;word-break:break-all;">'
+          + JSON.stringify(data.debug, null, 2) + '</div></div>');
         return;
       }
-      dropdown.innerHTML = '';
-      athletes.forEach(function(a) {
-        var div = document.createElement('div');
-        div.style.cssText = 'padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);'
-          + 'display:flex;align-items:center;justify-content:space-between;';
-        div.onmouseover = function() { this.style.background = 'var(--surface2)'; };
-        div.onmouseout  = function() { this.style.background = ''; };
-        
-        var disciplines = (a.disciplines || []).filter(function(d) {
-          return ['100','200','400','60','100H','110H','60H','4x100'].indexOf(d) !== -1;
-        }).join(' · ');
 
-        div.innerHTML = '<div>'
-          + '<div style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--text);">' + a.name + '</div>'
-          + '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);margin-top:2px;">'
-          + a.country + (a.birthDate ? ' · ' + a.birthDate.substring(0,4) : '')
-          + (disciplines ? ' · ' + disciplines : '')
-          + '</div></div>'
-          + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:12px;color:var(--muted);">›</div>';
-        
-        div.onclick = (function(athlete) { return function() { waSelectAthlete(athlete); }; })(a);
-        dropdown.appendChild(div);
-      });
+      var athletes = data.athletes || [];
+      if (!athletes.length) {
+        var errMsg = data.error ? '<div style="color:#ef4444;margin-top:6px;">Erreur: ' + data.error + '</div>' : '';
+        var rawMsg = data.rawSample ? '<div style="margin-top:8px;background:var(--surface2);padding:8px;border-radius:4px;font-size:8px;word-break:break-all;">' + data.rawSample + '</div>' : '';
+        _waSetBody('<div style="padding:20px 18px;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);">'
+          + 'Aucun résultat pour &laquo; ' + name + ' &raquo;' + errMsg + rawMsg + '</div>');
+        return;
+      }
+      _waRenderAthleteList(athletes);
     })
     .catch(function(err) {
-      dropdown.innerHTML = '<div style="padding:12px;font-family:\'DM Mono\',monospace;font-size:9px;color:#ef4444;text-align:center;">Erreur: ' + err.message + '</div>';
+      _waSetBody('<div style="padding:20px 18px;font-family:\'DM Mono\',monospace;font-size:9px;color:#ef4444;">'
+        + '❌ Erreur réseau : ' + err.message + '<br><br>'
+        + '<span style="color:var(--muted);">Vérifie que le Worker Cloudflare est déployé et actif.</span></div>');
     });
 }
 
-function waSelectAthlete(athlete) {
-  _waSelectedAthlete = athlete;
-  document.getElementById('waSearchInput').value = athlete.name;
-  document.getElementById('waSearchDropdown').style.display = 'none';
-
-  // Afficher les filtres de discipline
-  var filterEl = document.getElementById('waDisciplineFilter');
-  filterEl.style.display = 'block';
-
-  // Construire les boutons de discipline basés sur ce que l'athlète pratique
-  var btnsEl = document.getElementById('waDisciplineBtns');
-  btnsEl.innerHTML = '';
-  var athleteDisciplines = athlete.disciplines || [];
-  
-  var shown = WA_DISCIPLINES.filter(function(d) {
-    return athleteDisciplines.length === 0 || athleteDisciplines.indexOf(d.code) !== -1;
+// ── Liste athlètes ────────────────────────────────────────────
+function _waRenderAthleteList(athletes) {
+  var html = '<div style="padding:6px 0;">';
+  athletes.forEach(function(a, i) {
+    html += '<div onclick="waPickAthlete(' + i + ')" '
+      + 'style="display:flex;align-items:center;gap:12px;padding:11px 18px;cursor:pointer;'
+      + 'border-bottom:1px solid var(--border);" '
+      + 'onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">'
+      + '<div style="flex:1;">'
+      + '<div style="font-family:\'DM Mono\',monospace;font-size:12px;color:var(--text);font-weight:bold;">' + a.name + '</div>'
+      + '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);margin-top:2px;">'
+      + a.country
+      + (a.birthDate ? ' · ' + a.birthDate.substring(0,4) : '')
+      + (a.id ? ' · ID: ' + a.id : '')
+      + '</div>'
+      + '</div>'
+      + '<div style="font-family:\'DM Mono\',monospace;font-size:14px;color:var(--muted);">›</div>'
+      + '</div>';
   });
-  if (!shown.length) shown = WA_DISCIPLINES.slice(0, 5);
+  html += '</div>';
 
-  shown.forEach(function(d) {
-    var btn = document.createElement('button');
-    var active = d.code === _waCurrentDiscipline;
-    btn.textContent = d.label;
-    btn.style.cssText = 'font-family:\'Bebas Neue\',sans-serif;font-size:14px;padding:4px 12px;border-radius:3px;cursor:pointer;'
+  // Stocker les athlètes dans une variable globale accessible
+  window._waAthleteList = athletes;
+  _waSetBody(html);
+}
+
+function waPickAthlete(idx) {
+  _waAthlete = (window._waAthleteList || [])[idx];
+  if (!_waAthlete) return;
+  _waDisc = '100';
+  _waIndoor = false;
+  waShowResults();
+}
+
+// ── Résultats ─────────────────────────────────────────────────
+function waShowResults() {
+  if (!_waAthlete) return;
+
+  // Afficher les filtres + spinner
+  var athId = _waAthlete.aaAthleteId || _waAthlete.id;
+  var html = '<div style="padding:12px 18px;border-bottom:1px solid var(--border);flex-shrink:0;">'
+    // Retour
+    + '<button onclick="waDoSearch()" style="background:none;border:none;font-family:\'DM Mono\',monospace;'
+    + 'font-size:9px;color:var(--muted);cursor:pointer;padding:0;margin-bottom:8px;">← Retour</button>'
+    // Nom athlète
+    + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:var(--text);line-height:1;">' + _waAthlete.name + '</div>'
+    + '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);margin-top:2px;">'
+    + _waAthlete.country + (athId ? ' · WA ID: ' + athId : '') + '</div>'
+    // Filtres discipline
+    + '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;">';
+
+  WA_DISCS.forEach(function(d) {
+    var active = d.code === _waDisc;
+    html += '<button onclick="waSetDisc(\'' + d.code + '\')" '
+      + 'style="font-family:\'Bebas Neue\',sans-serif;font-size:13px;padding:4px 12px;border-radius:20px;cursor:pointer;'
       + 'background:' + (active ? 'var(--accent)' : 'none') + ';'
       + 'border:1px solid ' + (active ? 'var(--accent)' : 'var(--border)') + ';'
-      + 'color:' + (active ? '#000' : 'var(--muted)') + ';';
-    btn.onclick = (function(code) { return function() {
-      _waCurrentDiscipline = code;
-      waFetchResults();
-      waSelectAthlete(_waSelectedAthlete); // refresh boutons
-    }; })(d.code);
-    btnsEl.appendChild(btn);
+      + 'color:' + (active ? '#000' : 'var(--muted)') + ';">' + d.label + '</button>';
   });
 
-  waFetchResults();
+  html += '</div>'
+    // Indoor/Outdoor
+    + '<div style="display:flex;gap:6px;margin-top:8px;">'
+    + '<button onclick="waSetIndoor(false)" style="font-family:\'DM Mono\',monospace;font-size:8px;padding:4px 10px;border-radius:20px;cursor:pointer;'
+    + 'background:' + (!_waIndoor ? 'var(--accent)' : 'none') + ';border:1px solid ' + (!_waIndoor ? 'var(--accent)' : 'var(--border)') + ';'
+    + 'color:' + (!_waIndoor ? '#000' : 'var(--muted)') + ';">Outdoor</button>'
+    + '<button onclick="waSetIndoor(true)" style="font-family:\'DM Mono\',monospace;font-size:8px;padding:4px 10px;border-radius:20px;cursor:pointer;'
+    + 'background:' + (_waIndoor ? 'var(--accent)' : 'none') + ';border:1px solid ' + (_waIndoor ? 'var(--accent)' : 'var(--border)') + ';'
+    + 'color:' + (_waIndoor ? '#000' : 'var(--muted)') + ';">Indoor</button>'
+    + '</div>'
+    + '</div>'
+    + '<div id="waResultsList" style="padding:8px 0;">'
+    + '<div style="padding:20px;text-align:center;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);">⏳ Chargement...</div>'
+    + '</div>';
+
+  _waSetBody(html);
+
+  // Charger les résultats
+  waLoadResults();
 }
 
-function waToggleIndoor(indoor) {
-  _waIsIndoor = indoor;
-  var inBtn  = document.getElementById('waIndoorBtn');
-  var outBtn = document.getElementById('waOutdoorBtn');
-  if (indoor) {
-    inBtn.style.background  = 'none'; inBtn.style.borderColor = 'var(--border)'; inBtn.style.color = 'var(--muted)';
-    outBtn.style.background = 'var(--accent)'; outBtn.style.borderColor = 'var(--accent)'; outBtn.style.color = '#000';
-    outBtn.textContent = 'Indoor';
-    inBtn.textContent  = 'Outdoor';
-  } else {
-    outBtn.style.background = 'none'; outBtn.style.borderColor = 'var(--border)'; outBtn.style.color = 'var(--muted)';
-    inBtn.style.background  = 'var(--accent)'; inBtn.style.borderColor = 'var(--accent)'; inBtn.style.color = '#000';
-    inBtn.textContent  = 'Outdoor';
-    outBtn.textContent = 'Indoor';
-  }
-  waFetchResults();
+function waSetDisc(code) {
+  _waDisc = code;
+  waShowResults();
 }
 
-function waFetchResults() {
-  if (!_waSelectedAthlete) return;
-  var container = document.getElementById('waResultsContainer');
-  container.innerHTML = '<div style="padding:16px;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted);text-align:center;">⏳ Chargement des résultats...</div>';
+function waSetIndoor(indoor) {
+  _waIndoor = indoor;
+  waShowResults();
+}
 
-  var url = WA_PROXY + '/results?athleteId=' + (_waSelectedAthlete.aaAthleteId || _waSelectedAthlete.id)
-    + '&discipline=' + _waCurrentDiscipline
-    + '&indoor=' + _waIsIndoor;
+function waLoadResults() {
+  var athId = _waAthlete.aaAthleteId || _waAthlete.id;
+  var url = WA_PROXY + '/results?athleteId=' + athId + '&discipline=' + _waDisc + '&indoor=' + _waIndoor;
 
   fetch(url)
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      _waResults = data.results || [];
-      waRenderResults(data);
+      if (data.debug) {
+        var listEl = document.getElementById('waResultsList');
+        if (listEl) listEl.innerHTML = '<div style="padding:12px 18px;font-family:\'DM Mono\',monospace;font-size:9px;color:#f59e0b;">'
+          + '<div style="margin-bottom:4px;">⚠️ DEBUG — Structure réponse inattendue :</div>'
+          + '<div style="background:var(--surface2);padding:8px;border-radius:4px;white-space:pre-wrap;font-size:8px;">'
+          + JSON.stringify(data.debug, null, 2) + '</div></div>';
+        return;
+      }
+
+      _waResultsCache = data.results || [];
+      _waRenderResults(_waResultsCache);
     })
     .catch(function(err) {
-      container.innerHTML = '<div style="padding:16px;font-family:\'DM Mono\',monospace;font-size:9px;color:#ef4444;text-align:center;">Erreur: ' + err.message + '</div>';
+      var listEl = document.getElementById('waResultsList');
+      if (listEl) listEl.innerHTML = '<div style="padding:16px 18px;font-family:\'DM Mono\',monospace;font-size:9px;color:#ef4444;">❌ ' + err.message + '</div>';
     });
 }
 
-function waImportIdx(idx) {
-  var r = _waResults[idx];
-  if (!r) return;
-  waImportResult({ time: r.time, date: r.date, dist: parseInt(_waCurrentDiscipline) });
-}
-
-function waRenderResults(data) {
-  var container = document.getElementById('waResultsContainer');
-  var results = data.results || [];
+function _waRenderResults(results) {
+  var listEl = document.getElementById('waResultsList');
+  if (!listEl) return;
 
   if (!results.length) {
-    container.innerHTML = '<div style="padding:16px;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted);text-align:center;">'
-      + 'Aucun résultat en ' + _waCurrentDiscipline + 'm ' + (_waIsIndoor ? 'indoor' : 'outdoor') + ' pour ' + _waSelectedAthlete.name + '</div>';
+    listEl.innerHTML = '<div style="padding:20px 18px;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);text-align:center;">'
+      + 'Aucun résultat en ' + _waDisc + 'm ' + (_waIndoor ? 'indoor' : 'outdoor') + '</div>';
     return;
   }
 
   // Grouper par année
-  var byYear = {};
-  var yearOrder = [];
+  var byYear = {}, yearOrder = [];
   results.forEach(function(r) {
-    var year = r.date ? r.date.substring(0,4) : '?';
-    if (!byYear[year]) { byYear[year] = []; yearOrder.push(year); }
-    byYear[year].push(r);
+    var y = (r.date || '').substring(0, 4) || '?';
+    if (!byYear[y]) { byYear[y] = []; yearOrder.push(y); }
+    byYear[y].push(r);
   });
-  yearOrder.sort(function(a,b){return b-a;});
+  yearOrder.sort(function(a, b) { return b - a; });
 
-  var html = '<div style="margin-top:4px;">';
-
-  // Header athlète
-  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding:10px 12px;'
-    + 'background:var(--surface);border:1px solid var(--border);border-radius:6px;">'
-    + '<div>'
-    + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--text);">' + _waSelectedAthlete.name + '</div>'
-    + '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);">'
-    + _waSelectedAthlete.country
-    + (_waSelectedAthlete.birthDate ? ' · ' + _waSelectedAthlete.birthDate.substring(0,4) : '')
-    + ' · ' + results.length + ' résultats</div>'
-    + '</div>'
-    + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;color:var(--accent);">' + _waCurrentDiscipline + 'm</div>'
-    + '</div>';
-
+  var html = '';
   yearOrder.forEach(function(year) {
-    var yearResults = byYear[year];
-    var best = yearResults.reduce(function(b, r) { return (!b || r.time < b.time) ? r : b; }, null);
-    
-    html += '<div style="margin-bottom:12px;">'
-      + '<div style="display:flex;align-items:center;justify-content:space-between;'
-      + 'font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:2px;color:var(--muted);'
-      + 'padding:4px 0;border-bottom:1px solid var(--border);margin-bottom:6px;">'
-      + '<span>' + year + '</span>'
-      + (best ? '<span style="color:var(--accent);font-family:\'Bebas Neue\',sans-serif;font-size:14px;">SB ' + best.time + '</span>' : '')
-      + '</div>';
+    var yr = byYear[year];
+    var best = yr.reduce(function(b, r) { return !b || String(r.time) < String(b.time) ? r : b; }, null);
 
-    yearResults.forEach(function(r) {
-      var _waResultIdx = _waResults.indexOf(r);
+    html += '<div style="padding:6px 18px 2px;">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;'
+      + 'font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:2px;color:var(--muted);'
+      + 'padding:4px 0;border-bottom:1px solid var(--border);margin-bottom:4px;">'
+      + '<span>' + year + '</span>'
+      + (best ? '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:13px;color:var(--accent);">SB ' + best.time + '</span>' : '')
+      + '</div></div>';
+
+    yr.forEach(function(r, ri) {
       var isBest = best && r.time === best.time;
-      html += '<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;margin-bottom:3px;'
-        + 'background:' + (isBest ? 'rgba(245,200,0,0.06)' : 'var(--surface)') + ';'
-        + 'border:1px solid ' + (isBest ? 'rgba(245,200,0,0.3)' : 'var(--border)') + ';'
-        + 'border-radius:4px;">'
+      var globalIdx = results.indexOf(r);
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 18px;'
+        + 'background:' + (isBest ? 'rgba(245,200,0,0.06)' : 'transparent') + ';'
+        + 'border-bottom:1px solid var(--border);">'
         // Temps
-        + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:'
-        + (isBest ? 'var(--accent)' : 'var(--text)') + ';min-width:72px;">' + (r.time || '—') + '</div>'
+        + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;line-height:1;min-width:74px;'
+        + 'color:' + (isBest ? 'var(--accent)' : 'var(--text)') + ';">' + (r.time || '—') + '</div>'
         // Wind
-        + (r.wind ? '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);min-width:30px;">'
-          + (r.wind > 0 ? '+' : '') + r.wind + '</div>' : '<div style="min-width:30px;"></div>')
+        + (r.wind != null ? '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);min-width:32px;">'
+          + (r.wind > 0 ? '+' : '') + r.wind + '</div>' : '<div style="min-width:32px;"></div>')
         // Infos
         + '<div style="flex:1;min-width:0;">'
-          + '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
-          + (r.competition || '') + '</div>'
-          + '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:var(--muted);margin-top:1px;">'
-          + (r.date ? r.date.substring(0,10) : '') + (r.city ? ' · ' + r.city : '') + '</div>'
+        + '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--text);'
+        + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (r.competition || '—') + '</div>'
+        + '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:var(--muted);margin-top:2px;">'
+        + (r.date ? r.date.substring(0, 10) : '') + (r.city ? ' · ' + r.city : '') + '</div>'
         + '</div>'
         // Place
-        + (r.place ? '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:14px;color:var(--muted);min-width:24px;text-align:right;">' + r.place + '</div>' : '')
-        // Bouton import
-        + '<button onclick="waImportIdx(' + _waResultIdx + ')" '
-        + 'style="background:none;border:1px solid var(--border);border-radius:3px;padding:3px 8px;'
-        + 'font-family:\'DM Mono\',monospace;font-size:7px;color:var(--muted);cursor:pointer;'
-        + 'white-space:nowrap;flex-shrink:0;">+ Importer</button>'
+        + (r.place ? '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:13px;color:var(--muted);flex-shrink:0;">' + r.place + '</div>' : '')
+        // Import
+        + '<button onclick="waImport(' + globalIdx + ')" '
+        + 'style="flex-shrink:0;background:none;border:1px solid var(--border);border-radius:20px;'
+        + 'padding:4px 10px;font-family:\'DM Mono\',monospace;font-size:7px;letter-spacing:1px;'
+        + 'color:var(--muted);cursor:pointer;white-space:nowrap;">+ IMPORT</button>'
         + '</div>';
     });
-    html += '</div>';
   });
-  html += '</div>';
-  container.innerHTML = html;
+
+  listEl.innerHTML = html;
 }
 
-function waImportResult(result) {
-  // Chercher le profil actif dans l'onglet saison
-  var pid = document.getElementById('saisonAthleteSelect') ? document.getElementById('saisonAthleteSelect').value : null;
-  
-  // Si un athlète WA est sélectionné, on peut aussi chercher par nom
-  if (!pid && _waSelectedAthlete) {
+// ── Import ────────────────────────────────────────────────────
+function waImport(idx) {
+  var r = _waResultsCache[idx];
+  if (!r || !r.time) return;
+
+  // Chercher un profil correspondant
+  var pid = null;
+  if (_waAthlete) {
     var match = profiles.find(function(p) {
-      return p.name.toLowerCase().indexOf(_waSelectedAthlete.name.split(' ')[0].toLowerCase()) !== -1;
+      return p.name.toLowerCase().split(' ').some(function(part) {
+        return _waAthlete.name.toLowerCase().indexOf(part) !== -1 && part.length > 2;
+      });
     });
     if (match) pid = match.id;
   }
 
-  // Modal de sélection du profil si pas trouvé
-  if (!pid || !profiles.find(function(p){return p.id===pid;})) {
-    waShowImportModal(result);
+  if (!pid) {
+    _waShowImportPicker(r);
     return;
   }
-
-  waDoImport(pid, result);
+  _waDoImport(pid, r);
 }
 
-function waShowImportModal(result) {
-  var overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
-  overlay.onclick = function(e){ if(e.target===overlay) overlay.remove(); };
-  
-  var panel = document.createElement('div');
-  panel.style.cssText = 'background:var(--bg);border-radius:10px;padding:20px;width:280px;max-width:90vw;';
-  panel.innerHTML = '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--text);margin-bottom:4px;">IMPORTER</div>'
-    + '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted);margin-bottom:14px;">'
-    + result.time + ' · ' + result.dist + 'm · ' + (result.date||'').substring(0,10) + '</div>'
-    + '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);margin-bottom:6px;">CHOISIR UN ATHLÈTE</div>';
+function _waShowImportPicker(r) {
+  var html = '<div style="padding:16px 18px;border-top:2px solid var(--accent);">'
+    + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;color:var(--text);margin-bottom:4px;">IMPORTER DANS...</div>'
+    + '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted);margin-bottom:12px;">'
+    + r.time + ' · ' + _waDisc + 'm · ' + (r.date || '').substring(0, 10) + '</div>';
 
   profiles.forEach(function(p) {
-    var btn = document.createElement('button');
-    btn.textContent = p.name;
-    btn.style.cssText = 'width:100%;background:var(--surface);border:1px solid var(--border);border-radius:4px;'
-      + 'padding:8px 12px;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--text);'
-      + 'cursor:pointer;text-align:left;margin-bottom:4px;display:block;';
-    btn.onclick = (function(pid) { return function() { overlay.remove(); waDoImport(pid, result); }; })(p.id);
-    panel.appendChild(btn);
+    html += '<button onclick="waDoImportPick(\'' + p.id + '\',' + _waResultsCache.indexOf(r) + ')" '
+      + 'style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;'
+      + 'padding:10px 14px;font-family:\'DM Mono\',monospace;font-size:11px;color:var(--text);'
+      + 'cursor:pointer;text-align:left;margin-bottom:5px;display:block;">' + p.name + '</button>';
   });
 
-  var cancelBtn = document.createElement('button');
-  cancelBtn.textContent = 'Annuler';
-  cancelBtn.style.cssText = 'width:100%;background:none;border:1px solid var(--border);border-radius:4px;'
-    + 'padding:8px;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted);cursor:pointer;margin-top:4px;';
-  cancelBtn.onclick = function(){ overlay.remove(); };
-  panel.appendChild(cancelBtn);
-  overlay.appendChild(panel);
-  document.body.appendChild(overlay);
+  html += '<button onclick="this.parentElement.remove()" style="background:none;border:none;'
+    + 'font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted);cursor:pointer;margin-top:4px;">Annuler</button>'
+    + '</div>';
+
+  var listEl = document.getElementById('waResultsList');
+  if (listEl) {
+    var picker = document.createElement('div');
+    picker.innerHTML = html;
+    listEl.appendChild(picker.firstChild);
+  }
 }
 
-function waDoImport(pid, result) {
-  var profile = profiles.find(function(p){return p.id===pid;});
-  if (!profile) return;
+function waDoImportPick(pid, idx) {
+  _waDoImport(pid, _waResultsCache[idx]);
+}
 
+function _waDoImport(pid, r) {
+  var profile = profiles.find(function(p) { return p.id === pid; });
+  if (!profile) return;
   if (!profile.competResults) profile.competResults = [];
 
-  // Vérifier si ce résultat existe déjà
-  var exists = profile.competResults.some(function(r) {
-    return r.time === result.time && r.dist === result.dist && r.date === result.date;
+  var exists = profile.competResults.some(function(x) {
+    return String(x.time) === String(r.time) && x.dist === parseInt(_waDisc) && x.date === (r.date || '').substring(0, 10);
   });
-  if (exists) {
-    alert(profile.name + ' : ce résultat est déjà dans le profil.');
-    return;
-  }
+  if (exists) { alert(profile.name + ' : résultat déjà présent.'); return; }
 
-  // Calculer la saison
-  var year = result.date ? parseInt(result.date.substring(0,4)) : new Date().getFullYear();
-  var month = result.date ? parseInt(result.date.substring(5,7)) : 1;
-  var saison = (month >= 10 ? year : year-1) + '/' + String(month >= 10 ? year+1 : year).slice(-2);
+  var dateStr = (r.date || '').substring(0, 10);
+  var year  = dateStr ? parseInt(dateStr.substring(0, 4)) : new Date().getFullYear();
+  var month = dateStr ? parseInt(dateStr.substring(5, 7)) : 1;
+  var saison = (month >= 10 ? year : year - 1) + '/' + String(month >= 10 ? year + 1 : year).slice(-2);
 
   profile.competResults.push({
-    date: result.date || new Date().toISOString().substring(0,10),
-    dist: result.dist,
-    time: result.time,
+    date: dateStr,
+    dist: parseInt(_waDisc),
+    time: r.time,
     saison: saison,
-    source: 'worldathletics'
+    source: 'worldathletics',
   });
-
   localStorage.setItem('sc_profiles', JSON.stringify(profiles));
 
-  // Feedback visuel
+  // Toast
   var toast = document.createElement('div');
   toast.textContent = '✅ Importé dans ' + profile.name;
-  toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);'
-    + 'background:#22c55e;color:#000;font-family:\'DM Mono\',monospace;font-size:10px;'
-    + 'padding:10px 18px;border-radius:20px;z-index:9999;white-space:nowrap;';
+  toast.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);'
+    + 'background:#22c55e;color:#000;font-family:\'DM Mono\',monospace;font-size:10px;letter-spacing:1px;'
+    + 'padding:10px 20px;border-radius:20px;z-index:99999;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
   document.body.appendChild(toast);
-  setTimeout(function(){ toast.remove(); }, 2500);
+  setTimeout(function() { toast.remove(); }, 2500);
+}
+
+function _waSetBody(html) {
+  var body = document.getElementById('waBody');
+  if (body) body.innerHTML = html;
 }
 
 
@@ -8109,6 +8170,19 @@ setTimeout(() => {
   <!-- Contrôle genre + standard par athlète (rendu dynamiquement dans renderSaison) -->
   <div id="saisonStandardControls" style="margin-bottom:10px;"></div>
 
+  <!-- Bouton World Athletics -->
+  <button onclick="openWAWidget()"
+    style="width:100%;background:none;border:1px solid var(--border);border-radius:6px;
+           padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;gap:10px;
+           cursor:pointer;text-align:left;">
+    <span style="font-size:20px;">🌍</span>
+    <div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--text);letter-spacing:1px;line-height:1;">RECHERCHE WORLD ATHLETICS</div>
+      <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:2px;">Chercher un athlète et importer ses résultats officiels</div>
+    </div>
+    <span style="margin-left:auto;font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);">›</span>
+  </button>
+
   <!-- Sélecteur saison + athlète -->
   <div class="card" style="margin-bottom:12px;">
     <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
@@ -8183,48 +8257,6 @@ setTimeout(() => {
     <div id="saisonResultsList"></div>
   </div>
 
-  <!-- ══ RECHERCHE WORLD ATHLETICS ══ -->
-  <div class="card" style="margin-top:12px;">
-    <div class="card-title">// Recherche World Athletics</div>
-
-    <!-- Champ de recherche -->
-    <div style="display:flex;gap:8px;margin-bottom:10px;">
-      <div style="flex:1;position:relative;">
-        <input id="waSearchInput" type="text" placeholder="Nom de l'athlète (ex: Kambundji)"
-          style="width:100%;box-sizing:border-box;padding:10px 12px;background:var(--surface2);
-                 border:1px solid var(--border);border-radius:4px;color:var(--text);
-                 font-family:'DM Mono',monospace;font-size:12px;outline:none;"
-          oninput="waSearchDebounce(this.value)"
-          onkeydown="if(event.key==='Enter') waSearch()">
-        <!-- Dropdown résultats de recherche -->
-        <div id="waSearchDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:1000;
-             background:var(--surface);border:1px solid var(--border);border-radius:0 0 6px 6px;
-             max-height:220px;overflow-y:auto;"></div>
-      </div>
-      <button onclick="waSearch()"
-        style="background:var(--accent);border:none;border-radius:4px;padding:10px 16px;
-               font-family:'Bebas Neue',sans-serif;font-size:16px;color:#000;cursor:pointer;
-               white-space:nowrap;letter-spacing:1px;">🔍 CHERCHER</button>
-    </div>
-
-    <!-- Filtres discipline -->
-    <div id="waDisciplineFilter" style="display:none;margin-bottom:10px;">
-      <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;">DISCIPLINE</div>
-      <div style="display:flex;flex-wrap:wrap;gap:5px;" id="waDisciplineBtns"></div>
-      <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
-        <label style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--muted);">TYPE</label>
-        <button id="waIndoorBtn" onclick="waToggleIndoor(false)"
-          style="font-family:'DM Mono',monospace;font-size:8px;padding:4px 10px;border-radius:3px;
-                 background:var(--accent);border:1px solid var(--accent);color:#000;cursor:pointer;">Outdoor</button>
-        <button id="waOutdoorBtn" onclick="waToggleIndoor(true)"
-          style="font-family:'DM Mono',monospace;font-size:8px;padding:4px 10px;border-radius:3px;
-                 background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;">Indoor</button>
-      </div>
-    </div>
-
-    <!-- Résultats WA -->
-    <div id="waResultsContainer"></div>
-  </div>
 </div>
 
 </body>
