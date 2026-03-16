@@ -997,7 +997,6 @@ body.light-theme canvas { filter:invert(0); }
       </div>
     </button>
   </div>
-  </div>
 
   <!-- Sélecteur saison + athlète -->
   <div class="card" style="margin-bottom:12px;">
@@ -1078,6 +1077,8 @@ body.light-theme canvas { filter:invert(0); }
 
 
 
+
+</div>
 
 <!-- ══ PAGE PLANIFICATION ANNUELLE ══ -->
 <div class="page" id="page-planif">
@@ -7743,29 +7744,27 @@ function openSAWidget() {
     if (f) f.src = buildUrl();
   }
   function updateBtns() {
-    var outBtn = document.getElementById('saOutBtn');
-    var inBtn  = document.getElementById('saInBtn');
-    if (!outBtn || !inBtn) return;
+    var out = document.getElementById('saOutBtn');
+    var ind = document.getElementById('saInBtn');
+    if (!out || !ind) return;
     var isOut = state.indoor === 'false';
-    outBtn.style.background  = isOut ? 'var(--accent)' : 'var(--surface2)';
-    outBtn.style.borderColor = isOut ? 'var(--accent)' : 'var(--border)';
-    outBtn.style.color       = isOut ? '#000' : 'var(--muted)';
-    inBtn.style.background   = !isOut ? 'var(--accent)' : 'var(--surface2)';
-    inBtn.style.borderColor  = !isOut ? 'var(--accent)' : 'var(--border)';
-    inBtn.style.color        = !isOut ? '#000' : 'var(--muted)';
+    out.style.background  = isOut ? 'var(--accent)' : 'var(--surface2)';
+    out.style.borderColor = isOut ? 'var(--accent)' : 'var(--border)';
+    out.style.color       = isOut ? '#000' : 'var(--muted)';
+    ind.style.background  = !isOut ? 'var(--accent)' : 'var(--surface2)';
+    ind.style.borderColor = !isOut ? 'var(--accent)' : 'var(--border)';
+    ind.style.color       = !isOut ? '#000' : 'var(--muted)';
   }
 
-  // Overlay
   var overlay = document.createElement('div');
   overlay.id = 'saOverlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;display:flex;flex-direction:column;';
 
-  // Header
   var header = document.createElement('div');
   header.style.cssText = 'flex-shrink:0;background:var(--surface);border-bottom:2px solid var(--border);padding:8px 14px;display:flex;align-items:center;gap:10px;';
 
   var title = document.createElement('span');
-  title.textContent = '\uD83C\uDDE8\uD83C\uDDED SWISS ATHLETICS';
+  title.textContent = '🇨🇭 SWISS ATHLETICS';
   title.style.cssText = "font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--text);flex:1;";
 
   var yearSel = document.createElement('select');
@@ -7790,7 +7789,7 @@ function openSAWidget() {
   inBtn.addEventListener('click', function() { state.indoor = 'true'; updateBtns(); reloadIframe(); });
 
   var closeBtn = document.createElement('button');
-  closeBtn.textContent = '\u2715';
+  closeBtn.textContent = '×';
   closeBtn.style.cssText = 'background:none;border:none;font-size:18px;color:var(--muted);cursor:pointer;padding:0 4px;';
   closeBtn.addEventListener('click', closeSAWidget);
 
@@ -7800,7 +7799,6 @@ function openSAWidget() {
   header.appendChild(inBtn);
   header.appendChild(closeBtn);
 
-  // iframe
   var iframeWrap = document.createElement('div');
   iframeWrap.style.cssText = 'flex:1;overflow:hidden;background:#fff;';
   var iframe = document.createElement('iframe');
