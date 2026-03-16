@@ -3863,32 +3863,39 @@ function waDoSearch() {
 
   _waSetBody('<div style="padding:24px;text-align:center;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);">⏳ Recherche de <strong style="color:var(--text);">' + name + '</strong>...</div>');
 
-  fetch(WA_PROXY + '/search?name=' + encodeURIComponent(name))
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      // Debug : afficher ce qu'on reçoit si aucun athlète
-      if (data.debug) {
-        _waSetBody('<div style="padding:16px;font-family:\'DM Mono\',monospace;font-size:9px;color:#ef4444;">'
-          + '<div style="margin-bottom:6px;color:var(--accent);">DEBUG — Réponse brute du Worker :</div>'
-          + '<div style="background:var(--surface2);padding:10px;border-radius:4px;white-space:pre-wrap;word-break:break-all;">'
-          + JSON.stringify(data.debug, null, 2) + '</div></div>');
-        return;
+  // Scraping direct côté browser (évite le bot-detection de Cloudflare Worker)
+  fetch('https://worldathletics.org/athletes?query=' + encodeURIComponent(name), {
+    headers: { 'Accept': 'text/html', 'Accept-Language': 'en-US,en;q=0.9' }
+  })
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+      // Parser les liens d'athlètes : /athletes/COUNTRY/FIRSTNAME-LASTNAME-ID
+      var re = /href="\/athletes\/([a-z0-9-]+)\/([a-z0-9-]+-([0-9]{6,12}))"/gi;
+      var seen = {};
+      var athletes = [];
+      var m;
+      while ((m = re.exec(html)) !== null && athletes.length < 15) {
+        var country = m[1];
+        var slug    = m[2];
+        var id      = parseInt(m[3]);
+        if (!id || seen[id]) continue;
+        seen[id] = true;
+        var linkStart = m.index;
+        var linkEnd   = html.indexOf('<\/a>', linkStart);
+        var linkHtml  = html.substring(linkStart, linkEnd + 4);
+        var nameMatch = linkHtml.match(/>([^<]{2,60})</);
+        var rawName   = nameMatch ? nameMatch[1].trim() : slug.replace(/-[0-9]+$/, '').replace(/-/g, ' ').toUpperCase();
+        var cc = country.replace(/-/g, '').toUpperCase().substring(0, 3);
+        athletes.push({ id: id, aaAthleteId: id, name: rawName, country: cc, countryCode: cc, birthDate: '', urlSlug: country + '/' + slug });
       }
-
-      var athletes = data.athletes || [];
       if (!athletes.length) {
-        var errMsg = data.error ? '<div style="color:#ef4444;margin-top:6px;">Erreur: ' + data.error + '</div>' : '';
-        var rawMsg = data.rawSample ? '<div style="margin-top:8px;background:var(--surface2);padding:8px;border-radius:4px;font-size:8px;word-break:break-all;">' + data.rawSample + '</div>' : '';
-        _waSetBody('<div style="padding:20px 18px;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);">'
-          + 'Aucun résultat pour &laquo; ' + name + ' &raquo;' + errMsg + rawMsg + '</div>');
+        _waSetBody('<div style="padding:20px 18px;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);">Aucun résultat pour &laquo; ' + name + ' &raquo;</div>');
         return;
       }
       _waRenderAthleteList(athletes);
     })
     .catch(function(err) {
-      _waSetBody('<div style="padding:20px 18px;font-family:\'DM Mono\',monospace;font-size:9px;color:#ef4444;">'
-        + '❌ Erreur réseau : ' + err.message + '<br><br>'
-        + '<span style="color:var(--muted);">Vérifie que le Worker Cloudflare est déployé et actif.</span></div>');
+      _waSetBody('<div style="padding:20px 18px;font-family:\'DM Mono\',monospace;font-size:9px;color:#ef4444;">❌ Erreur : ' + err.message + '</div>');
     });
 }
 
