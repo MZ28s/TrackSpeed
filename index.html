@@ -1005,11 +1005,17 @@ body.light-theme canvas { filter:invert(0); }
              background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);cursor:pointer;">
       👁 VUE ANNUELLE
     </button>
+    <button id="planif-stab-ia" onclick="switchPlanifTab('ia')"
+      style="flex:1;padding:10px 4px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;
+             background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);cursor:pointer;">
+      🤖 IA
+    </button>
   </div>
 
   <!-- Contenu sous-onglets -->
   <div id="planif-stab-liste-content" style="padding:14px 16px 100px;overflow-y:auto;"></div>
   <div id="planif-stab-edit-content"  style="padding:14px 16px 100px;overflow-y:auto;display:none;"></div>
+  <div id="planif-stab-ia-content" style="padding:0 0 100px;overflow-y:auto;display:none;"></div>
   <div id="planif-stab-vue-content" style="padding:0 0 100px;overflow-y:auto;display:none;">
     <!-- Sélecteur de vues -->
     <div id="planifViewSelector" style="display:flex;gap:0;overflow-x:auto;border-bottom:1px solid var(--border);padding:0 16px;background:var(--surface);position:sticky;top:0;z-index:10;">
@@ -1508,6 +1514,382 @@ function _delPlanif(idx) {
   renderPlanifListe();
 }
 
+// ════════════════════════════════════════════════════════════════
+// ══  GÉNÉRATEUR DE PLANIFICATION IA  ════════════════════════════
+// ════════════════════════════════════════════════════════════════
+
+function renderPlanifIA() {
+  var el = document.getElementById('planif-stab-ia-content');
+  if (!el) return;
+
+  // Récupérer les athlètes pour le sélecteur
+  var athOptions = '<option value="">-- Optionnel --</option>'
+    + profiles.map(function(p) {
+        return '<option value="' + p.id + '">' + p.name + ' (' + (p.categorie||'?') + ')</option>';
+      }).join('');
+
+  // Date par défaut : aujourd'hui pour début, dans 12 semaines pour fin
+  var today = new Date();
+  var in12w  = new Date(today); in12w.setDate(today.getDate() + 84);
+  var fmt = function(d) { return d.toISOString().substring(0,10); };
+
+  el.innerHTML = '<div style="padding:14px 16px 0;">'
+
+    // ── Header ──
+    + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">'
+    + '<div style="font-size:28px;">🤖</div>'
+    + '<div>'
+    + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:var(--text);line-height:1;">GÉNÉRATION IA DE PLANIFICATION</div>'
+    + '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);margin-top:3px;">L\'IA crée une périodisation optimale basée sur la science du sprint</div>'
+    + '</div></div>'
+
+    // ── Formulaire ──
+    + '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:12px;">'
+    + '<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:12px;">// PARAMÈTRES</div>'
+
+    // Dates début / fin
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">'
+    + '<div><label style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);display:block;margin-bottom:4px;letter-spacing:1px;">DÉBUT</label>'
+    + '<input type="date" id="iaPlanifStart" value="' + fmt(today) + '"'
+    + ' style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;color:var(--text);font-family:\'DM Mono\',monospace;font-size:11px;outline:none;"></div>'
+    + '<div><label style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);display:block;margin-bottom:4px;letter-spacing:1px;">FIN (OBJECTIF PRINCIPAL)</label>'
+    + '<input type="date" id="iaPlanifEnd" value="' + fmt(in12w) + '"'
+    + ' style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;color:var(--text);font-family:\'DM Mono\',monospace;font-size:11px;outline:none;"></div>'
+    + '</div>'
+
+    // Échéance principale
+    + '<div style="margin-bottom:12px;">'
+    + '<label style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);display:block;margin-bottom:4px;letter-spacing:1px;">ÉCHÉANCE PRINCIPALE</label>'
+    + '<input type="text" id="iaPlanifEvent" placeholder="Ex: Championnats Suisses U18, Regionaux, CE U18..."'
+    + ' style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;color:var(--text);font-family:\'DM Mono\',monospace;font-size:11px;outline:none;"></div>'
+
+    // Athlète + Discipline
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">'
+    + '<div><label style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);display:block;margin-bottom:4px;letter-spacing:1px;">ATHLÈTE (optionnel)</label>'
+    + '<select id="iaPlanifAthlete"'
+    + ' style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;color:var(--text);font-family:\'DM Mono\',monospace;font-size:11px;outline:none;">'
+    + athOptions + '</select></div>'
+    + '<div><label style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);display:block;margin-bottom:4px;letter-spacing:1px;">DISCIPLINE PRINCIPALE</label>'
+    + '<select id="iaPlanifDisc"'
+    + ' style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;color:var(--text);font-family:\'DM Mono\',monospace;font-size:11px;outline:none;">'
+    + '<option value="100">100m</option><option value="200">200m</option>'
+    + '<option value="60">60m (indoor)</option><option value="100-200">100m + 200m</option>'
+    + '<option value="400">400m</option><option value="100H">100m haies</option>'
+    + '<option value="110H">110m haies</option></select></div>'
+    + '</div>'
+
+    // Niveau
+    + '<div style="margin-bottom:12px;">'
+    + '<label style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);display:block;margin-bottom:6px;letter-spacing:1px;">NIVEAU DE L\'ATHLÈTE</label>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:6px;" id="iaNiveauGroup">'
+    + ['Débutant','Régional','National','International'].map(function(n,i) {
+        return '<button onclick="iaNiveauSelect(this)" data-niveau="' + n + '"'
+          + ' style="font-family:\'DM Mono\',monospace;font-size:8px;padding:5px 12px;border-radius:20px;cursor:pointer;'
+          + (i===1 ? 'background:rgba(245,200,0,0.15);border:1px solid var(--accent);color:var(--accent);' : 'background:none;border:1px solid var(--border);color:var(--muted);')
+          + '">' + n + '</button>';
+      }).join('')
+    + '</div></div>'
+
+    // Contraintes
+    + '<div><label style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);display:block;margin-bottom:4px;letter-spacing:1px;">CONTRAINTES / CONTEXTE (optionnel)</label>'
+    + '<textarea id="iaPlanifContext" rows="2" placeholder="Ex: compétitions intermédiaires connues, blessure récente, infrastructure limitée, nombre de séances par semaine..."'
+    + ' style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;color:var(--text);font-family:\'DM Mono\',monospace;font-size:11px;outline:none;resize:none;"></textarea></div>'
+    + '</div>'
+
+    // ── Nom de la planification générée ──
+    + '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:12px;">'
+    + '<label style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);display:block;margin-bottom:4px;letter-spacing:1px;">NOM DE LA PLANIFICATION GÉNÉRÉE</label>'
+    + '<input type="text" id="iaPlanifNom" placeholder="Ma planification IA..."'
+    + ' style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 10px;color:var(--text);font-family:\'DM Mono\',monospace;font-size:11px;outline:none;">'
+    + '</div>'
+
+    // ── Bouton générer ──
+    + '<button onclick="runIAPlanif()" id="iaPlanifBtn"'
+    + ' style="width:100%;background:var(--accent);border:none;border-radius:8px;padding:14px;'
+    + 'font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:1px;margin-bottom:16px;">'
+    + '🤖 GÉNÉRER MA PLANIFICATION</button>'
+
+    // ── Zone résultat ──
+    + '<div id="iaPlanifResult"></div>'
+    + '</div>';
+}
+
+var _iaNiveau = 'Régional';
+
+function iaNiveauSelect(btn) {
+  _iaNiveau = btn.getAttribute('data-niveau');
+  document.querySelectorAll('#iaNiveauGroup button').forEach(function(b) {
+    var active = b === btn;
+    b.style.background = active ? 'rgba(245,200,0,0.15)' : 'none';
+    b.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
+    b.style.color = active ? 'var(--accent)' : 'var(--muted)';
+  });
+}
+
+function runIAPlanif() {
+  var startVal  = document.getElementById('iaPlanifStart')?.value;
+  var endVal    = document.getElementById('iaPlanifEnd')?.value;
+  var eventName = document.getElementById('iaPlanifEvent')?.value || '';
+  var discVal   = document.getElementById('iaPlanifDisc')?.value || '100';
+  var context   = document.getElementById('iaPlanifContext')?.value || '';
+  var nomVal    = document.getElementById('iaPlanifNom')?.value || '';
+  var athId     = document.getElementById('iaPlanifAthlete')?.value || '';
+
+  if (!startVal || !endVal) { alert('Choisis une date de début et de fin.'); return; }
+  var start = new Date(startVal), end = new Date(endVal);
+  if (end <= start) { alert('La date de fin doit être après le début.'); return; }
+
+  // Calculer le nombre de semaines
+  var totalDays  = Math.round((end - start) / 86400000);
+  var totalWeeks = Math.ceil(totalDays / 7);
+
+  if (totalWeeks < 4) { alert('Minimum 4 semaines pour générer une planification.'); return; }
+  if (totalWeeks > 52) { alert('Maximum 52 semaines.'); return; }
+
+  // Infos athlète
+  var ath = athId ? profiles.find(function(p){ return p.id === athId; }) : null;
+  var athInfo = ath ? (ath.name + ', ' + (ath.categorie||'') + ', ' + (ath.genre==='M'?'H':'F')) : 'Athlète non spécifié';
+
+  // Afficher le loader
+  var btn = document.getElementById('iaPlanifBtn');
+  var resultEl = document.getElementById('iaPlanifResult');
+  btn.textContent = '⏳ L\'IA construit ta planification...';
+  btn.disabled = true;
+  btn.style.opacity = '0.7';
+  resultEl.innerHTML = '<div style="text-align:center;padding:20px;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);">Analyse en cours...</div>';
+
+  // Construire le prompt
+  var startWN = getISOWeek(start), startWY = getISOWeekYear(start);
+  var endWN   = getISOWeek(end),   endWY   = getISOWeekYear(end);
+
+  var prompt = 'Tu es un expert en périodisation du sprint athlétisme, spécialisé catégories U16-U20 et senior.\n'
+    + 'Tu bases tes recommandations sur : Bompa & Haff (Periodization), le modèle Swiss Athletics, '
+    + 'Haugen & Seiler (sprint periodization), et les bonnes pratiques World Athletics développement.\n\n'
+    + 'MISSION : Génère une planification annuelle COMPLÈTE et OPTIMALE pour arriver au meilleur de la forme à l\'échéance principale.\n\n'
+    + '=== PARAMÈTRES ===\n'
+    + 'Période : ' + startVal + ' (S' + startWN + '/' + startWY + ') → ' + endVal + ' (S' + endWN + '/' + endWY + ')\n'
+    + 'Total : ' + totalWeeks + ' semaines\n'
+    + 'Échéance principale : ' + (eventName || 'Compétition principale') + '\n'
+    + 'Discipline : ' + discVal + 'm\n'
+    + 'Athlète : ' + athInfo + '\n'
+    + 'Niveau : ' + _iaNiveau + '\n'
+    + (context ? 'Contraintes : ' + context + '\n' : '')
+    + '\n=== PHASES DISPONIBLES ===\n'
+    + 'prep_gen = Préparation générale (base aérobie, force générale, technique fondamentale)\n'
+    + 'pre_comp = Pré-compétition (vitesse-force, accélérations, haute intensité)\n'
+    + 'comp = Compétition (maintien forme, fraîcheur, pointes de forme)\n'
+    + 'recup = Récupération/Transition (régénération active)\n'
+    + '\n=== CHARGES DISPONIBLES ===\n'
+    + '100 = Charge maximale | 80 = Charge élevée | 60 = Charge modérée | 30 = Charge légère | 0 = Affûtage (AF)\n'
+    + '\n=== FORMAT DE RÉPONSE STRICT ===\n'
+    + 'Réponds UNIQUEMENT avec un JSON valide, sans markdown, sans texte avant ou après.\n'
+    + 'Structure exacte :\n'
+    + '{\n'
+    + '  "nom": "nom suggéré pour la planification",\n'
+    + '  "resume": "2-3 phrases expliquant la logique globale",\n'
+    + '  "semaines": [\n'
+    + '    {\n'
+    + '      "num": <numéro_semaine_ISO>,\n'
+    + '      "year": <année>,\n'
+    + '      "phase": "<prep_gen|pre_comp|comp|recup>",\n'
+    + '      "charge": <100|80|60|30|0>,\n'
+    + '      "camp": false,\n'
+    + '      "vacances": false,\n'
+    + '      "label": "<note_optionnelle>",\n'
+    + '      "competitions": []\n'
+    + '    }\n'
+    + '  ],\n'
+    + '  "echeances": [\n'
+    + '    { "semNum": <num>, "semYear": <year>, "nom": "<nom>", "importance": "<A|B|C>", "lieu": "" }\n'
+    + '  ],\n'
+    + '  "conseils": ["conseil 1", "conseil 2", "conseil 3"]\n'
+    + '}\n\n'
+    + 'RÈGLES DE PÉRIODISATION SPRINT :\n'
+    + '- Les ' + totalWeeks + ' semaines doivent TOUTES être planifiées (du S' + startWN + ' au S' + endWN + ')\n'
+    + '- Respecter la progression : prep_gen → pre_comp → comp, avec récupération périodique\n'
+    + '- Pour ' + totalWeeks + ' semaines :\n'
+    + '  * Préparation générale : ' + Math.round(totalWeeks * 0.35) + '-' + Math.round(totalWeeks * 0.45) + ' sem. (35-45%)\n'
+    + '  * Pré-compétition : ' + Math.round(totalWeeks * 0.25) + '-' + Math.round(totalWeeks * 0.35) + ' sem. (25-35%)\n'
+    + '  * Compétition : ' + Math.round(totalWeeks * 0.20) + '-' + Math.round(totalWeeks * 0.30) + ' sem. (20-30%)\n'
+    + '  * Récupération : ' + Math.round(totalWeeks * 0.05) + '-' + Math.round(totalWeeks * 0.10) + ' sem. (5-10%)\n'
+    + '- Affûtage (AF) les 1-2 semaines avant l\'échéance principale (S' + endWN + ')\n'
+    + '- Semaines de récupération (charge 30%) toutes les 3-4 semaines de charge élevée\n'
+    + '- Progression de charge : monter progressivement, ne pas dépasser +20% par semaine\n'
+    + '- L\'échéance principale ' + (eventName||'') + ' doit être en charge AF ou 60 max\n'
+    + '- Numéroter les semaines ISO correctement depuis S' + startWN + ' (' + startWY + ') jusqu\'à S' + endWN + ' (' + endWY + ')';
+
+  // Appel API Claude via proxy Cloudflare Worker (évite le blocage CORS)
+  fetch(WA_PROXY + '/ai', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: prompt }]
+    })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    btn.textContent = '🤖 GÉNÉRER MA PLANIFICATION';
+    btn.disabled = false;
+    btn.style.opacity = '1';
+
+    var text = (data.content && data.content[0] && data.content[0].text) || '';
+    if (!text) { resultEl.innerHTML = '<div style="color:#ef4444;padding:12px;font-family:\'DM Mono\',monospace;font-size:9px;">Erreur : réponse vide de l\'IA.</div>'; return; }
+
+    // Parser le JSON
+    var planifData_ia;
+    try {
+      var clean = text.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+      planifData_ia = JSON.parse(clean);
+    } catch(e) {
+      resultEl.innerHTML = '<div style="color:#ef4444;padding:12px;font-family:\'DM Mono\',monospace;font-size:9px;">Erreur parsing JSON : ' + e.message + '<br><pre style="font-size:8px;white-space:pre-wrap;">' + text.substring(0,300) + '</pre></div>';
+      return;
+    }
+
+    // Afficher le résumé et proposer d'importer
+    _renderIAPlanifResult(planifData_ia, nomVal, athId, startVal, endVal, eventName);
+  })
+  .catch(function(err) {
+    btn.textContent = '🤖 GÉNÉRER MA PLANIFICATION';
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    resultEl.innerHTML = '<div style="color:#ef4444;padding:12px;font-family:\'DM Mono\',monospace;font-size:9px;">Erreur réseau : ' + err.message + '</div>';
+  });
+}
+
+function _renderIAPlanifResult(data, nomOverride, athId, startVal, endVal, eventName) {
+  var resultEl = document.getElementById('iaPlanifResult');
+  var nom = nomOverride || data.nom || 'Planification IA';
+
+  // Stats de la planification générée
+  var sems = data.semaines || [];
+  var phaseCount = {};
+  sems.forEach(function(s) { phaseCount[s.phase] = (phaseCount[s.phase]||0) + 1; });
+
+  var html = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:12px;">'
+
+    // Header vert succès
+    + '<div style="background:rgba(34,197,94,0.15);border-bottom:1px solid rgba(34,197,94,0.3);padding:14px 16px;">'
+    + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
+    + '<span style="font-size:18px;">✅</span>'
+    + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:#22c55e;">' + nom + '</div>'
+    + '</div>'
+    + '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted);line-height:1.6;">' + (data.resume || '') + '</div>'
+    + '</div>'
+
+    // Répartition des phases
+    + '<div style="padding:12px 16px;border-bottom:1px solid var(--border);">'
+    + '<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:8px;">RÉPARTITION</div>'
+    + '<div style="display:flex;gap:5px;flex-wrap:wrap;">';
+
+  Object.keys(PLANIF_PHASES).forEach(function(k) {
+    var n = phaseCount[k] || 0;
+    if (!n) return;
+    var ph = PLANIF_PHASES[k];
+    html += '<div style="background:' + ph.bg + ';border:1px solid ' + ph.border + ';border-radius:4px;padding:5px 10px;text-align:center;">'
+      + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;color:' + ph.color + ';line-height:1;">' + n + '</div>'
+      + '<div style="font-family:\'DM Mono\',monospace;font-size:6px;color:' + ph.color + ';">' + ph.short + '</div>'
+      + '</div>';
+  });
+
+  html += '</div></div>';
+
+  // Frise mini aperçu
+  html += '<div style="padding:12px 16px;border-bottom:1px solid var(--border);overflow-x:auto;">'
+    + '<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:8px;">APERÇU DE LA FRISE</div>'
+    + '<div style="display:flex;gap:2px;min-width:max-content;">';
+  sems.forEach(function(s) {
+    var ph = s.phase ? PLANIF_PHASES[s.phase] : null;
+    var chLabel = s.charge === 0 ? 'AF' : (s.charge ? s.charge + '%' : '');
+    html += '<div style="width:30px;border-radius:3px;overflow:hidden;flex-shrink:0;'
+      + 'background:' + (ph ? ph.bg : 'var(--surface2)') + ';'
+      + 'border:1px solid ' + (ph ? ph.border : 'var(--border)') + ';text-align:center;">'
+      + '<div style="height:3px;background:' + (ph ? ph.color : 'transparent') + ';"></div>'
+      + '<div style="padding:2px 1px;">'
+      + '<div style="font-family:\'DM Mono\',monospace;font-size:6px;color:' + (ph?ph.color:'var(--muted)') + ';">' + s.num + '</div>'
+      + '<div style="font-family:\'DM Mono\',monospace;font-size:5px;color:var(--muted);">' + chLabel + '</div>'
+      + '</div></div>';
+  });
+  html += '</div></div>';
+
+  // Conseils
+  if (data.conseils && data.conseils.length) {
+    html += '<div style="padding:12px 16px;border-bottom:1px solid var(--border);">'
+      + '<div style="font-family:\'DM Mono\',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:8px;">💡 CONSEILS IA</div>';
+    data.conseils.forEach(function(c) {
+      html += '<div style="display:flex;gap:6px;margin-bottom:5px;">'
+        + '<span style="color:var(--accent);flex-shrink:0;">·</span>'
+        + '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted);line-height:1.5;">' + c + '</div>'
+        + '</div>';
+    });
+    html += '</div>';
+  }
+
+  // Bouton importer
+  html += '<div style="padding:14px 16px;">'
+    + '<button onclick="importIAPlanif(' + JSON.stringify(data).replace(/"/g, '&quot;') + ', \'' + nom.replace(/'/g,"\\'") + '\', \'' + (athId||'') + '\')" '
+    + 'style="width:100%;background:var(--accent);border:none;border-radius:6px;padding:12px;'
+    + 'font-family:\'Bebas Neue\',sans-serif;font-size:18px;color:#000;cursor:pointer;letter-spacing:1px;margin-bottom:8px;">'
+    + '✅ IMPORTER CETTE PLANIFICATION</button>'
+    + '<button onclick="runIAPlanif()" '
+    + 'style="width:100%;background:none;border:1px solid var(--border);border-radius:6px;padding:10px;'
+    + 'font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted);cursor:pointer;">'
+    + '🔄 Régénérer avec d\'autres paramètres</button>'
+    + '</div></div>';
+
+  resultEl.innerHTML = html;
+}
+
+function importIAPlanif(data, nom, athId) {
+  // Créer une nouvelle planif avec les semaines générées par l'IA
+  var newPlanif = createNewPlanif();
+  newPlanif.nom = nom;
+  if (athId) newPlanif.athleteIds = [athId];
+
+  // Remplacer les semaines par celles générées
+  newPlanif.semaines = (data.semaines || []).map(function(s) {
+    return {
+      num: s.num,
+      year: s.year,
+      phase: s.phase || null,
+      charge: s.charge !== undefined ? s.charge : null,
+      camp: s.camp || false,
+      vacances: s.vacances || false,
+      label: s.label || '',
+      competitions: [],
+    };
+  });
+
+  // Ajouter les échéances
+  if (data.echeances && data.echeances.length) {
+    data.echeances.forEach(function(e) {
+      var sem = newPlanif.semaines.find(function(s) { return s.num === e.semNum && s.year === e.semYear; });
+      if (sem) {
+        sem.competitions = [{ nom: e.nom || '', lieu: e.lieu || '', importance: e.importance || 'A' }];
+      }
+    });
+  }
+
+  savePlanifData();
+
+  // Naviguer vers la planif créée
+  activePlanifId = newPlanif.id;
+
+  // Toast
+  var toast = document.createElement('div');
+  toast.textContent = '✅ Planification importée !';
+  toast.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);'
+    + 'background:#22c55e;color:#000;font-family:\'DM Mono\',monospace;font-size:10px;letter-spacing:1px;'
+    + 'padding:10px 20px;border-radius:20px;z-index:99999;white-space:nowrap;';
+  document.body.appendChild(toast);
+  setTimeout(function() {
+    toast.remove();
+    switchPlanifTab('vue');
+  }, 1500);
+}
+
+
 function renderPlanifListe() {
   _planifDeleteIds = [];
   var el = document.getElementById('planif-stab-liste-content');
@@ -2002,7 +2384,7 @@ var _currentPlanifView = 'calendrier';
 
 // ── Tab switcher planif ──
 function switchPlanifTab(tab) {
-  ['liste','edit','vue'].forEach(function(t) {
+  ['liste','edit','vue','ia'].forEach(function(t) {
     var btn = document.getElementById('planif-stab-' + t);
     var div = document.getElementById('planif-stab-' + t + '-content');
     if (!btn || !div) return;
@@ -2014,6 +2396,7 @@ function switchPlanifTab(tab) {
   if (tab === 'liste') renderPlanifListe();
   if (tab === 'edit')  renderPlanifEdit();
   if (tab === 'vue')   { _currentPlanifView = _currentPlanifView || 'calendrier'; renderPlanifVue(); }
+  if (tab === 'ia')    renderPlanifIA();
 }
 
 // Helper: génère onclick pour une semaine dans les vues
@@ -2617,7 +3000,7 @@ function runIAAnalyse() {
 
   // Appel API Anthropic
 
-  fetch('https://api.anthropic.com/v1/messages', {
+  fetch(WA_PROXY + '/ai', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
