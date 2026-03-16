@@ -1315,6 +1315,7 @@ function goPage(id) {
 // ── Constantes ──
 var PLANIF_PHASES = {
   prep_gen:  { label: 'Préparation générale',   short: 'PRÉP. GÉN.',   color: '#3b82f6', bg: 'rgba(59,130,246,0.18)',  border: 'rgba(59,130,246,0.5)'  },
+  deload:    { label: 'Décharge (Deload)',       short: 'DELOAD',       color: '#a78bfa', bg: 'rgba(167,139,250,0.18)', border: 'rgba(167,139,250,0.5)' },
   pre_comp:  { label: 'Pré-compétition',         short: 'PRÉ-COMP.',    color: '#f59e0b', bg: 'rgba(245,158,11,0.18)', border: 'rgba(245,158,11,0.5)'  },
   comp:      { label: 'Compétition',             short: 'COMPÉT.',      color: '#ef4444', bg: 'rgba(239,68,68,0.18)',  border: 'rgba(239,68,68,0.5)'   },
   recup:     { label: 'Récupération',            short: 'RÉCUP.',       color: '#22c55e', bg: 'rgba(34,197,94,0.18)',  border: 'rgba(34,197,94,0.5)'   },
@@ -1632,19 +1633,18 @@ function iaNiveauSelect(btn) {
 
 function _buildPlanifStructure(startWN, startWY, endWN, endWY, totalWeeks) {
   // ═══════════════════════════════════════════════════════════════
-  // VALEURS DE CHARGE : uniquement 100 / 80 / 60 / 30 / 0 (AF)
+  // CONSTRUCTION À REBOURS — on part de l'objectif et on remonte
   //
-  // PRINCIPES (Haugen 2019, Bompa 6e éd.) :
-  // - Famil. progressive (S1 = 60%)
-  // - Vagues 3:1 en prep_gen (3 sem charge + 1 sem récup 30%)
-  // - Transition prep→pre_comp obligatoirement douce (60%)
-  // - Pré-comp : jamais 100% (risque blessure ischio, Haugen)
-  // - Comp : descente douce vers AF
-  // - AF : 0% sur 2-3 semaines (tapering Bompa/Mujika)
-  // - Récup : phase post-compétition (30%) — absente dans Swiss Athletics
-  //   car leur plan finit sur l'objectif, mais essentielle pour cycle complet
+  // PREP GÉNÉRALE  → progressif  : cycles 60→80→100 (avec ou sans 30 entre cycles)
+  // PRÉ-COMP       → dégressif   : cycles 100→80→60
+  // COMPÉTITION    → fraîcheur   : 60→AF→AF→AF (arriver le plus frais possible)
+  //
+  // Règle deload : toutes les 3 semaines de charge en prep_gen,
+  //   on peut insérer une semaine à 30% entre deux cycles.
+  //   Ce n'est pas obligatoire — dépend de la durée disponible.
   // ═══════════════════════════════════════════════════════════════
 
+  // Générer la liste ISO des semaines
   var weeks = [];
   var wn = startWN, wy = startWY;
   for (var i = 0; i < totalWeeks; i++) {
@@ -1654,83 +1654,130 @@ function _buildPlanifStructure(startWN, startWY, endWN, endWY, totalWeeks) {
   }
   var n = totalWeeks;
 
-  // ── Proportions des phases ─────────────────────────────────────
-  var nAF      = (n <= 8)  ? 2 : 3;                         // 2-3 sem AF
-  var nRecup   = (n <= 10) ? 0 : (n <= 16) ? 1 : 2;        // 0-2 sem récup post-comp
-  var nComp    = Math.max(2, Math.round(n * 0.12));          // ~12% comp hors AF
-  var nPreComp = Math.max(2, Math.round(n * 0.22));          // ~22% pré-comp
-  var nPrepGen = n - nAF - nRecup - nComp - nPreComp;       // reste prep_gen
+  // ── Calcul des blocs (à rebours depuis l'objectif) ─────────────
+  //
+  // COMP + AF (fin) : 1 sem + nAF sem AF
+  var nAF   = (n <= 8) ? 2 : 3;       // 2-3 sem affûtage
+  var nComp = Math.max(1, Math.round(n * 0.10)); // ~10% comp hors AF
 
-  // Sécurité : si prep trop court
-  if (nPrepGen < 3) {
-    nPreComp = Math.max(1, nPreComp - 1);
-    nPrepGen = n - nAF - nRecup - nComp - nPreComp;
+  // PRÉ-COMP : cycles 100→80→60 = 3 sem par cycle
+  // On calcule le nombre de cycles selon la durée disponible
+  var restAfterComp = n - nAF - nComp;
+  var nPreCompCycles = (n <= 10) ? 1 : (n <= 18) ? 2 : (n <= 28) ? 2 : 3;
+  var nPreComp = nPreCompCycles * 3;
+
+  // PREP_GEN : le reste
+  var nPrepGen = n - nAF - nComp - nPreComp;
+  // Ajuster si prep trop court
+  while (nPrepGen < 3 && nPreCompCycles > 1) {
+    nPreCompCycles--;
+    nPreComp = nPreCompCycles * 3;
+    nPrepGen = n - nAF - nComp - nPreComp;
   }
 
-  // Indices de début
-  var preStart  = nPrepGen;
-  var compStart = nPrepGen + nPreComp;
-  var afStart   = compStart + nComp;
-  var recupStart = afStart + nAF;  // après AF
+  // ── CONSTRUCTION À REBOURS ─────────────────────────────────────
+  // On remplit un tableau de n cases en partant de la fin
 
-  // Phases
-  var phases = [];
-  for (var i = 0; i < n; i++) {
-    if      (i < preStart)    phases.push('prep_gen');
-    else if (i < compStart)   phases.push('pre_comp');
-    else if (i < afStart)     phases.push('comp');
-    else if (i < recupStart)  phases.push('comp');    // AF = phase comp avec charge 0
-    else                      phases.push('recup');
+  var phases  = new Array(n);
+  var charges = new Array(n);
+
+  // INDEX de début de chaque zone
+  var afStart   = n - nAF;
+  var compStart = afStart - nComp;
+  var preStart  = compStart - nPreComp;
+  // prepStart = 0
+
+  // ── AFFÛTAGE (AF) : charge 0 ───────────────────────────────────
+  for (var i = afStart; i < n; i++) {
+    phases[i]  = 'comp';
+    charges[i] = 0;
   }
 
-  // ── Charges ───────────────────────────────────────────────────
-  var charges = new Array(n).fill(60);
-
-  // RÉCUP post-compétition : 30%
-  for (var i = recupStart; i < n; i++) charges[i] = 30;
-
-  // AF : 0%
-  for (var i = afStart; i < recupStart; i++) charges[i] = 0;
-
-  // COMP (hors AF) : 80 → 60 → 60
+  // ── COMPÉTITION : fraîcheur maximale ───────────────────────────
+  // Volume très faible, intensité maintenue
+  // 1 semaine à 60% (maintien) puis descente vers AF
   for (var i = compStart; i < afStart; i++) {
+    phases[i]  = 'comp';
     var pos = i - compStart;
-    charges[i] = (pos === 0 && nComp > 1) ? 80 : 60;
+    charges[i] = (pos === 0) ? 60 : 60; // toujours 60% en comp hors AF
   }
 
-  // PRÉ-COMP : vagues 2:1 avec charges 80→80→60, jamais 100%
-  // Transition S0 = 60% obligatoire
+  // ── PRÉ-COMP : cycles dégressifs 100→80→60 ─────────────────────
+  // Chaque cycle de 3 semaines : 100 → 80 → 60
+  // Transition depuis prep : la 1ère semaine de pré-comp est toujours 60
+  // (Haugen 2019 : transition obligatoirement douce, zone blessure ischio)
+  var prePattern = [100, 80, 60]; // cycle dégressif
   for (var i = preStart; i < compStart; i++) {
+    phases[i] = 'pre_comp';
     var pos = i - preStart;
     if (pos === 0) {
-      charges[i] = 60; // Transition douce (Haugen : zone blessure)
+      charges[i] = 60; // Transition douce obligatoire
     } else {
+      // Cycle 100→80→60 à partir de la 2ème semaine
       var cyclePos = (pos - 1) % 3;
-      if      (cyclePos === 0) charges[i] = 80;
-      else if (cyclePos === 1) charges[i] = 80;
-      else                     charges[i] = 60; // Décharge vague 2:1
+      charges[i] = prePattern[cyclePos];
     }
   }
 
-  // PREP_GEN : vagues 3:1 avec charges 60/80/100/30
-  // S0 = 60 (familiarisation)
-  // Vague 1 : 80→100→30
-  // Vague 2 : 80→100→30
-  // Vague N : 80→100→30 (pattern stable, progression gérée par l'IA dans les labels)
-  var posInVague = 0;
-  var vaguePattern = [80, 100, 30]; // Vague standard après S0
+  // ── PREP GÉNÉRALE : cycles progressifs 60→80→100 ───────────────
+  // Avec ou sans semaine deload (30%) entre cycles selon l'espace dispo
+  //
+  // On remplit À REBOURS depuis preStart-1 jusqu'à 0
+  // en plaçant des cycles complets 60→80→100
+  // et en insérant des semaines deload (30%) si l'espace le permet
+  //
+  // Stratégie : on calcule combien de cycles entiers rentrent
+  // et on distribue les semaines restantes comme deloads entre cycles
 
+  // Cycles de 3 semaines 60→80→100
+  var semsPrepTotal = preStart; // nombre de semaines dispo pour prep
+  var nCycles = Math.floor(semsPrepTotal / 3);
+  var semsDeload = semsPrepTotal - (nCycles * 3); // semaines restantes = deloads
+
+  // Construire le pattern prep de droite à gauche
+  // Structure : [deload?] cycle1 [deload?] cycle2 [deload?] cycle3...
+  // On place les deloads ENTRE les cycles (pas au début, ni à la fin)
+  var prepSequence = []; // [ {phase, charge}, ... ] de gauche à droite
+
+  if (nCycles === 0) {
+    // Pas assez pour un cycle complet — mettre ce qu'on peut
+    for (var i = 0; i < semsPrepTotal; i++) prepSequence.push({phase:'prep_gen', charge:[60,80,100][i]||60});
+  } else {
+    // Distribuer les deloads entre les cycles
+    // Stratégie : 1 deload après chaque cycle sauf le dernier
+    // Si plus de deloads que d'intervalles, on met aussi au début
+    var maxDeloadSlots = nCycles - 1; // slots entre cycles
+    var deloadsToInsert = Math.min(semsDeload, maxDeloadSlots);
+
+    // Cycles avec ou sans deload avant
+    // Construire séquence : [cycle][deload?][cycle][deload?]...[cycle]
+    var deloadInserted = 0;
+    for (var c = 0; c < nCycles; c++) {
+      // Ajouter le cycle 60→80→100
+      prepSequence.push({phase:'prep_gen', charge:60});
+      prepSequence.push({phase:'prep_gen', charge:80});
+      prepSequence.push({phase:'prep_gen', charge:100});
+      // Ajouter un deload après ce cycle si ce n'est pas le dernier
+      // et qu'il reste des deloads à insérer
+      if (c < nCycles - 1 && deloadInserted < deloadsToInsert) {
+        prepSequence.push({phase:'deload', charge:30});
+        deloadInserted++;
+      }
+    }
+    // Semaines restantes non utilisées : compléter avec prep_gen
+    while (prepSequence.length < semsPrepTotal) {
+      prepSequence.unshift({phase:'prep_gen', charge:60}); // ajouter au début
+    }
+  }
+
+  // Appliquer la séquence prep
   for (var i = 0; i < preStart; i++) {
-    if (i === 0) {
-      charges[i] = 60; // Familiarisation
-      posInVague = 0;
-      continue;
-    }
-    charges[i] = vaguePattern[posInVague];
-    posInVague = (posInVague + 1) % vaguePattern.length;
+    var entry = prepSequence[i] || {phase:'prep_gen', charge:60};
+    phases[i]  = entry.phase;
+    charges[i] = entry.charge;
   }
 
-  // ── Corrections de sécurité ────────────────────────────────────
+  // ── CORRECTIONS DE SÉCURITÉ ────────────────────────────────────
 
   // 1. Jamais 2× 100% consécutif
   for (var i = 1; i < afStart; i++) {
@@ -1743,7 +1790,8 @@ function _buildPlanifStructure(startWN, startWY, endWN, endWY, totalWeeks) {
     if (charges[i] >= 80) {
       streak++;
       if (streak > 3) {
-        charges[i] = (i < preStart) ? 30 : 60;
+        charges[i] = (phases[i] === 'prep_gen') ? 30 : 60;
+        if (charges[i] === 30) phases[i] = 'deload';
         streak = 0;
       }
     } else {
@@ -1751,15 +1799,10 @@ function _buildPlanifStructure(startWN, startWY, endWN, endWY, totalWeeks) {
     }
   }
 
-  // 3. Transition pre_comp→comp ne monte pas
-  if (compStart > 0 && compStart < afStart) {
-    if (charges[compStart] > charges[compStart - 1]) {
-      charges[compStart] = Math.min(charges[compStart - 1], 80);
-    }
+  // 3. Semaine avant AF : jamais 100%
+  if (afStart > 0 && charges[afStart - 1] === 100) {
+    charges[afStart - 1] = 60;
   }
-
-  // 4. Semaine avant AF : pas de 100%
-  if (afStart > 0 && charges[afStart - 1] === 100) charges[afStart - 1] = 60;
 
   return weeks.map(function(w, i) {
     return {
@@ -1841,12 +1884,12 @@ function runIAPlanif() {
     + 'TON RÔLE : enrichir uniquement les champs "label" (1-4 mots, contenu concret de la semaine).\n'
     + 'Exemples de labels par phase :\n'
     + '- prep_gen charge élevée : "Force max", "Volume vitesse", "Accél. générales", "Endurance alactique"\n'
-    + '- prep_gen charge 30 : "Récup active", "Régénération", "Footwork léger"\n'
+    + '- deload charge 30 : "Récup active", "Décharge planifiée", "Régénération", "Footwork léger"\n'
     + '- pre_comp : "Vitesse spécifique", "Départs + accél", "Séances race pace", "Tapering vol."\n'
     + '- comp charge élevée : "Maintien forme", "Séance de rappel", "Compét préparatoire"\n'
     + '- comp charge AF (0) : "Affûtage final", "Activation pré-compét", "Mise en forme"\n'
     + '\n'
-    + 'Discipline: ' + discVal + 'm | Niveau: ' + _iaNiveau + ' | Athlète: ' + athInfo
+    + 'Nb semaines: ' + totalWeeks + ' | Discipline: ' + discVal + 'm | Niveau: ' + _iaNiveau + ' | Athlète: ' + athInfo
     + ' | Échéance: ' + (eventName || 'Compétition') + ' S' + endWN + '/' + endWY
     + (context ? ' | Contraintes: ' + context : '') + '\n\n'
     + 'Retourne le JSON COMPLET et VALIDE, sans markdown, en remplissant les labels et ajoutant les champs:\n'
@@ -3137,25 +3180,38 @@ function runIAAnalyse() {
     return '- S'+c.sem+' : '+(c.nom||'Compétition')+' (priorité '+(c.importance||'?')+')';
   }).join('\n') + (allComps.length>10 ? ' ...et '+(allComps.length-10)+' autres' : '');
   var athCount = (planif.athleteIds||[]).length;
-  var prompt = 'Tu es un expert en planification de l\'entraînement en athlétisme sprint, spécialisé en périodisation pour des athlètes U18 et seniors.\n'
-    + 'Tu bases ton analyse sur : Bompa & Haff, Viru & Viru, les recommandations World Athletics Development, le modèle Swiss Athletics formation jeunesse.\n\n'
-    + 'Voici la planification :\n'
-    + '- Nom : ' + planif.nom + '\n'
-    + '- Saison : ' + planif.saison + '\n'
-    + '- Total semaines : ' + totalSems + '\n'
-    + '- Athlètes : ' + athCount + ' assigné(s)\n\n'
+  var prompt = 'Tu es un expert en périodisation du sprint (Haugen 2019, Bompa 6e éd., Swiss Athletics).\n'
+    + 'Analyse cette planification en respectant STRICTEMENT les conventions et critères ci-dessous.\n\n'
+    + '=== CONVENTIONS DE LA PLANIFICATION ===\n'
+    + 'Phases : prep_gen (préparation générale), deload (semaine de décharge planifiée), pre_comp (pré-compétition), comp (compétition), recup (récupération post-saison)\n'
+    + 'Charges : 100%=charge maximale, 80%=charge élevée, 60%=charge modérée, 30%=récup active (recup dans deload), 0%=AF (Affûtage : réduction volume 40-60% + maintien intensité spécifique)\n\n'
+    + '=== CRITÈRES DE NOTATION (sur 10) ===\n'
+    + 'Une planification est CORRECTE (note 8-10) si elle respecte :\n'
+    + '1. FAMILIARISATION : semaine 1 ≤ 60% (prévention blessure, Haugen)\n'
+    + '2. VAGUES 3:1 : en prep_gen, les semaines deload (30%) espacent les blocs de charge toutes les 3-4 semaines\n'
+    + '3. PAS DE 100% CONSÉCUTIF : jamais 2 semaines à 100% d\'affilée (SNC)\n'
+    + '4. PAS 4×≥80% CONSÉCUTIF : max 3 semaines de charge élevée de suite (règle 3:1 Haugen)\n'
+    + '5. TRANSITION PRÉ-COMP DOUCE : la 1ère semaine de pre_comp = 60% (zone blessure ischio, Haugen 2019)\n'
+    + '6. PAS DE 100% EN PRÉ-COMP : la pré-comp vise la qualité, pas la surcharge\n'
+    + '7. COMP NE MONTE PAS : la 1ère semaine de comp ≤ dernière semaine de pre_comp\n'
+    + '8. AF OBLIGATOIRE : 0% sur les 2-3 dernières semaines avant l\'objectif principal\n'
+    + '9. DELOAD PRÉSENT : au moins 1 phase deload si prep_gen ≥ 4 semaines (si prep_gen < 4 sem, absence de deload est acceptable)\n'
+    + '10. OBJECTIF PRINCIPAL : la compétition principale est en phase comp ou AF, jamais en recup ou deload\n\n'
+    + '=== DONNÉES DE LA PLANIFICATION ===\n'
+    + 'Nom : ' + planif.nom + '\n'
+    + 'Saison : ' + planif.saison + ' | Semaines totales : ' + totalSems + '\n\n'
     + 'Répartition par phase :\n' + phasesLines + '\n'
-    + '- Non défini : ' + sorted.filter(function(s){return !s.phase;}).length + ' sem.\n\n'
+    + '(Non défini : ' + sorted.filter(function(s){return !s.phase;}).length + ' sem.)\n\n'
     + 'Séquence des blocs :\n' + blocsLines + '\n\n'
     + 'Compétitions (' + allComps.length + ') :\n' + compsLines + '\n\n'
     + 'Camps : ' + campSems + ' sem. · Vacances : ' + vacSems + ' sem.\n\n'
-    + 'Analyse cette planification avec ce format :\n\n'
-    + '✅ **POINTS FORTS**\n'
-    + '⚠️ **POINTS À SURVEILLER**\n'
-    + '❌ **ERREURS / PROBLÈMES**\n'
-    + '💡 **RECOMMANDATIONS**\n'
-    + '📊 **VERDICT GLOBAL**\n\n'
-    + 'Sois concis et direct. Réponds en français.';
+    + '=== FORMAT DE RÉPONSE ===\n'
+    + '✅ **POINTS FORTS** (critères respectés)\n'
+    + '⚠️ **POINTS À SURVEILLER** (améliorations possibles sans être des erreurs)\n'
+    + '❌ **ERREURS / PROBLÈMES** (critères violés — ne signale une erreur QUE si un critère listé ci-dessus est réellement violé)\n'
+    + '💡 **RECOMMANDATIONS** (conseils pratiques)\n'
+    + '📊 **VERDICT GLOBAL** : note X/10 + justification courte\n\n'
+    + 'IMPORTANT : Si tous les critères sont respectés, la note doit être entre 8 et 10. Ne pénalise pas les choix qui respectent les critères scientifiques. Réponds en français, sois concis.';
 
   // Appel API Anthropic
 
