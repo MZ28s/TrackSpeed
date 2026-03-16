@@ -3206,8 +3206,8 @@ function runIAAnalyse() {
     + '7. COMP NE MONTE PAS : la 1ère semaine de comp ≤ dernière semaine de pre_comp\n'
     + '8. AF OBLIGATOIRE : 0% sur les 2-3 dernières semaines avant l\'objectif principal\n'
     + '9. DELOAD PRÉSENT : au moins 1 phase deload si prep_gen ≥ 4 semaines (si prep_gen < 4 sem, absence de deload est acceptable)\n'
-    + '10. OBJECTIF PRINCIPAL : la compétition principale est en phase comp ou AF, jamais en recup ou deload\\n'\
-    + '11. CAMP D\'ENTRAÎNEMENT : semaine camp = idéalement 100%, 80% acceptable selon le cycle. Signaler si < 80%.\\n\\n'
+    + '10. OBJECTIF PRINCIPAL : la compétition principale est en phase comp ou AF, jamais en recup ou deload\\n'
+    + '11. CAMP D\'ENTRAÎNEMENT : idéalement 100%, 80% acceptable selon le cycle. Signaler si < 80%.\\n\\n'
     + '=== DONNÉES DE LA PLANIFICATION ===\n'
     + 'Nom : ' + planif.nom + '\n'
     + 'Saison : ' + planif.saison + ' | Semaines totales : ' + totalSems + '\n\n'
@@ -3215,9 +3215,9 @@ function runIAAnalyse() {
     + '(Non défini : ' + sorted.filter(function(s){return !s.phase;}).length + ' sem.)\n\n'
     + 'Séquence des blocs :\n' + blocsLines + '\n\n'
     + 'Compétitions (' + allComps.length + ') :\n' + compsLines + '\n\n'
-     + 'Camps : ' + campSems + ' sem. · Vacances : ' + vacSems + ' sem.\\n'
+    + 'Camps : ' + campSems + ' sem. · Vacances : ' + vacSems + ' sem.\\n'
     + (campSems > 0 ? 'Semaines camp (règle : charge doit être 100%) : ' + sorted.filter(function(s){return s.camp;}).map(function(s){return 'S'+s.num+'='+( s.charge===0?'AF':s.charge+'%');}).join(', ') + '\\n' : '')
-    + '\\n'
+
     + '=== FORMAT DE RÉPONSE ===\n'
     + '✅ **POINTS FORTS** (critères respectés)\n'
     + '⚠️ **POINTS À SURVEILLER** (améliorations possibles sans être des erreurs)\n'
