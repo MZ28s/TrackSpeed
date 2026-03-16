@@ -1681,42 +1681,14 @@ function runIAPlanif() {
     + 'recup = Récupération/Transition (régénération active)\n'
     + '\n=== CHARGES DISPONIBLES ===\n'
     + '100 = Charge maximale | 80 = Charge élevée | 60 = Charge modérée | 30 = Charge légère | 0 = Affûtage (AF)\n'
-    + '\n=== FORMAT DE RÉPONSE STRICT ===\n'
-    + 'Réponds UNIQUEMENT avec un JSON valide, sans markdown, sans texte avant ou après.\n'
-    + 'Structure exacte :\n'
-    + '{\n'
-    + '  "nom": "nom suggéré pour la planification",\n'
-    + '  "resume": "2-3 phrases expliquant la logique globale",\n'
-    + '  "semaines": [\n'
-    + '    {\n'
-    + '      "num": <numéro_semaine_ISO>,\n'
-    + '      "year": <année>,\n'
-    + '      "phase": "<prep_gen|pre_comp|comp|recup>",\n'
-    + '      "charge": <100|80|60|30|0>,\n'
-    + '      "camp": false,\n'
-    + '      "vacances": false,\n'
-    + '      "label": "<note_optionnelle>",\n'
-    + '      "competitions": []\n'
-    + '    }\n'
-    + '  ],\n'
-    + '  "echeances": [\n'
-    + '    { "semNum": <num>, "semYear": <year>, "nom": "<nom>", "importance": "<A|B|C>", "lieu": "" }\n'
-    + '  ],\n'
-    + '  "conseils": ["conseil 1", "conseil 2", "conseil 3"]\n'
-    + '}\n\n'
+    + '\nJSON STRICT (pas de markdown):\n'
+    + '{"nom":"...","resume":"1 phrase","semaines":[{"num":N,"year":N,"phase":"prep_gen|pre_comp|comp|recup","charge":100|80|60|30|0,"camp":false,"vacances":false,"label":"","competitions":[]}],"echeances":[{"semNum":N,"semYear":N,"nom":"...","importance":"A","lieu":""}],"conseils":["...","...","..."]}\n\n'
     + 'RÈGLES DE PÉRIODISATION SPRINT :\n'
-    + '- Les ' + totalWeeks + ' semaines doivent TOUTES être planifiées (du S' + startWN + ' au S' + endWN + ')\n'
-    + '- Respecter la progression : prep_gen → pre_comp → comp, avec récupération périodique\n'
-    + '- Pour ' + totalWeeks + ' semaines :\n'
-    + '  * Préparation générale : ' + Math.round(totalWeeks * 0.35) + '-' + Math.round(totalWeeks * 0.45) + ' sem. (35-45%)\n'
-    + '  * Pré-compétition : ' + Math.round(totalWeeks * 0.25) + '-' + Math.round(totalWeeks * 0.35) + ' sem. (25-35%)\n'
-    + '  * Compétition : ' + Math.round(totalWeeks * 0.20) + '-' + Math.round(totalWeeks * 0.30) + ' sem. (20-30%)\n'
-    + '  * Récupération : ' + Math.round(totalWeeks * 0.05) + '-' + Math.round(totalWeeks * 0.10) + ' sem. (5-10%)\n'
-    + '- Affûtage (AF) les 1-2 semaines avant l\'échéance principale (S' + endWN + ')\n'
-    + '- Semaines de récupération (charge 30%) toutes les 3-4 semaines de charge élevée\n'
-    + '- Progression de charge : monter progressivement, ne pas dépasser +20% par semaine\n'
-    + '- L\'échéance principale ' + (eventName||'') + ' doit être en charge AF ou 60 max\n'
-    + '- Numéroter les semaines ISO correctement depuis S' + startWN + ' (' + startWY + ') jusqu\'à S' + endWN + ' (' + endWY + ')';
+    + '- Planifier les ' + totalWeeks + ' semaines de S' + startWN + '/' + startWY + ' à S' + endWN + '/' + endWY + '\n'
+    + '- Progression: prep_gen(' + Math.round(totalWeeks*0.40) + 'sem) → pre_comp(' + Math.round(totalWeeks*0.30) + 'sem) → comp(' + Math.round(totalWeeks*0.25) + 'sem) + recup(' + Math.round(totalWeeks*0.05) + 'sem)\n'
+    + '- Affûtage charge=0 sur S' + endWN + ', récup charge=30 toutes les 3-4 semaines\n'
+    + '- Numérotation ISO: S' + startWN + '/' + startWY + ' → S' + endWN + '/' + endWY + '\n'
+    + '- IMPORTANT: réponse JSON uniquement, pas de texte, les "conseils" max 3 items courts';
 
   // Appel API Claude via proxy Cloudflare Worker (évite le blocage CORS)
   fetch(WA_PROXY + '/ai', {
@@ -1724,7 +1696,7 @@ function runIAPlanif() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
+      max_tokens: 4000,
       messages: [{ role: 'user', content: prompt }]
     })
   })
@@ -3005,7 +2977,7 @@ function runIAAnalyse() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
+      max_tokens: 4000,
       messages: [{ role: 'user', content: prompt }]
     })
   })
