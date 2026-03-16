@@ -823,11 +823,54 @@ body.light-theme canvas { filter:invert(0); }
 
       <!-- Tableau des temps — toujours visible si athlètes sélectionnés -->
       <div id="multiTimesWrap" style="display:none;margin-bottom:14px;">
+
+        <!-- ── Chrono inline séance ── -->
+        <div id="inlineChronoBar" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <!-- Affichage temps -->
+          <div id="inlineChronoDisplay" style="font-family:'Bebas Neue',sans-serif;font-size:36px;color:var(--accent);line-height:1;min-width:80px;cursor:pointer;" onclick="inlineChronoToggle()">00:00</div>
+          <!-- Barre de progression -->
+          <div style="flex:1;min-width:80px;">
+            <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:6px;">
+              <div id="inlineChronoBar2" style="height:100%;width:100%;background:var(--accent);border-radius:3px;transition:width 0.5s linear;"></div>
+            </div>
+            <div id="inlineChronoLabel" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;">RÉCUPÉRATION</div>
+          </div>
+          <!-- Boutons -->
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <!-- Preset pauses rapides + saisie manuelle -->
+            <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+              <button onclick="inlineChronoSet(60)"  style="font-family:'DM Mono',monospace;font-size:8px;padding:4px 8px;border-radius:3px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;">1'</button>
+              <button onclick="inlineChronoSet(120)" style="font-family:'DM Mono',monospace;font-size:8px;padding:4px 8px;border-radius:3px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;">2'</button>
+              <button onclick="inlineChronoSet(180)" style="font-family:'DM Mono',monospace;font-size:8px;padding:4px 8px;border-radius:3px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;">3'</button>
+              <button onclick="inlineChronoSet(240)" style="font-family:'DM Mono',monospace;font-size:8px;padding:4px 8px;border-radius:3px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;">4'</button>
+              <button onclick="inlineChronoSet(300)" style="font-family:'DM Mono',monospace;font-size:8px;padding:4px 8px;border-radius:3px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;">5'</button>
+              <!-- Saisie manuelle mm:ss -->
+              <div style="display:flex;align-items:center;gap:3px;margin-left:2px;">
+                <input id="inlineChronoCustom" type="text" placeholder="mm:ss" maxlength="5"
+                  style="width:52px;padding:4px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:'DM Mono',monospace;font-size:9px;text-align:center;outline:none;"
+                  oninput="this.value=this.value.replace(/[^0-9:]/g,'')"
+                  onkeydown="if(event.key==='Enter')inlineChronoSetCustom()">
+                <button onclick="inlineChronoSetCustom()"
+                  style="font-family:'DM Mono',monospace;font-size:8px;padding:4px 7px;border-radius:3px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;">OK</button>
+              </div>
+            </div>
+            <!-- Start / Reset -->
+            <button id="inlineChronoBtn" onclick="inlineChronoToggle()"
+              style="font-family:'Bebas Neue',sans-serif;font-size:15px;padding:6px 14px;border-radius:4px;background:var(--accent);border:none;color:#000;cursor:pointer;min-width:70px;">
+              ▶ START
+            </button>
+            <button onclick="inlineChronoReset()"
+              style="font-family:'DM Mono',monospace;font-size:10px;padding:6px 10px;border-radius:4px;background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;">
+              ↺
+            </button>
+          </div>
+        </div>
+
         <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;">
           SAISIE DES TEMPS
           <span style="color:var(--accent);margin-left:8px;">🟢 ±0.15s · 🟡 + rapide · 🔴 + lent</span>
         </div>
-        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;position:relative;">
           <table id="multiTimesGrid" style="width:100%;border-collapse:collapse;font-family:'DM Mono',monospace;font-size:11px;min-width:300px;"></table>
         </div>
       </div>
@@ -6628,6 +6671,35 @@ function addBlock() {
   renderSession();
 }
 
+function toggleEditBlock(i) {
+  const el = document.getElementById('editBlock_' + i);
+  if (!el) return;
+  const isOpen = el.style.display !== 'none';
+  // Fermer tous les autres
+  sessionBlocks.forEach((_, j) => {
+    const other = document.getElementById('editBlock_' + j);
+    if (other) other.style.display = 'none';
+  });
+  el.style.display = isOpen ? 'none' : 'block';
+}
+
+function applyEditBlock(i) {
+  const reps = parseInt(document.getElementById('editReps_' + i)?.value);
+  const dist = parseInt(document.getElementById('editDist_' + i)?.value);
+  const pct  = parseInt(document.getElementById('editPct_'  + i)?.value);
+  const rest = parseFloat(document.getElementById('editRest_' + i)?.value);
+  if (!reps || !dist || !pct || reps < 1 || dist < 5 || pct < 50) {
+    alert('Valeurs invalides.');
+    return;
+  }
+  sessionBlocks[i].reps = reps;
+  sessionBlocks[i].dist = dist;
+  sessionBlocks[i].pct  = pct;
+  sessionBlocks[i].rest = isNaN(rest) ? 0 : rest;
+  renderSession();
+  updateDashboard();
+}
+
 function removeBlock(i) {
   sessionBlocks.splice(i, 1);
   renderSession();
@@ -6671,23 +6743,65 @@ function renderSession() {
       infoStr = fmt(tAtPct)+' · '+fmtS(spd)+' · '+(spd*3.6).toFixed(1)+' km/h';
     }
     chipsHtml += `
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:2px;padding:14px 18px;display:flex;align-items:center;gap:12px;">
-        <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--accent);min-width:32px;">${b.reps}×</div>
-        <div style="flex:1;">
-          <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;">${b.dist}m <span style="color:var(--accent);font-size:18px;">@ ${b.pct}%</span></div>
-          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:2px;">
-            ${infoStr}${b.rest > 0 ? ' · récup '+b.rest+'min' : ' · pas de récup'}
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:2px;overflow:hidden;">
+        <!-- Affichage normal du bloc -->
+        <div style="padding:14px 18px;display:flex;align-items:center;gap:12px;">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--accent);min-width:32px;">${b.reps}×</div>
+          <div style="flex:1;">
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;">${b.dist}m <span style="color:var(--accent);font-size:18px;">@ ${b.pct}%</span></div>
+            <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:2px;">
+              ${infoStr}${b.rest > 0 ? ' · récup '+b.rest+'min' : ' · pas de récup'}
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <button class="icon-btn" onclick="moveBlock(${i},-1)" ${i===0?'disabled style="opacity:.3"':''}>↑</button>
+            <button class="icon-btn" onclick="moveBlock(${i},1)"  ${i===sessionBlocks.length-1?'disabled style="opacity:.3"':''}>↓</button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <button class="icon-btn" onclick="toggleEditBlock(${i})"
+              title="Modifier ce bloc"
+              style="font-size:13px;background:transparent;border:1px solid var(--border);color:var(--muted);">✏️</button>
+            <button class="icon-btn" onclick="openChronoFromSession(${i});event.stopPropagation()"
+              title="Lancer le chrono"
+              style="font-size:13px;background:transparent;border:1px solid var(--accent);color:var(--accent);">⏱</button>
+            <button class="icon-btn del" onclick="removeBlock(${i})">✕</button>
           </div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:4px;">
-          <button class="icon-btn" onclick="moveBlock(${i},-1)" ${i===0?'disabled style="opacity:.3"':''}>↑</button>
-          <button class="icon-btn" onclick="moveBlock(${i},1)"  ${i===sessionBlocks.length-1?'disabled style="opacity:.3"':''}>↓</button>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:4px;">
-          <button class="icon-btn" onclick="openChronoFromSession(${i});event.stopPropagation()"
-            title="Lancer le chrono avec la pause de ce bloc"
-            style="font-size:13px;background:transparent;border:1px solid var(--accent);color:var(--accent);">⏱</button>
-          <button class="icon-btn del" onclick="removeBlock(${i})">✕</button>
+        <!-- Formulaire d'édition inline (caché par défaut) -->
+        <div id="editBlock_${i}" style="display:none;border-top:1px solid var(--border);padding:14px 18px;background:var(--surface);">
+          <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:12px;">// MODIFIER LE BLOC</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;align-items:end;">
+            <div>
+              <label style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);display:block;margin-bottom:4px;">RÉPÉTITIONS</label>
+              <input type="number" id="editReps_${i}" value="${b.reps}" min="1" max="50"
+                style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px 10px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;-moz-appearance:textfield;">
+            </div>
+            <div>
+              <label style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);display:block;margin-bottom:4px;">DISTANCE (m)</label>
+              <input type="number" id="editDist_${i}" value="${b.dist}" min="5" max="500"
+                style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px 10px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;-moz-appearance:textfield;">
+            </div>
+            <div>
+              <label style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);display:block;margin-bottom:4px;">INTENSITÉ (%)</label>
+              <input type="number" id="editPct_${i}" value="${b.pct}" min="50" max="120"
+                style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px 10px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;-moz-appearance:textfield;">
+            </div>
+            <div>
+              <label style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);display:block;margin-bottom:4px;">RÉCUP (min)</label>
+              <input type="number" id="editRest_${i}" value="${b.rest}" min="0" max="60" step="0.5"
+                style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px 10px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;-moz-appearance:textfield;">
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px;">
+            <button onclick="applyEditBlock(${i})"
+              style="flex:1;background:var(--accent);border:none;border-radius:3px;padding:10px;font-family:'Bebas Neue',sans-serif;font-size:16px;color:#000;cursor:pointer;letter-spacing:1px;">
+              ✓ APPLIQUER
+            </button>
+            <button onclick="toggleEditBlock(${i})"
+              style="background:none;border:1px solid var(--border);border-radius:3px;padding:10px 16px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;">
+              Annuler
+            </button>
+          </div>
         </div>
       </div>`;
   });
@@ -6721,18 +6835,15 @@ function renderSession() {
       html += `
         <div style="background:var(--surface2);border:1px solid var(--border);border-radius:2px;
           padding:12px 16px;margin-bottom:8px;">
-          <!-- Ligne principale : cible + saisie temps réel -->
           <div style="display:grid;grid-template-columns:40px 1fr 1fr;gap:10px;align-items:center;margin-bottom:8px;">
             <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--muted);">
               ${r}/${b.reps}
             </div>
-            <!-- Temps cible -->
             <div>
               <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;margin-bottom:3px;">CIBLE</div>
               <div style="font-family:'DM Mono',monospace;font-size:16px;color:var(--text);">${fmt(tAtPct)}</div>
               <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--accent2);">${fmtS(spd)} · ${(spd*3.6).toFixed(1)} km/h</div>
             </div>
-            <!-- Temps réel saisi -->
             <div>
               <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;margin-bottom:3px;">RÉALISÉ</div>
               <input type="number" id="${rid}" placeholder="${tAtPct.toFixed(2)}"
@@ -6744,7 +6855,6 @@ function renderSession() {
               <div id="ecart_${bi}_${r}" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:2px;min-height:14px;"></div>
             </div>
           </div>
-          <!-- Note -->
           <input type="text" id="${nid}" placeholder="Note... (ex: bonne foulée, départ lent)"
             style="width:100%;background:transparent;border:none;border-top:1px solid var(--border);
               padding:8px 0 0;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;
@@ -7818,6 +7928,198 @@ function closeSAWidget() {
   if (o) { o.remove(); _saOverlay = null; }
 }
 
+// ════════════════════════════════════════════════════════
+// ══  CHRONO INLINE SÉANCE  ══════════════════════════════
+// ════════════════════════════════════════════════════════
+
+var _iChrono = {
+  duration:  180,
+  remaining: 180,
+  running:   false,
+  interval:  null,
+  startTime: null,   // timestamp réel du départ (pour résister à l'écran éteint)
+  wakeLock:  null,
+};
+
+// ── Wake Lock : empêche l'écran de s'éteindre (si supporté) ──
+async function _iChronoRequestWakeLock() {
+  if ('wakeLock' in navigator) {
+    try {
+      _iChrono.wakeLock = await navigator.wakeLock.request('screen');
+    } catch(e) { /* pas supporté ou refusé */ }
+  }
+}
+function _iChronoReleaseWakeLock() {
+  if (_iChrono.wakeLock) { _iChrono.wakeLock.release(); _iChrono.wakeLock = null; }
+}
+
+// ── Audio silencieux : maintient le timer actif même écran éteint sur iOS ──
+var _iChronoAudioCtx = null;
+var _iChronoAudioNode = null;
+function _iChronoStartAudio() {
+  try {
+    if (!_iChronoAudioCtx) {
+      _iChronoAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    // Oscillo silencieux (volume 0) — maintient le contexte audio actif
+    var osc = _iChronoAudioCtx.createOscillator();
+    var gain = _iChronoAudioCtx.createGain();
+    gain.gain.value = 0.001; // quasi-silence
+    osc.connect(gain);
+    gain.connect(_iChronoAudioCtx.destination);
+    osc.start();
+    _iChronoAudioNode = { osc: osc, gain: gain };
+  } catch(e) {}
+}
+function _iChronoStopAudio() {
+  if (_iChronoAudioNode) {
+    try { _iChronoAudioNode.osc.stop(); } catch(e) {}
+    _iChronoAudioNode = null;
+  }
+}
+
+// ── Page visibility : recalcul du temps restant après retour d'arrière-plan ──
+document.addEventListener('visibilitychange', function() {
+  if (!_iChrono.running) return;
+  if (document.visibilityState === 'visible' && _iChrono.startTime) {
+    // Recalculer le temps restant basé sur le temps réel écoulé
+    var elapsed = Math.floor((Date.now() - _iChrono.startTime) / 1000);
+    _iChrono.remaining = Math.max(0, _iChrono.duration - elapsed);
+    _iChronoUpdateDisplay();
+    if (_iChrono.remaining <= 0) {
+      _iChronoFinish();
+    }
+  }
+});
+
+function inlineChronoSet(seconds, autoStart) {
+  inlineChronoReset();
+  _iChrono.duration  = seconds;
+  _iChrono.remaining = seconds;
+  _iChronoUpdateDisplay();
+  // Surbrillance des presets
+  document.querySelectorAll('#inlineChronoBar button').forEach(function(btn) {
+    var s = btn.textContent.trim();
+    var val = s.endsWith("'") ? parseInt(s) * 60 : 0;
+    btn.style.borderColor = (val === seconds && val > 0) ? 'var(--accent)' : 'var(--border)';
+    btn.style.color       = (val === seconds && val > 0) ? 'var(--accent)' : 'var(--muted)';
+  });
+  // Lancer automatiquement si demandé (ex: clic sur R1/R2)
+  if (autoStart && seconds > 0) {
+    setTimeout(_iChronoStart, 50);
+  }
+}
+
+function inlineChronoSetCustom() {
+  var raw = (document.getElementById('inlineChronoCustom')?.value || '').trim();
+  var secs = 0;
+  if (raw.includes(':')) {
+    var parts = raw.split(':');
+    var m = parseInt(parts[0]) || 0;
+    var s = parseInt(parts[1]) || 0;
+    secs = m * 60 + s;
+  } else {
+    // Juste un nombre → minutes
+    secs = (parseInt(raw) || 0) * 60;
+  }
+  if (secs <= 0) return;
+  inlineChronoSet(secs);
+  // Vider le champ après validation
+  var inp = document.getElementById('inlineChronoCustom');
+  if (inp) inp.value = '';
+}
+
+function inlineChronoToggle() {
+  if (_iChrono.running) {
+    _iChronoPause();
+  } else {
+    _iChronoStart();
+  }
+}
+
+function _iChronoStart() {
+  if (_iChrono.remaining <= 0) _iChrono.remaining = _iChrono.duration;
+  _iChrono.running   = true;
+  _iChrono.startTime = Date.now() - (_iChrono.duration - _iChrono.remaining) * 1000;
+
+  var btn = document.getElementById('inlineChronoBtn');
+  if (btn) { btn.textContent = '⏸ PAUSE'; btn.style.background = 'var(--surface2)'; btn.style.color = 'var(--muted)'; btn.style.border = '1px solid var(--border)'; }
+
+  _iChronoRequestWakeLock();
+  _iChronoStartAudio();
+
+  _iChrono.interval = setInterval(function() {
+    var elapsed = Math.floor((Date.now() - _iChrono.startTime) / 1000);
+    _iChrono.remaining = Math.max(0, _iChrono.duration - elapsed);
+    _iChronoUpdateDisplay();
+    if (_iChrono.remaining <= 0) _iChronoFinish();
+  }, 250); // tick rapide pour précision
+}
+
+function _iChronoPause() {
+  clearInterval(_iChrono.interval);
+  _iChrono.running = false;
+  _iChronoStopAudio();
+  _iChronoReleaseWakeLock();
+  var btn = document.getElementById('inlineChronoBtn');
+  if (btn) { btn.textContent = '▶ START'; btn.style.background = 'var(--accent)'; btn.style.color = '#000'; btn.style.border = 'none'; }
+}
+
+function inlineChronoReset() {
+  clearInterval(_iChrono.interval);
+  _iChrono.running   = false;
+  _iChrono.remaining = _iChrono.duration;
+  _iChrono.startTime = null;
+  _iChronoStopAudio();
+  _iChronoReleaseWakeLock();
+  var btn = document.getElementById('inlineChronoBtn');
+  if (btn) { btn.textContent = '▶ START'; btn.style.background = 'var(--accent)'; btn.style.color = '#000'; btn.style.border = 'none'; }
+  var lbl = document.getElementById('inlineChronoLabel');
+  if (lbl) lbl.textContent = 'RÉCUPÉRATION';
+  _iChronoUpdateDisplay();
+}
+
+function _iChronoFinish() {
+  clearInterval(_iChrono.interval);
+  _iChrono.running = false;
+  _iChronoStopAudio();
+  _iChronoReleaseWakeLock();
+  var btn = document.getElementById('inlineChronoBtn');
+  if (btn) { btn.textContent = '▶ START'; btn.style.background = 'var(--accent)'; btn.style.color = '#000'; btn.style.border = 'none'; }
+  var lbl = document.getElementById('inlineChronoLabel');
+  if (lbl) lbl.textContent = '✅ TEMPS !';
+  chronoBeep(); // réutilise le beep du chrono principal
+  _iChronoUpdateDisplay();
+}
+
+function _iChronoUpdateDisplay() {
+  var rem = Math.max(0, _iChrono.remaining);
+  var m = Math.floor(rem / 60);
+  var s = rem % 60;
+  var txt = String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+
+  var disp = document.getElementById('inlineChronoDisplay');
+  if (disp) {
+    disp.textContent = txt;
+    disp.style.color = rem <= 10 && _iChrono.running ? '#ef4444' : 'var(--accent)';
+  }
+
+  var pct = _iChrono.duration > 0 ? (rem / _iChrono.duration) * 100 : 100;
+  var bar = document.getElementById('inlineChronoBar2');
+  if (bar) {
+    bar.style.width = Math.max(0, pct) + '%';
+    bar.style.background = pct > 30 ? 'var(--accent)' : '#ef4444';
+  }
+}
+
+// Synchroniser inlineChronoSet depuis les blocs (appelé par openChronoFromSession)
+function inlineChronoFromBlock(blocIndex) {
+  if (typeof blocIndex === 'undefined' || !sessionBlocks[blocIndex]) return;
+  var b = sessionBlocks[blocIndex];
+  var restSecs = Math.round(b.rest * 60);
+  if (restSecs > 0) inlineChronoSet(restSecs);
+}
+
 // ══ EXPORT / IMPORT DONNÉES ══════════════════════════════════════
 
 // ════════════════════════════════════════════════════════
@@ -8528,11 +8830,9 @@ function _updateMultiTable() {
     if (saveRow)  saveRow.style.display = 'none';
     if (emptyMsg) {
       emptyMsg.style.display = 'block';
-      if (!hasBlocks && hasAthletes) {
-        emptyMsg.textContent = '📋 Ajoute des blocs de séance pour saisir les temps';
-      } else if (!hasAthletes) {
-        emptyMsg.textContent = '☝️ Sélectionne les athlètes pour afficher le tableau de saisie';
-      }
+      emptyMsg.textContent = !hasBlocks && hasAthletes
+        ? '📋 Ajoute des blocs de séance pour saisir les temps'
+        : '☝️ Sélectionne les athlètes pour afficher le tableau de saisie';
     }
     return;
   }
@@ -8541,7 +8841,7 @@ function _updateMultiTable() {
   if (wrap)     wrap.style.display = 'block';
   if (saveRow)  saveRow.style.display = 'block';
 
-  // ── Construire les colonnes (une par répétition de chaque bloc) ──
+  // ── Colonnes : une par répétition de chaque bloc ──
   var cols = [];
   sessionBlocks.forEach(function(b, bi) {
     for (var r = 0; r < b.reps; r++) {
@@ -8550,35 +8850,75 @@ function _updateMultiTable() {
     }
   });
 
-  // ── Calculer les temps cibles ──
-  var targets = cols.map(function(c) {
+  // ── Temps cible GLOBAL (depuis calculateur) pour l'en-tête ──
+  var globalTargets = cols.map(function(c) {
     if (!currentRefs || !currentRefs.length) return null;
-    try {
-      var t = computeTarget(c.dist, currentRefs);
-      return (t / (c.pct / 100)).toFixed(2);
-    } catch(e) { return null; }
+    try { return (computeTarget(c.dist, currentRefs) / (c.pct / 100)).toFixed(2); }
+    catch(e) { return null; }
   });
 
-  // ── En-tête du tableau ──
-  var html = '<thead><tr>';
+  // ── Calculer le temps cible d'un athlète pour un bloc donné ──
+  // Priorité : records du profil > calculateur global
+  function getAthleteTarget(pid, dist, pct) {
+    var p = profiles.find(function(pr) { return pr.id === pid; });
+    if (!p) return null;
 
-  // Colonne athlète — sticky
+    // Construire les refs depuis les records du profil
+    var refs = [];
+    var rec = p.records || {};
+    if (rec.pr50  != null) refs.push({ t: rec.pr50,  dRef: 50  });
+    if (rec.pr60  != null) refs.push({ t: rec.pr60,  dRef: 60  });
+    if (rec.pr100 != null) refs.push({ t: rec.pr100, dRef: 100 });
+    if (rec.pr200 != null) refs.push({ t: rec.pr200, dRef: 200 });
+    if (rec.pr400 != null) refs.push({ t: rec.pr400, dRef: 400 });
+
+    if (!refs.length) return null; // pas de records → pas de cible perso
+    try {
+      return (computeTarget(dist, refs) / (pct / 100)).toFixed(2);
+    } catch(e) { return null; }
+  }
+
+  // ── Résumé des temps cibles par athlète pour chaque BLOC DISTINCT ──
+  // (une ligne par bloc si plusieurs distances différentes)
+  function getAthleteBlockSummary(pid) {
+    // Dédupliquer les blocs par (dist, pct)
+    var seen = {};
+    var lines = [];
+    sessionBlocks.forEach(function(b, bi) {
+      var key = b.dist + '_' + b.pct;
+      if (seen[key]) return;
+      seen[key] = true;
+      var t = getAthleteTarget(pid, b.dist, b.pct);
+      if (!t) return;
+      var prefix = sessionBlocks.length > 1 ? b.dist + 'm@' + b.pct + '%: ' : '';
+      lines.push(prefix + t + 's');
+    });
+    return lines;
+  }
+
+  // ── En-tête ──
+  var html = '<thead><tr>';
   html += '<th style="text-align:left;padding:8px 10px;font-size:8px;letter-spacing:1px;'
     + 'color:var(--muted);border-bottom:2px solid var(--accent);white-space:nowrap;'
-    + 'position:sticky;left:0;background:var(--bg);z-index:2;min-width:80px;">ATHLÈTE</th>';
+    + 'position:sticky;left:0;background:var(--bg);z-index:3;min-width:120px;max-width:150px;">ATHLÈTE</th>';
 
-  // Grouper par bloc pour l'en-tête
   var lastBi = -1;
   cols.forEach(function(c, ci) {
-    var isFirst = (c.bi !== lastBi);
-    lastBi = c.bi;
-    var tgt = targets[ci];
+    var isFirst = (c.bi !== lastBi); lastBi = c.bi;
+    var tgt = globalTargets[ci];
+    var restSecs = Math.round((sessionBlocks[c.bi].rest || 0) * 60);
+    var restLabel = sessionBlocks[c.bi].rest > 0 ? sessionBlocks[c.bi].rest + 'min' : 'aucune';
     var borderLeft = isFirst && ci > 0 ? 'border-left:2px solid var(--border);' : '';
     html += '<th style="padding:6px 4px;font-size:8px;letter-spacing:1px;color:var(--muted);'
-      + 'border-bottom:2px solid var(--accent);text-align:center;min-width:72px;' + borderLeft + '">'
-      + '<div style="color:var(--text);font-size:10px;font-weight:bold;">' + c.label + '</div>'
-      + '<div style="color:var(--muted);font-size:8px;">' + c.dist + 'm@' + c.pct + '%</div>'
-      + (tgt ? '<div style="color:var(--accent);font-size:9px;margin-top:1px;">↳ ' + tgt + 's</div>' : '')
+      + 'border-bottom:2px solid var(--accent);text-align:center;min-width:76px;' + borderLeft + '">'
+      + '<button onclick="inlineChronoSet(' + restSecs + ',true)" '
+      + 'title="Lancer le chrono : récup ' + restLabel + '" '
+      + 'style="font-family:Bebas Neue,sans-serif;font-size:13px;color:var(--text);cursor:pointer;'
+      + 'background:none;border:none;padding:3px 6px;border-radius:3px;width:100%;'
+      + 'display:flex;align-items:center;justify-content:center;gap:4px;">'
+      + c.label + ' <span style="font-size:9px;color:var(--accent);">⏱</span></button>'
+      + '<div style="color:var(--muted);font-size:8px;">' + c.dist + 'm @ ' + c.pct + '%</div>'
+      + (tgt ? '<div style="color:var(--accent);font-size:9px;margin-top:2px;">↳ ' + tgt + 's</div>' : '')
       + '</th>';
   });
   html += '</tr></thead><tbody>';
@@ -8588,23 +8928,46 @@ function _updateMultiTable() {
     var p = profiles.find(function(pr) { return pr.id === pid; });
     if (!p) return;
 
-    html += '<tr>';
-    // Nom athlète sticky
-    html += '<td style="padding:8px 10px;font-family:Bebas Neue,sans-serif;font-size:15px;'
-      + 'color:var(--text);border-bottom:1px solid var(--border);white-space:nowrap;'
-      + 'position:sticky;left:0;background:var(--bg);z-index:1;">' + p.name + '</td>';
+    var blockSummary = getAthleteBlockSummary(pid);
 
+    html += '<tr>';
+
+    // Cellule nom + cibles perso : sticky
+    html += '<td style="padding:0;border-bottom:1px solid var(--border);'
+      + 'position:sticky;left:0;background:var(--bg);z-index:2;min-width:120px;max-width:150px;">';
+    html += '<div style="padding:6px 10px;">';
+
+    // Nom
+    html += '<div style="font-family:Bebas Neue,sans-serif;font-size:16px;color:var(--text);'
+      + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.1;">'
+      + p.name + '</div>';
+
+    // Temps cibles depuis les records du profil
+    if (blockSummary.length) {
+      blockSummary.forEach(function(line) {
+        html += '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--accent);'
+          + 'white-space:nowrap;line-height:1.5;">' + line + '</div>';
+      });
+    } else {
+      // Pas de records → indiquer
+      html += '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);'
+        + 'font-style:italic;margin-top:2px;">Pas de records</div>';
+    }
+
+    html += '</div></td>';
+
+    // Cellules de saisie
     var lastBi2 = -1;
     cols.forEach(function(c, ci) {
-      var isFirst = (c.bi !== lastBi2);
-      lastBi2 = c.bi;
+      var isFirst = (c.bi !== lastBi2); lastBi2 = c.bi;
       var inputId = 'mt_' + pid + '_' + c.bi + '_' + c.ri;
-      var tgt = targets[ci];
+      // Placeholder = cible perso de l'athlète pour ce bloc
+      var tgt = getAthleteTarget(pid, c.dist, c.pct) || globalTargets[ci] || '';
       var borderLeft = isFirst && ci > 0 ? 'border-left:2px solid var(--border);' : '';
       html += '<td style="padding:4px 3px;border-bottom:1px solid var(--border);text-align:center;' + borderLeft + '">'
         + '<input type="number" id="' + inputId + '" step="0.01" min="5" max="120" '
         + 'placeholder="' + (tgt || '—') + '" '
-        + 'style="width:66px;padding:6px 4px;background:var(--surface2);border:1px solid var(--border);'
+        + 'style="width:68px;padding:6px 4px;background:var(--surface2);border:1px solid var(--border);'
         + 'border-radius:3px;color:var(--text);font-family:DM Mono,monospace;font-size:12px;'
         + 'text-align:center;-moz-appearance:textfield;" '
         + 'data-tgt="' + (tgt || '') + '" oninput="highlightMultiCell(this,this.dataset.tgt)">'
