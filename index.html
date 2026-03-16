@@ -3863,39 +3863,19 @@ function waDoSearch() {
 
   _waSetBody('<div style="padding:24px;text-align:center;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);">⏳ Recherche de <strong style="color:var(--text);">' + name + '</strong>...</div>');
 
-  // Scraping direct côté browser (évite le bot-detection de Cloudflare Worker)
-  fetch('https://worldathletics.org/athletes?query=' + encodeURIComponent(name), {
-    headers: { 'Accept': 'text/html', 'Accept-Language': 'en-US,en;q=0.9' }
-  })
-    .then(function(r) { return r.text(); })
-    .then(function(html) {
-      // Parser les liens d'athlètes : /athletes/COUNTRY/FIRSTNAME-LASTNAME-ID
-      var re = /href="\/athletes\/([a-z0-9-]+)\/([a-z0-9-]+-([0-9]{6,12}))"/gi;
-      var seen = {};
-      var athletes = [];
-      var m;
-      while ((m = re.exec(html)) !== null && athletes.length < 15) {
-        var country = m[1];
-        var slug    = m[2];
-        var id      = parseInt(m[3]);
-        if (!id || seen[id]) continue;
-        seen[id] = true;
-        var linkStart = m.index;
-        var linkEnd   = html.indexOf('<\/a>', linkStart);
-        var linkHtml  = html.substring(linkStart, linkEnd + 4);
-        var nameMatch = linkHtml.match(/>([^<]{2,60})</);
-        var rawName   = nameMatch ? nameMatch[1].trim() : slug.replace(/-[0-9]+$/, '').replace(/-/g, ' ').toUpperCase();
-        var cc = country.replace(/-/g, '').toUpperCase().substring(0, 3);
-        athletes.push({ id: id, aaAthleteId: id, name: rawName, country: cc, countryCode: cc, birthDate: '', urlSlug: country + '/' + slug });
-      }
+  fetch(WA_PROXY + '/search?name=' + encodeURIComponent(name))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var athletes = data.athletes || [];
       if (!athletes.length) {
-        _waSetBody('<div style="padding:20px 18px;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);">Aucun résultat pour &laquo; ' + name + ' &raquo;</div>');
+        var detail = data.error ? '<br><span style="font-size:8px;color:var(--muted);">(' + data.error.substring(0, 120) + ')</span>' : '';
+        _waSetBody('<div style="padding:20px 18px;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);">Aucun résultat pour &laquo; ' + name + ' &raquo;' + detail + '</div>');
         return;
       }
       _waRenderAthleteList(athletes);
     })
     .catch(function(err) {
-      _waSetBody('<div style="padding:20px 18px;font-family:\'DM Mono\',monospace;font-size:9px;color:#ef4444;">❌ Erreur : ' + err.message + '</div>');
+      _waSetBody('<div style="padding:20px 18px;font-family:\'DM Mono\',monospace;font-size:9px;color:#ef4444;">❌ Erreur réseau : ' + err.message + '</div>');
     });
 }
 
