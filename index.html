@@ -7619,117 +7619,142 @@ var _saOverlay = null;
 function openSAWidget() {
   if (_saOverlay) { _saOverlay.remove(); _saOverlay = null; return; }
 
-  // Catégories avec IDs alabus
   var SA_CATS = [
-    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g45s-bk', label: 'U16 ♂' },
-    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g45u-bl', label: 'U16 ♀' },
-    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g45w-bm', label: 'U18 ♂' },
-    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g45y-bn', label: 'U18 ♀' },
-    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g45z-bo', label: 'U20 ♂' },
-    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g461-bp', label: 'U20 ♀' },
-    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g467-bs', label: 'Seniors ♂' },
-    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g469-bt', label: 'Seniors ♀' },
-    { id: 'M', label: 'Tous ♂' },
-    { id: 'W', label: 'Toutes ♀' },
+    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g45s-bk', label: 'U16 \u2642' },
+    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g45u-bl', label: 'U16 \u2640' },
+    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g45w-bm', label: 'U18 \u2642' },
+    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g45y-bn', label: 'U18 \u2640' },
+    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g45z-bo', label: 'U20 \u2642' },
+    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g461-bp', label: 'U20 \u2640' },
+    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g467-bs', label: 'Seniors \u2642' },
+    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g469-bt', label: 'Seniors \u2640' },
+    { id: 'M', label: 'Tous \u2642' },
+    { id: 'W', label: 'Toutes \u2640' },
   ];
+  var state = {
+    catId: '5c4o3k5m-d686mo-j986g2ie-1-j986g45w-bm',
+    indoor: 'false',
+    year: String(new Date().getFullYear())
+  };
 
-  var _saCatId = '5c4o3k5m-d686mo-j986g2ie-1-j986g45w-bm'; // U18 ♂ par défaut
-  var _saSeason = 'false'; // Outdoor par défaut
-  var _saYear = new Date().getFullYear().toString();
+  function buildUrl() {
+    return 'https://alabus.swiss-athletics.ch/satweb/faces/bestlist.xhtml'
+      + '?lang=fr&mobile=false&year=' + state.year
+      + '&indoor=' + state.indoor
+      + '&category=' + encodeURIComponent(state.catId)
+      + '&tops=30&onlyCategoryAthletes=false&onlyHomologated=false&listType=1';
+  }
+  function reloadIframe() {
+    var f = document.getElementById('saIframe');
+    if (f) f.src = buildUrl();
+  }
+  function updateCatBtns() {
+    document.querySelectorAll('#saCatBtns button').forEach(function(btn) {
+      var active = btn.dataset.catId === state.catId;
+      btn.style.background  = active ? 'var(--accent)' : 'var(--surface2)';
+      btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
+      btn.style.color       = active ? '#000' : 'var(--muted)';
+    });
+  }
+  function updateSeasonBtns() {
+    var out = document.getElementById('saOutBtn');
+    var ind = document.getElementById('saInBtn');
+    if (!out || !ind) return;
+    var isOut = state.indoor === 'false';
+    out.style.background  = isOut ? 'var(--accent)' : 'var(--surface2)';
+    out.style.borderColor = isOut ? 'var(--accent)' : 'var(--border)';
+    out.style.color       = isOut ? '#000' : 'var(--muted)';
+    ind.style.background  = !isOut ? 'var(--accent)' : 'var(--surface2)';
+    ind.style.borderColor = !isOut ? 'var(--accent)' : 'var(--border)';
+    ind.style.color       = !isOut ? '#000' : 'var(--muted)';
+  }
 
+  // Overlay
   var overlay = document.createElement('div');
   overlay.id = 'saOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;'    + 'display:flex;flex-direction:column;';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;display:flex;flex-direction:column;';
 
-  // ── Header ──
+  // Header
   var header = document.createElement('div');
-  header.style.cssText = 'flex-shrink:0;background:var(--surface);border-bottom:1px solid var(--border);'    + 'padding:10px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;';
-  header.innerHTML = '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--text);flex-shrink:0;">🇨🇭 SWISS ATHLETICS</span>'
-    + '<div id="saCatBtns" style="display:flex;gap:4px;flex-wrap:wrap;flex:1;"></div>'
-    + '<div style="display:flex;gap:6px;flex-shrink:0;align-items:center;">'
-    + '<select id="saYearSel" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 8px;color:var(--text);font-family:\'DM Mono\',monospace;font-size:9px;">'
-    + [2026,2025,2024,2023,2022].map(function(y){ return '<option value="'+y+'"'+(y===parseInt(_saYear)?' selected':'')+'>'+y+'</option>'; }).join('')
-    + '</select>'
-    + '<button onclick="_saSetSeason(\'false\')" id="saOutBtn" style="font-family:\'DM Mono\',monospace;font-size:9px;padding:5px 10px;border-radius:4px;cursor:pointer;background:var(--accent);border:1px solid var(--accent);color:#000;">Outdoor</button>'
-    + '<button onclick="_saSetSeason(\'true\')" id="saInBtn" style="font-family:\'DM Mono\',monospace;font-size:9px;padding:5px 10px;border-radius:4px;cursor:pointer;background:var(--surface2);border:1px solid var(--border);color:var(--muted);">Indoor</button>'
-    + '</div>'
-    + '<button onclick="closeSAWidget()" style="flex-shrink:0;background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer;padding:0 4px;">✕</button>';
+  header.style.cssText = 'flex-shrink:0;background:var(--surface);border-bottom:2px solid var(--border);padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
 
-  // Boutons catégorie
-  var catBtns = '';
+  // Titre
+  var title = document.createElement('span');
+  title.textContent = '\uD83C\uDDE8\uD83C\uDDED SWISS ATHLETICS';
+  title.style.cssText = "font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--text);flex-shrink:0;";
+
+  // Zone boutons catégorie
+  var catWrap = document.createElement('div');
+  catWrap.id = 'saCatBtns';
+  catWrap.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;flex:1;';
   SA_CATS.forEach(function(c) {
-    var active = c.id === _saCatId;
-    catBtns += '<button onclick="_saSetCat(\'' + c.id + '\')" id="sacat_' + c.id.split('-')[0] + c.id.slice(-4)
-      + '" style="font-family:\'DM Mono\',monospace;font-size:9px;padding:5px 10px;border-radius:4px;cursor:pointer;white-space:nowrap;'
+    var btn = document.createElement('button');
+    btn.textContent = c.label;
+    btn.dataset.catId = c.id;
+    var active = c.id === state.catId;
+    btn.style.cssText = "font-family:'DM Mono',monospace;font-size:9px;padding:4px 9px;border-radius:4px;cursor:pointer;white-space:nowrap;"
       + 'background:' + (active ? 'var(--accent)' : 'var(--surface2)') + ';'
       + 'border:1px solid ' + (active ? 'var(--accent)' : 'var(--border)') + ';'
-      + 'color:' + (active ? '#000' : 'var(--muted)') + ';">' + c.label + '</button>';
+      + 'color:' + (active ? '#000' : 'var(--muted)') + ';';
+    btn.addEventListener('click', function() {
+      state.catId = c.id;
+      updateCatBtns();
+      reloadIframe();
+    });
+    catWrap.appendChild(btn);
   });
 
-  // ── iframe ──
+  // Contrôles droite
+  var controls = document.createElement('div');
+  controls.style.cssText = 'flex-shrink:0;display:flex;align-items:center;gap:6px;';
+
+  var yearSel = document.createElement('select');
+  yearSel.id = 'saYearSel';
+  yearSel.style.cssText = "background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:4px 8px;color:var(--text);font-family:'DM Mono',monospace;font-size:9px;cursor:pointer;";
+  [2026,2025,2024,2023,2022].forEach(function(y) {
+    var opt = document.createElement('option');
+    opt.value = String(y); opt.textContent = String(y);
+    if (String(y) === state.year) opt.selected = true;
+    yearSel.appendChild(opt);
+  });
+  yearSel.addEventListener('change', function() { state.year = this.value; reloadIframe(); });
+
+  var outBtn = document.createElement('button');
+  outBtn.id = 'saOutBtn'; outBtn.textContent = 'Outdoor';
+  outBtn.style.cssText = "font-family:'DM Mono',monospace;font-size:9px;padding:4px 10px;border-radius:4px;cursor:pointer;background:var(--accent);border:1px solid var(--accent);color:#000;";
+  outBtn.addEventListener('click', function() { state.indoor = 'false'; updateSeasonBtns(); reloadIframe(); });
+
+  var inBtn = document.createElement('button');
+  inBtn.id = 'saInBtn'; inBtn.textContent = 'Indoor';
+  inBtn.style.cssText = "font-family:'DM Mono',monospace;font-size:9px;padding:4px 10px;border-radius:4px;cursor:pointer;background:var(--surface2);border:1px solid var(--border);color:var(--muted);";
+  inBtn.addEventListener('click', function() { state.indoor = 'true'; updateSeasonBtns(); reloadIframe(); });
+
+  var closeBtn = document.createElement('button');
+  closeBtn.textContent = '\u2715';
+  closeBtn.style.cssText = 'flex-shrink:0;background:none;border:none;font-size:18px;color:var(--muted);cursor:pointer;padding:0 4px;';
+  closeBtn.addEventListener('click', closeSAWidget);
+
+  controls.appendChild(yearSel);
+  controls.appendChild(outBtn);
+  controls.appendChild(inBtn);
+  header.appendChild(title);
+  header.appendChild(catWrap);
+  header.appendChild(controls);
+  header.appendChild(closeBtn);
+
+  // iframe
   var iframeWrap = document.createElement('div');
   iframeWrap.style.cssText = 'flex:1;overflow:hidden;background:#fff;';
-
   var iframe = document.createElement('iframe');
   iframe.id = 'saIframe';
   iframe.style.cssText = 'width:100%;height:100%;border:none;';
-  iframe.src = _buildSAUrl(_saCatId, _saYear, _saSeason);
-
+  iframe.src = buildUrl();
   iframeWrap.appendChild(iframe);
+
   overlay.appendChild(header);
   overlay.appendChild(iframeWrap);
   document.body.appendChild(overlay);
   _saOverlay = overlay;
-
-  // Remplir les boutons catégorie
-  setTimeout(function() {
-    var cb = document.getElementById('saCatBtns');
-    if (cb) cb.innerHTML = catBtns;
-
-    // Listener sur l'année
-    var ys = document.getElementById('saYearSel');
-    if (ys) ys.addEventListener('change', function() {
-      _saYear = this.value;
-      _saReload();
-    });
-  }, 50);
-
-  function _buildSAUrl(catId, year, indoor) {
-    return 'https://alabus.swiss-athletics.ch/satweb/faces/bestlist.xhtml'
-      + '?lang=fr&mobile=false'
-      + '&year=' + year
-      + '&indoor=' + indoor
-      + '&category=' + encodeURIComponent(catId)
-      + '&tops=30&onlyCategoryAthletes=false&onlyHomologated=false&listType=1';
-  }
-
-  window._saSetCat = function(catId) {
-    _saCatId = catId;
-    _saReload();
-    // Mettre à jour les boutons
-    SA_CATS.forEach(function(c) {
-      var btn = document.getElementById('sacat_' + c.id.split('-')[0] + c.id.slice(-4));
-      if (!btn) return;
-      var active = c.id === catId;
-      btn.style.background = active ? 'var(--accent)' : 'var(--surface2)';
-      btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
-      btn.style.color = active ? '#000' : 'var(--muted)';
-    });
-  };
-
-  window._saSetSeason = function(indoor) {
-    _saSeason = indoor;
-    document.getElementById('saOutBtn').style.background = indoor === 'false' ? 'var(--accent)' : 'var(--surface2)';
-    document.getElementById('saOutBtn').style.color = indoor === 'false' ? '#000' : 'var(--muted)';
-    document.getElementById('saInBtn').style.background = indoor === 'true' ? 'var(--accent)' : 'var(--surface2)';
-    document.getElementById('saInBtn').style.color = indoor === 'true' ? '#000' : 'var(--muted)';
-    _saReload();
-  };
-
-  window._saReload = function() {
-    var f = document.getElementById('saIframe');
-    if (f) f.src = _buildSAUrl(_saCatId, _saYear, _saSeason);
-  };
 }
 
 function closeSAWidget() {
@@ -9109,31 +9134,34 @@ setTimeout(() => {
   <!-- Contrôle genre + standard par athlète (rendu dynamiquement dans renderSaison) -->
   <div id="saisonStandardControls" style="margin-bottom:10px;"></div>
 
-  <!-- Bouton World Athletics -->
-  <button onclick="openWAWidget()"
-    style="width:100%;background:none;border:1px solid var(--border);border-radius:6px;
-           padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:10px;
-           cursor:pointer;text-align:left;">
-    <span style="font-size:20px;">🌍</span>
-    <div>
-      <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--text);letter-spacing:1px;line-height:1;">RECHERCHE WORLD ATHLETICS</div>
-      <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:2px;">Chercher un athlète et importer ses résultats officiels</div>
-    </div>
-    <span style="margin-left:auto;font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);">›</span>
-  </button>
-
-  <!-- Bouton Swiss Athletics Bestenliste -->
-  <button onclick="openSAWidget()"
-    style="width:100%;background:none;border:1px solid var(--border);border-radius:6px;
-           padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;gap:10px;
-           cursor:pointer;text-align:left;">
-    <span style="font-size:20px;">🇨🇭</span>
-    <div>
-      <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--text);letter-spacing:1px;line-height:1;">LISTES DES MEILLEURS — SWISS ATHLETICS</div>
-      <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:2px;">Classements suisses par catégorie et discipline (U12 → Masters)</div>
-    </div>
-    <span style="margin-left:auto;font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);">›</span>
-  </button>
+  <!-- Boutons WA + SA compacts côte à côte -->
+  <div style="display:flex;gap:6px;margin-bottom:10px;">
+    <button onclick="openWAWidget()" style="flex:1;background:none;border:1px solid var(--border);border-radius:5px;padding:7px 10px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+      <span style="font-size:14px;flex-shrink:0;">🌍</span>
+      <div style="text-align:left;">
+        <div style="font-family:'DM Mono',monospace;font-size:8px;font-weight:bold;color:var(--text);letter-spacing:0.5px;">WORLD ATHLETICS</div>
+        <div style="font-family:'DM Mono',monospace;font-size:6px;color:var(--muted);">Importer résultats</div>
+      </div>
+    </button>
+    <button onclick="openSAWidget()" style="flex:1;background:none;border:1px solid var(--border);border-radius:5px;padding:7px 10px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+      <span style="font-size:14px;flex-shrink:0;">🇨🇭</span>
+      <div style="text-align:left;">
+        <div style="font-family:'DM Mono',monospace;font-size:8px;font-weight:bold;color:var(--text);letter-spacing:0.5px;">SWISS ATHLETICS</div>
+        <div style="font-family:'DM Mono',monospace;font-size:6px;color:var(--muted);">Listes des meilleurs</div>
+      </div>
+    </button>
+  </div>
+    </button>
+    <button onclick="openSAWidget()"
+      style="flex:1;background:none;border:1px solid var(--border);border-radius:6px;
+             padding:8px 12px;display:flex;align-items:center;gap:8px;cursor:pointer;">
+      <span style="font-size:16px;">🇨🇭</span>
+      <div style="text-align:left;min-width:0;">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text);font-weight:bold;letter-spacing:1px;white-space:nowrap;">SWISS ATHLETICS</div>
+        <div style="font-family:'DM Mono',monospace;font-size:7px;color:var(--muted);margin-top:1px;">Listes des meilleurs</div>
+      </div>
+    </button>
+  </div>
 
   <!-- Sélecteur saison + athlète -->
   <div class="card" style="margin-bottom:12px;">
