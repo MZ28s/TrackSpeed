@@ -1662,34 +1662,19 @@ function runIAPlanif() {
   var startWN = getISOWeek(start), startWY = getISOWeekYear(start);
   var endWN   = getISOWeek(end),   endWY   = getISOWeekYear(end);
 
-  var prompt = 'Tu es un expert en périodisation du sprint athlétisme, spécialisé catégories U16-U20 et senior.\n'
-    + 'Tu bases tes recommandations sur : Bompa & Haff (Periodization), le modèle Swiss Athletics, '
-    + 'Haugen & Seiler (sprint periodization), et les bonnes pratiques World Athletics développement.\n\n'
-    + 'MISSION : Génère une planification annuelle COMPLÈTE et OPTIMALE pour arriver au meilleur de la forme à l\'échéance principale.\n\n'
-    + '=== PARAMÈTRES ===\n'
-    + 'Période : ' + startVal + ' (S' + startWN + '/' + startWY + ') → ' + endVal + ' (S' + endWN + '/' + endWY + ')\n'
-    + 'Total : ' + totalWeeks + ' semaines\n'
-    + 'Échéance principale : ' + (eventName || 'Compétition principale') + '\n'
-    + 'Discipline : ' + discVal + 'm\n'
-    + 'Athlète : ' + athInfo + '\n'
-    + 'Niveau : ' + _iaNiveau + '\n'
-    + (context ? 'Contraintes : ' + context + '\n' : '')
-    + '\n=== PHASES DISPONIBLES ===\n'
-    + 'prep_gen = Préparation générale (base aérobie, force générale, technique fondamentale)\n'
-    + 'pre_comp = Pré-compétition (vitesse-force, accélérations, haute intensité)\n'
-    + 'comp = Compétition (maintien forme, fraîcheur, pointes de forme)\n'
-    + 'recup = Récupération/Transition (régénération active)\n'
-    + '\n=== CHARGES DISPONIBLES ===\n'
-    + '100 = Charge maximale | 80 = Charge élevée | 60 = Charge modérée | 30 = Charge légère | 0 = Affûtage (AF)\n'
-    + '\nJSON STRICT (pas de markdown):\n'
-    + '{"nom":"...","resume":"1 phrase","semaines":[{"num":N,"year":N,"phase":"prep_gen|pre_comp|comp|recup","charge":100|80|60|30|0,"camp":false,"vacances":false,"label":"","competitions":[]}],"echeances":[{"semNum":N,"semYear":N,"nom":"...","importance":"A","lieu":""}],"conseils":["...","...","..."]}\n\n'
-    + 'RÈGLES DE PÉRIODISATION SPRINT :\n'
-    + '- Planifier les ' + totalWeeks + ' semaines de S' + startWN + '/' + startWY + ' à S' + endWN + '/' + endWY + '\n'
-    + '- Progression: prep_gen(' + Math.round(totalWeeks*0.40) + 'sem) → pre_comp(' + Math.round(totalWeeks*0.30) + 'sem) → comp(' + Math.round(totalWeeks*0.25) + 'sem) + recup(' + Math.round(totalWeeks*0.05) + 'sem)\n'
-    + '- Affûtage charge=0 sur S' + endWN + ', récup charge=30 toutes les 3-4 semaines\n'
-    + '- Numérotation ISO: S' + startWN + '/' + startWY + ' → S' + endWN + '/' + endWY + '\n'
-    + '- IMPORTANT: réponse JSON uniquement, pas de texte, les "conseils" max 3 items courts';
-
+  var prompt = 'Tu es expert en périodisation du sprint. Génère une planification JSON pour '
+    + totalWeeks + ' semaines (S' + startWN + '/' + startWY + ' à S' + endWN + '/' + endWY + ').'
+    + '\nDiscipline: ' + discVal + 'm | Niveau: ' + _iaNiveau + ' | Athlète: ' + athInfo
+    + '\nÉchéance principale: ' + (eventName || 'Compétition principale') + ' → S' + endWN + '/' + endWY
+    + (context ? '\nContraintes: ' + context : '')
+    + '\n\nJSON STRICT uniquement, aucun texte autour, aucun markdown:'
+    + '\n{"nom":"...","resume":"1 phrase","semaines":[{"num":N,"year":N,"phase":"prep_gen|pre_comp|comp|recup","charge":100|80|60|30|0,"camp":false,"vacances":false,"label":"","competitions":[]}],"echeances":[{"semNum":N,"semYear":N,"nom":"...","importance":"A|B|C","lieu":""}],"conseils":["...","...","..."]}'
+    + '\n\nRègles:'
+    + '\n- ' + Math.round(totalWeeks*0.40) + 'sem prep_gen → ' + Math.round(totalWeeks*0.30) + 'sem pre_comp → ' + Math.round(totalWeeks*0.25) + 'sem comp + ' + Math.round(totalWeeks*0.05) + 'sem recup'
+    + '\n- Récupération (charge=30) toutes les 3-4 semaines de charge élevée'
+    + '\n- Affûtage (charge=0) sur S' + endWN + '/' + endWY + ' (échéance principale)'
+    + '\n- Numéros de semaine ISO corrects de S' + startWN + '/' + startWY + ' à S' + endWN + '/' + endWY
+    + '\n- Toutes les ' + totalWeeks + ' semaines doivent être dans le tableau';
   // Appel API Claude via proxy Cloudflare Worker (évite le blocage CORS)
   fetch(WA_PROXY + '/ai', {
     method: 'POST',
