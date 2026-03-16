@@ -997,7 +997,7 @@ body.light-theme canvas { filter:invert(0); }
       </div>
     </button>
   </div>
-
+  </div>
 
   <!-- Sélecteur saison + athlète -->
   <div class="card" style="margin-bottom:12px;">
@@ -1078,8 +1078,6 @@ body.light-theme canvas { filter:invert(0); }
 
 
 
-
-</div>
 
 <!-- ══ PAGE PLANIFICATION ANNUELLE ══ -->
 <div class="page" id="page-planif">
@@ -7732,54 +7730,29 @@ var _saOverlay = null;
 function openSAWidget() {
   if (_saOverlay) { _saOverlay.remove(); _saOverlay = null; return; }
 
-  var SA_CATS = [
-    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g45s-bk', label: 'U16 \u2642' },
-    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g45u-bl', label: 'U16 \u2640' },
-    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g45w-bm', label: 'U18 \u2642' },
-    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g45y-bn', label: 'U18 \u2640' },
-    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g45z-bo', label: 'U20 \u2642' },
-    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g461-bp', label: 'U20 \u2640' },
-    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g467-bs', label: 'Seniors \u2642' },
-    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g469-bt', label: 'Seniors \u2640' },
-    { id: 'M', label: 'Tous \u2642' },
-    { id: 'W', label: 'Toutes \u2640' },
-  ];
-  var state = {
-    catId: '5c4o3k5m-d686mo-j986g2ie-1-j986g45w-bm',
-    indoor: 'false',
-    year: String(new Date().getFullYear())
-  };
+  var state = { indoor: 'false', year: String(new Date().getFullYear()) };
 
   function buildUrl() {
     return 'https://alabus.swiss-athletics.ch/satweb/faces/bestlist.xhtml'
       + '?lang=fr&mobile=false&year=' + state.year
       + '&indoor=' + state.indoor
-      + '&category=' + encodeURIComponent(state.catId)
       + '&tops=30&onlyCategoryAthletes=false&onlyHomologated=false&listType=1';
   }
   function reloadIframe() {
     var f = document.getElementById('saIframe');
     if (f) f.src = buildUrl();
   }
-  function updateCatBtns() {
-    document.querySelectorAll('#saCatBtns button').forEach(function(btn) {
-      var active = btn.dataset.catId === state.catId;
-      btn.style.background  = active ? 'var(--accent)' : 'var(--surface2)';
-      btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
-      btn.style.color       = active ? '#000' : 'var(--muted)';
-    });
-  }
-  function updateSeasonBtns() {
-    var out = document.getElementById('saOutBtn');
-    var ind = document.getElementById('saInBtn');
-    if (!out || !ind) return;
+  function updateBtns() {
+    var outBtn = document.getElementById('saOutBtn');
+    var inBtn  = document.getElementById('saInBtn');
+    if (!outBtn || !inBtn) return;
     var isOut = state.indoor === 'false';
-    out.style.background  = isOut ? 'var(--accent)' : 'var(--surface2)';
-    out.style.borderColor = isOut ? 'var(--accent)' : 'var(--border)';
-    out.style.color       = isOut ? '#000' : 'var(--muted)';
-    ind.style.background  = !isOut ? 'var(--accent)' : 'var(--surface2)';
-    ind.style.borderColor = !isOut ? 'var(--accent)' : 'var(--border)';
-    ind.style.color       = !isOut ? '#000' : 'var(--muted)';
+    outBtn.style.background  = isOut ? 'var(--accent)' : 'var(--surface2)';
+    outBtn.style.borderColor = isOut ? 'var(--accent)' : 'var(--border)';
+    outBtn.style.color       = isOut ? '#000' : 'var(--muted)';
+    inBtn.style.background   = !isOut ? 'var(--accent)' : 'var(--surface2)';
+    inBtn.style.borderColor  = !isOut ? 'var(--accent)' : 'var(--border)';
+    inBtn.style.color        = !isOut ? '#000' : 'var(--muted)';
   }
 
   // Overlay
@@ -7789,37 +7762,11 @@ function openSAWidget() {
 
   // Header
   var header = document.createElement('div');
-  header.style.cssText = 'flex-shrink:0;background:var(--surface);border-bottom:2px solid var(--border);padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
+  header.style.cssText = 'flex-shrink:0;background:var(--surface);border-bottom:2px solid var(--border);padding:8px 14px;display:flex;align-items:center;gap:10px;';
 
-  // Titre
   var title = document.createElement('span');
   title.textContent = '\uD83C\uDDE8\uD83C\uDDED SWISS ATHLETICS';
-  title.style.cssText = "font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--text);flex-shrink:0;";
-
-  // Zone boutons catégorie
-  var catWrap = document.createElement('div');
-  catWrap.id = 'saCatBtns';
-  catWrap.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;flex:1;';
-  SA_CATS.forEach(function(c) {
-    var btn = document.createElement('button');
-    btn.textContent = c.label;
-    btn.dataset.catId = c.id;
-    var active = c.id === state.catId;
-    btn.style.cssText = "font-family:'DM Mono',monospace;font-size:9px;padding:4px 9px;border-radius:4px;cursor:pointer;white-space:nowrap;"
-      + 'background:' + (active ? 'var(--accent)' : 'var(--surface2)') + ';'
-      + 'border:1px solid ' + (active ? 'var(--accent)' : 'var(--border)') + ';'
-      + 'color:' + (active ? '#000' : 'var(--muted)') + ';';
-    btn.addEventListener('click', function() {
-      state.catId = c.id;
-      updateCatBtns();
-      reloadIframe();
-    });
-    catWrap.appendChild(btn);
-  });
-
-  // Contrôles droite
-  var controls = document.createElement('div');
-  controls.style.cssText = 'flex-shrink:0;display:flex;align-items:center;gap:6px;';
+  title.style.cssText = "font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--text);flex:1;";
 
   var yearSel = document.createElement('select');
   yearSel.id = 'saYearSel';
@@ -7834,25 +7781,23 @@ function openSAWidget() {
 
   var outBtn = document.createElement('button');
   outBtn.id = 'saOutBtn'; outBtn.textContent = 'Outdoor';
-  outBtn.style.cssText = "font-family:'DM Mono',monospace;font-size:9px;padding:4px 10px;border-radius:4px;cursor:pointer;background:var(--accent);border:1px solid var(--accent);color:#000;";
-  outBtn.addEventListener('click', function() { state.indoor = 'false'; updateSeasonBtns(); reloadIframe(); });
+  outBtn.style.cssText = "font-family:'DM Mono',monospace;font-size:9px;padding:4px 12px;border-radius:4px;cursor:pointer;background:var(--accent);border:1px solid var(--accent);color:#000;";
+  outBtn.addEventListener('click', function() { state.indoor = 'false'; updateBtns(); reloadIframe(); });
 
   var inBtn = document.createElement('button');
   inBtn.id = 'saInBtn'; inBtn.textContent = 'Indoor';
-  inBtn.style.cssText = "font-family:'DM Mono',monospace;font-size:9px;padding:4px 10px;border-radius:4px;cursor:pointer;background:var(--surface2);border:1px solid var(--border);color:var(--muted);";
-  inBtn.addEventListener('click', function() { state.indoor = 'true'; updateSeasonBtns(); reloadIframe(); });
+  inBtn.style.cssText = "font-family:'DM Mono',monospace;font-size:9px;padding:4px 12px;border-radius:4px;cursor:pointer;background:var(--surface2);border:1px solid var(--border);color:var(--muted);";
+  inBtn.addEventListener('click', function() { state.indoor = 'true'; updateBtns(); reloadIframe(); });
 
   var closeBtn = document.createElement('button');
   closeBtn.textContent = '\u2715';
-  closeBtn.style.cssText = 'flex-shrink:0;background:none;border:none;font-size:18px;color:var(--muted);cursor:pointer;padding:0 4px;';
+  closeBtn.style.cssText = 'background:none;border:none;font-size:18px;color:var(--muted);cursor:pointer;padding:0 4px;';
   closeBtn.addEventListener('click', closeSAWidget);
 
-  controls.appendChild(yearSel);
-  controls.appendChild(outBtn);
-  controls.appendChild(inBtn);
   header.appendChild(title);
-  header.appendChild(catWrap);
-  header.appendChild(controls);
+  header.appendChild(yearSel);
+  header.appendChild(outBtn);
+  header.appendChild(inBtn);
   header.appendChild(closeBtn);
 
   // iframe
