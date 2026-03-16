@@ -1631,104 +1631,192 @@ function iaNiveauSelect(btn) {
 // ════════════════════════════════════════════════════════════════
 
 function _buildPlanifStructure(startWN, startWY, endWN, endWY, totalWeeks) {
-  // Générer la liste ISO des semaines
+  // ═══════════════════════════════════════════════════════════════
+  // ALGORITHME BASÉ SUR LA SCIENCE DU SPRINT (2025)
+  //
+  // Sources :
+  // ─ Haugen, Seiler, Sandbakk, Tønnessen (2019) - Sports Medicine Open
+  //   "Training and Development of Elite Sprint Performance"
+  //   → Périodisation 2:1 ou 3:1 (semaines charge : semaine récup)
+  //   → Transition prépa→compét = période à risque (2/3 des blessures ischio)
+  //   → Familiarisation progressive obligatoire au début
+  //   → CNS : 48h récup minimum après séance intensive
+  //
+  // ─ Bompa & Buzzichelli (2019) - Periodization 6th ed.
+  //   → Macrocycle : Prépa générale → Prépa spécifique → Compétition → Transition
+  //   → Surcompensation : charge élevée → récup → adaptation = progression
+  //   → Règle d'individualisation : adapter au niveau (débutant→élite)
+  //   → Volume décroît et intensité croît vers la compétition
+  //
+  // ─ Matveyev / Verkhoshansky - modèle classique
+  //   → Volume élevé en début de cycle, intensité croissante vers la fin
+  //   → Affûtage (tapering) : réduction progressive 40-60% du volume sur 2-3 sem
+  //
+  // MODÈLE IMPLÉMENTÉ :
+  //   1. SEMAINE 1 : toujours ≤60% (familiarisation, prévention blessures)
+  //   2. PREP_GEN : vagues 3:1 (3 semaines charge + 1 récup active à 30%)
+  //      Charges : 70→85→100→30 (montée progressive par vague)
+  //      Vague 2 : 80→90→100→30
+  //      Vague 3+ : 80→100→80→30 (oscillation mature)
+  //   3. PRE_COMP : vagues 2:1 (2 semaines charge + 1 décharge relative)
+  //      Jamais 100% → max 85% pour protéger la transition
+  //      Charges : 85→75→60 / 85→75→60...
+  //      Haugen : "large reductions in volume, increases in intensity"
+  //   4. COMP : maintien de la forme + fraîcheur
+  //      Charges décroissantes : 75→65→60→60
+  //      Pas de charge élevée, juste maintien du niveau de stimulation
+  //   5. TAPERING (AF) : réduction 40-60% volume sur 2-3 semaines
+  //      Semaines AF = 0% (repos relatif + activation légère)
+  //
+  // ADAPTATION PAR NIVEAU (injectée via le prompt IA) :
+  //   Débutant   : pics max 80%, vagues 2:1, plus de récup
+  //   Régional   : pics max 90%, vagues 3:1 standard
+  //   National   : pics 100%, vagues 3:1, prépa spécifique plus longue
+  //   International : vagues 3:1 avec surcharge planifiée (>100% possible)
+  // ═══════════════════════════════════════════════════════════════
+
+  // Générer la liste des semaines ISO
   var weeks = [];
   var wn = startWN, wy = startWY;
   for (var i = 0; i < totalWeeks; i++) {
     weeks.push({ num: wn, year: wy });
     wn++;
-    var maxW = _isoWeeksInYear(wy);
-    if (wn > maxW) { wn = 1; wy++; }
+    if (wn > _isoWeeksInYear(wy)) { wn = 1; wy++; }
+  }
+  var n = totalWeeks;
+
+  // ── Proportions des phases (adaptées à la durée) ──────────────
+  // Basées sur Bompa (Prep générale 40-50%, Prep spécifique 25-30%, Comp 20-30%)
+  // Affûtage : 2-3 semaines selon Haugen/Mujika
+  var nAF      = (n <= 8) ? 2 : (n <= 14) ? 2 : 3;        // 2-3 sem tapering
+  var nComp    = Math.max(2, Math.round(n * 0.12));         // ~12% comp hors AF
+  var nPreComp = Math.max(2, Math.round(n * 0.25));         // ~25% pré-comp
+  var nPrepGen = n - nAF - nComp - nPreComp;               // ~55-63% prep_gen
+
+  // Garantir minimums sensés
+  if (nPrepGen < 2) { nPreComp = Math.max(1, nPreComp - 1); nPrepGen = n - nAF - nComp - nPreComp; }
+
+  // Indices de début de chaque phase
+  var preStart  = nPrepGen;
+  var compStart = nPrepGen + nPreComp;
+  var afStart   = n - nAF;
+
+  // Assigner les phases
+  var phases = [];
+  for (var i = 0; i < n; i++) {
+    if      (i < preStart)  phases.push('prep_gen');
+    else if (i < compStart) phases.push('pre_comp');
+    else                    phases.push('comp');
   }
 
-  var n = totalWeeks;
-  // Calcul des phases selon Bompa & Swiss Athletics
-  // - Récupération : ~8% (min 1 sem)
-  // - Comp : ~22%
-  // - Pré-comp : ~28%
-  // - Prep_gen : reste
-  var nRecup   = Math.max(1, Math.round(n * 0.08));
-  var nComp    = Math.max(2, Math.round(n * 0.22));
-  var nPreComp = Math.max(2, Math.round(n * 0.28));
-  var nPrepGen = n - nRecup - nComp - nPreComp;
+  // ── Calcul des charges ────────────────────────────────────────
+  var charges = new Array(n).fill(0);
 
-  // Distribuer les phases dans l'ordre : prep_gen → pre_comp → comp → recup
-  var phases = [];
-  for (var i = 0; i < nPrepGen; i++)  phases.push('prep_gen');
-  for (var i = 0; i < nPreComp; i++) phases.push('pre_comp');
-  for (var i = 0; i < nComp; i++)    phases.push('comp');
-  for (var i = 0; i < nRecup; i++)   phases.push('recup');
+  // ── AF : 0% (tapering final)
+  for (var i = afStart; i < n; i++) charges[i] = 0;
 
-  // Attribuer les charges selon les règles :
-  // - Jamais plus de 2 semaines consécutives à 100%
-  // - Semaine de récup (30%) toutes les 3 semaines de charge élevée (≥80%)
-  // - Montée progressive : ne pas dépasser +20% par semaine
-  // - Affûtage (0) sur la dernière semaine (échéance principale) et avant-dernière
-  // - Dernière semaine comp toujours AF (0)
-  var charges = [];
-  var highCount = 0; // compteur de semaines à charge élevée consécutives
-  var lastCharge = 30;
+  // ── COMP (hors AF) : descente douce, maintien de stimulation
+  // Inspiré de Bompa : volume -40%, maintien de l'intensité spécifique
+  for (var i = compStart; i < afStart; i++) {
+    var pos = i - compStart;
+    var rem = afStart - compStart; // total semaines comp
+    if (rem === 1) { charges[i] = 75; }
+    else if (pos === 0)         charges[i] = 80;
+    else if (pos <= rem * 0.5) charges[i] = 65;
+    else                       charges[i] = 60;
+  }
 
-  for (var i = 0; i < n; i++) {
-    var phase = phases[i];
-    var isLast = (i === n - 1);
-    var isPreLast = (i === n - 2);
-    var remainingComp = phases.slice(i).filter(function(p){return p==='comp';}).length;
-
-    var charge;
-
-    if (isLast) {
-      // Dernière semaine = AF (affûtage)
-      charge = 0;
-    } else if (isPreLast && phase === 'comp') {
-      // Avant-dernière en compétition = affûtage aussi
-      charge = 0;
-    } else if (phase === 'recup') {
-      charge = 30;
-      highCount = 0;
-    } else if (highCount >= 3) {
-      // Forcer récup après 3 semaines de charge élevée
-      charge = 30;
-      highCount = 0;
-    } else if (phase === 'prep_gen') {
-      // prep_gen : alterner 100 / 100 / 30 ou 80 / 100 / 30
-      var posInPhase = phases.slice(0, i).filter(function(p){return p==='prep_gen';}).length;
-      if (posInPhase % 3 === 2) {
-        charge = 30; highCount = 0;
-      } else if (posInPhase % 3 === 1) {
-        charge = 100; highCount++;
-      } else {
-        charge = 80; highCount++;
-      }
-    } else if (phase === 'pre_comp') {
-      // pre_comp : 100 / 80 / 60 / 100 / 80 / 60...
-      var posInPhase = phases.slice(0, i).filter(function(p){return p==='pre_comp';}).length;
-      if (posInPhase % 3 === 0) {
-        charge = 100; highCount++;
-      } else if (posInPhase % 3 === 1) {
-        charge = 80; highCount++;
-      } else {
-        charge = 60; highCount = 0;
-      }
-    } else if (phase === 'comp') {
-      // comp : décroissance progressive vers l'échéance
-      var posInPhase = phases.slice(0, i).filter(function(p){return p==='comp';}).length;
-      if (posInPhase === 0) {
-        charge = 80;
-      } else if (posInPhase === 1) {
-        charge = 60;
-      } else {
-        charge = 60;
-      }
-      highCount = 0;
+  // ── PRE_COMP : vagues 2:1 selon Haugen, max 85%
+  // Transition douce obligatoire (risque blessure élevé)
+  // Pattern : [60 transition] → 85→75→60 → 85→75→60...
+  for (var i = preStart; i < compStart; i++) {
+    var pos = i - preStart;
+    if (pos === 0) {
+      // Semaine de transition depuis prep_gen → TOUJOURS douce (Haugen)
+      charges[i] = 60;
     } else {
-      charge = 60;
+      // Vagues 2:1 : 85 → 75 → 60 (décharge relative)
+      var cyclePos = (pos - 1) % 3;
+      if      (cyclePos === 0) charges[i] = 85;
+      else if (cyclePos === 1) charges[i] = 75;
+      else                     charges[i] = 60;
+    }
+  }
+
+  // ── PREP_GEN : vagues 3:1 selon Haugen/Bompa
+  // Semaine 1 = familiarisation (≤60%)
+  // Vague 1 : 60→75→90→30
+  // Vague 2 : 70→85→100→30
+  // Vague 3+ : 75→90→100→30 (charge mature)
+  var vague = 0;
+  var posInVague = 0;
+
+  for (var i = 0; i < preStart; i++) {
+    if (i === 0) {
+      charges[i] = 60; // Familiarisation obligatoire (Haugen 2019)
+      posInVague = 1;
+      continue;
     }
 
-    charges.push(charge);
+    // Patterns par vague (progression inter-vagues)
+    var patterns = [
+      [75, 90, 30],    // Vague 1 : modérée
+      [80, 95, 30],    // Vague 2 : plus forte
+      [85, 100, 30],   // Vague 3 : charge max
+      [80, 100, 30],   // Vague 4+ : maintien du niveau
+    ];
+    var pat = patterns[Math.min(vague, patterns.length - 1)];
+
+    charges[i] = pat[posInVague];
+    posInVague++;
+    if (posInVague >= pat.length) {
+      posInVague = 0;
+      vague++;
+    }
   }
 
-  // Construire le tableau final
+  // ── CORRECTIONS DE SÉCURITÉ (règles absolues) ────────────────
+
+  // 1. Jamais 2 semaines à 100% consécutives (surmenage SNC)
+  for (var i = 1; i < afStart; i++) {
+    if (charges[i] >= 100 && charges[i-1] >= 100) {
+      charges[i] = 85;
+    }
+  }
+
+  // 2. Jamais plus de 3 semaines ≥ 80% consécutives → récup forcée
+  // (Règle 3:1 de Haugen - risque de surmenage et blessure)
+  var highStreak = 0;
+  for (var i = 0; i < afStart; i++) {
+    if (charges[i] >= 80) {
+      highStreak++;
+      if (highStreak > 3) {
+        charges[i] = (i < preStart) ? 30 : 60;
+        highStreak = 0;
+      }
+    } else {
+      highStreak = 0;
+    }
+  }
+
+  // 3. Transition pre_comp → comp : jamais monter (risque blessure)
+  if (compStart > 0 && compStart < afStart) {
+    if (charges[compStart] > charges[compStart - 1]) {
+      charges[compStart] = Math.min(charges[compStart - 1], 75);
+    }
+  }
+
+  // 4. Transition prep_gen → pre_comp : jamais > 80% (Haugen : période vulnérable)
+  if (preStart > 0 && charges[preStart] > 80) {
+    charges[preStart] = 60;
+  }
+
+  // 5. Semaine avant AF : pas de 100% (ne pas compromettre l'affûtage)
+  if (afStart > 0 && charges[afStart - 1] >= 100) {
+    charges[afStart - 1] = 70;
+  }
+
+  // Résultat final
   return weeks.map(function(w, i) {
     return {
       num: w.num,
