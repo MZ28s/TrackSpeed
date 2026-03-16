@@ -1696,7 +1696,7 @@ function runIAPlanif() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 4000,
+      max_tokens: 8000,
       messages: [{ role: 'user', content: prompt }]
     })
   })
@@ -1713,9 +1713,34 @@ function runIAPlanif() {
     var planifData_ia;
     try {
       var clean = text.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
-      planifData_ia = JSON.parse(clean);
+      // Tentative 1 : parser directement
+      try {
+        planifData_ia = JSON.parse(clean);
+      } catch(e1) {
+        // Tentative 2 : réparer un JSON tronqué
+        // Trouver le dernier objet semaine complet et fermer le JSON
+        var truncated = clean;
+        // Trouver le dernier "}" complet dans le tableau semaines
+        var lastGoodSem = truncated.lastIndexOf('{"num":');
+        if (lastGoodSem > -1) {
+          // Couper après le dernier objet complet (avant la dernière virgule incomplète)
+          var afterLastSem = truncated.indexOf('}', lastGoodSem);
+          if (afterLastSem > -1) {
+            truncated = truncated.substring(0, afterLastSem + 1);
+            // Fermer le tableau semaines, echeances vide, conseils vide
+            truncated += '],"echeances":[],"conseils":["Planification générée (tronquée - augmenter les semaines IA)"]}'
+          }
+        }
+        try {
+          planifData_ia = JSON.parse(truncated);
+          planifData_ia._truncated = true;
+        } catch(e2) {
+          resultEl.innerHTML = '<div style="color:#ef4444;padding:12px;font-family:\'DM Mono\',monospace;font-size:9px;">Erreur parsing JSON : ' + e1.message + '<br><pre style="font-size:8px;white-space:pre-wrap;word-break:break-all;">' + text.substring(0,400) + '</pre></div>';
+          return;
+        }
+      }
     } catch(e) {
-      resultEl.innerHTML = '<div style="color:#ef4444;padding:12px;font-family:\'DM Mono\',monospace;font-size:9px;">Erreur parsing JSON : ' + e.message + '<br><pre style="font-size:8px;white-space:pre-wrap;">' + text.substring(0,300) + '</pre></div>';
+      resultEl.innerHTML = '<div style="color:#ef4444;padding:12px;font-family:\'DM Mono\',monospace;font-size:9px;">Erreur: ' + e.message + '</div>';
       return;
     }
 
@@ -1748,6 +1773,7 @@ function _renderIAPlanifResult(data, nomOverride, athId, startVal, endVal, event
     + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:#22c55e;">' + nom + '</div>'
     + '</div>'
     + '<div style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted);line-height:1.6;">' + (data.resume || '') + '</div>'
+    + (data._truncated ? '<div style="color:#f59e0b;font-family:\'DM Mono\',monospace;font-size:8px;margin-top:4px;">⚠️ Réponse tronquée — ' + sems.length + ' semaines récupérées. Réessaie avec une période plus courte.</div>' : '')
     + '</div>'
 
     // Répartition des phases
@@ -2977,7 +3003,7 @@ function runIAAnalyse() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 4000,
+      max_tokens: 8000,
       messages: [{ role: 'user', content: prompt }]
     })
   })
