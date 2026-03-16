@@ -968,16 +968,124 @@ body.light-theme canvas { filter:invert(0); }
   </div>
 </div>
 
-<!-- ══ NAV ══ -->
-<nav class="nav">
-  <button class="nav-btn active" id="nav-home"    onclick="goPage('page-home')">    <span class="icon">🏠</span>Accueil</button>
-  <button class="nav-btn"        id="nav-calc"     onclick="goPage('page-calc')">    <span class="icon">⏱</span>Calcul</button>
-  <button class="nav-btn"        id="nav-profiles" onclick="goPage('page-profiles')"><span class="icon">👤</span>Profils</button>
-  <button class="nav-btn"        id="nav-saison"   onclick="goPage('page-saison')">  <span class="icon">📊</span>Saison</button>
-  <button class="nav-btn"        id="nav-session"  onclick="goPage('page-session')"> <span class="icon">📋</span>Séance</button>
-  <button class="nav-btn"        id="nav-force"    onclick="goPage('page-force')">   <span class="icon">🏋</span>Force</button>
-  <button class="nav-btn"        id="nav-planif"   onclick="goPage('page-planif')">  <span class="icon">📅</span>Planif</button>
-</nav>
+
+
+
+<!-- ══ PAGE SAISON ══ -->
+<div class="page" id="page-saison">
+  <div class="page-header">
+    <span class="label-tag">// Suivi de saison</span>
+    <h1>SAISON</h1>
+  </div>
+  <!-- Contrôle genre + standard par athlète (rendu dynamiquement dans renderSaison) -->
+  <div id="saisonStandardControls" style="margin-bottom:10px;"></div>
+
+  <!-- Boutons WA + SA compacts côte à côte -->
+  <div style="display:flex;gap:6px;margin-bottom:10px;">
+    <button onclick="openWAWidget()" style="flex:1;background:none;border:1px solid var(--border);border-radius:5px;padding:7px 10px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+      <span style="font-size:14px;flex-shrink:0;">🌍</span>
+      <div style="text-align:left;">
+        <div style="font-family:'DM Mono',monospace;font-size:8px;font-weight:bold;color:var(--text);letter-spacing:0.5px;">WORLD ATHLETICS</div>
+        <div style="font-family:'DM Mono',monospace;font-size:6px;color:var(--muted);">Importer résultats</div>
+      </div>
+    </button>
+    <button onclick="openSAWidget()" style="flex:1;background:none;border:1px solid var(--border);border-radius:5px;padding:7px 10px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+      <span style="font-size:14px;flex-shrink:0;">🇨🇭</span>
+      <div style="text-align:left;">
+        <div style="font-family:'DM Mono',monospace;font-size:8px;font-weight:bold;color:var(--text);letter-spacing:0.5px;">SWISS ATHLETICS</div>
+        <div style="font-family:'DM Mono',monospace;font-size:6px;color:var(--muted);">Listes des meilleurs</div>
+      </div>
+    </button>
+  </div>
+    </button>
+    <button onclick="openSAWidget()"
+      style="flex:1;background:none;border:1px solid var(--border);border-radius:6px;
+             padding:8px 12px;display:flex;align-items:center;gap:8px;cursor:pointer;">
+      <span style="font-size:16px;">🇨🇭</span>
+      <div style="text-align:left;min-width:0;">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text);font-weight:bold;letter-spacing:1px;white-space:nowrap;">SWISS ATHLETICS</div>
+        <div style="font-family:'DM Mono',monospace;font-size:7px;color:var(--muted);margin-top:1px;">Listes des meilleurs</div>
+      </div>
+    </button>
+  </div>
+
+  <!-- Sélecteur saison + athlète -->
+  <div class="card" style="margin-bottom:12px;">
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+      <div class="input-wrap" style="flex:1;min-width:120px;margin:0;">
+        <label>Saison</label>
+        <select id="saisonSelect" onchange="renderSaison()"
+          style="width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;">
+        </select>
+      </div>
+      <div style="flex:100%;width:100%;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:4px;">
+        <div class="input-wrap" style="margin:0;">
+          <label style="display:flex;align-items:center;gap:5px;">
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#F5C800;"></span>Athlète 1
+          </label>
+          <select id="saisonAthleteSelect" onchange="saison_genre_override=false;renderSaison()"
+            style="width:100%;padding:8px 10px;background:var(--surface2);border:1px solid #F5C800;border-radius:3px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;"></select>
+        </div>
+        <div class="input-wrap" style="margin:0;">
+          <label style="display:flex;align-items:center;gap:5px;">
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#38bdf8;"></span>Athlète 2
+          </label>
+          <select id="saisonAthlete2Select" onchange="renderSaison()"
+            style="width:100%;padding:8px 10px;background:var(--surface2);border:1px solid #38bdf8;border-radius:3px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;"></select>
+        </div>
+        <div class="input-wrap" style="margin:0;">
+          <label style="display:flex;align-items:center;gap:5px;">
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f87171;"></span>Athlète 3
+          </label>
+          <select id="saisonAthlete3Select" onchange="renderSaison()"
+            style="width:100%;padding:8px 10px;background:var(--surface2);border:1px solid #f87171;border-radius:3px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;"></select>
+        </div>
+        <div class="input-wrap" style="margin:0;">
+          <label style="display:flex;align-items:center;gap:5px;">
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#4ade80;"></span>Athlète 4
+          </label>
+          <select id="saisonAthlete4Select" onchange="renderSaison()"
+            style="width:100%;padding:8px 10px;background:var(--surface2);border:1px solid #4ade80;border-radius:3px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;"></select>
+        </div>
+        <div class="input-wrap" style="margin:0;">
+          <label style="display:flex;align-items:center;gap:5px;">
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#c084fc;"></span>Athlète 5
+          </label>
+          <select id="saisonAthlete5Select" onchange="renderSaison()"
+            style="width:100%;padding:8px 10px;background:var(--surface2);border:1px solid #c084fc;border-radius:3px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;"></select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Graphique progression compét -->
+  <div class="card" style="margin-bottom:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div class="card-title" style="margin:0;">// Progression compétitions</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;" id="saisonDistBtns"></div>
+    </div>
+    <div id="saisonChartEmpty" style="text-align:center;padding:32px 0;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);">
+      <div style="font-size:28px;margin-bottom:8px;">📊</div>
+      Aucun résultat compétition enregistré.<br>Ajoute des résultats dans la fiche athlète (Profils).
+    </div>
+    <canvas id="saisonChart" style="display:none;"></canvas>
+    <div id="saisonStats" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:none;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;"></div>
+    <!-- Graphique comparaison 2e athlète -->
+    <div id="saisonCompareWrap" style="display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+      <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">// COMPARAISON</div>
+      <canvas id="saisonChartCompare" style="display:none;"></canvas>
+    </div>
+  </div>
+
+  <!-- Liste des résultats compét -->
+  <div class="card">
+    <div class="card-title">// Résultats compétitions</div>
+    <div id="saisonResultsList"></div>
+  </div>
+
+
+
+
 
 
 
@@ -1041,6 +1149,19 @@ body.light-theme canvas { filter:invert(0); }
     <div id="planifViewContent" style="min-height:400px;"></div>
   </div>
 </div>
+
+<!-- ══ NAV ══ -->
+
+
+<nav class="nav">
+  <button class="nav-btn active" id="nav-home"    onclick="goPage('page-home')">    <span class="icon">🏠</span>Accueil</button>
+  <button class="nav-btn"        id="nav-calc"     onclick="goPage('page-calc')">    <span class="icon">⏱</span>Calcul</button>
+  <button class="nav-btn"        id="nav-profiles" onclick="goPage('page-profiles')"><span class="icon">👤</span>Profils</button>
+  <button class="nav-btn"        id="nav-saison"   onclick="goPage('page-saison')">  <span class="icon">📊</span>Saison</button>
+  <button class="nav-btn"        id="nav-session"  onclick="goPage('page-session')"> <span class="icon">📋</span>Séance</button>
+  <button class="nav-btn"        id="nav-force"    onclick="goPage('page-force')">   <span class="icon">🏋</span>Force</button>
+  <button class="nav-btn"        id="nav-planif"   onclick="goPage('page-planif')">  <span class="icon">📅</span>Planif</button>
+</nav>
 
 <script>
 // ── STATE ──
@@ -9125,119 +9246,6 @@ setTimeout(() => {
 }, 200);
 </script>
 
-<!-- ══ PAGE SAISON ══ -->
-<div class="page" id="page-saison">
-  <div class="page-header">
-    <span class="label-tag">// Suivi de saison</span>
-    <h1>SAISON</h1>
-  </div>
-  <!-- Contrôle genre + standard par athlète (rendu dynamiquement dans renderSaison) -->
-  <div id="saisonStandardControls" style="margin-bottom:10px;"></div>
-
-  <!-- Boutons WA + SA compacts côte à côte -->
-  <div style="display:flex;gap:6px;margin-bottom:10px;">
-    <button onclick="openWAWidget()" style="flex:1;background:none;border:1px solid var(--border);border-radius:5px;padding:7px 10px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-      <span style="font-size:14px;flex-shrink:0;">🌍</span>
-      <div style="text-align:left;">
-        <div style="font-family:'DM Mono',monospace;font-size:8px;font-weight:bold;color:var(--text);letter-spacing:0.5px;">WORLD ATHLETICS</div>
-        <div style="font-family:'DM Mono',monospace;font-size:6px;color:var(--muted);">Importer résultats</div>
-      </div>
-    </button>
-    <button onclick="openSAWidget()" style="flex:1;background:none;border:1px solid var(--border);border-radius:5px;padding:7px 10px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-      <span style="font-size:14px;flex-shrink:0;">🇨🇭</span>
-      <div style="text-align:left;">
-        <div style="font-family:'DM Mono',monospace;font-size:8px;font-weight:bold;color:var(--text);letter-spacing:0.5px;">SWISS ATHLETICS</div>
-        <div style="font-family:'DM Mono',monospace;font-size:6px;color:var(--muted);">Listes des meilleurs</div>
-      </div>
-    </button>
-  </div>
-    </button>
-    <button onclick="openSAWidget()"
-      style="flex:1;background:none;border:1px solid var(--border);border-radius:6px;
-             padding:8px 12px;display:flex;align-items:center;gap:8px;cursor:pointer;">
-      <span style="font-size:16px;">🇨🇭</span>
-      <div style="text-align:left;min-width:0;">
-        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text);font-weight:bold;letter-spacing:1px;white-space:nowrap;">SWISS ATHLETICS</div>
-        <div style="font-family:'DM Mono',monospace;font-size:7px;color:var(--muted);margin-top:1px;">Listes des meilleurs</div>
-      </div>
-    </button>
-  </div>
-
-  <!-- Sélecteur saison + athlète -->
-  <div class="card" style="margin-bottom:12px;">
-    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
-      <div class="input-wrap" style="flex:1;min-width:120px;margin:0;">
-        <label>Saison</label>
-        <select id="saisonSelect" onchange="renderSaison()"
-          style="width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;">
-        </select>
-      </div>
-      <div style="flex:100%;width:100%;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:4px;">
-        <div class="input-wrap" style="margin:0;">
-          <label style="display:flex;align-items:center;gap:5px;">
-            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#F5C800;"></span>Athlète 1
-          </label>
-          <select id="saisonAthleteSelect" onchange="saison_genre_override=false;renderSaison()"
-            style="width:100%;padding:8px 10px;background:var(--surface2);border:1px solid #F5C800;border-radius:3px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;"></select>
-        </div>
-        <div class="input-wrap" style="margin:0;">
-          <label style="display:flex;align-items:center;gap:5px;">
-            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#38bdf8;"></span>Athlète 2
-          </label>
-          <select id="saisonAthlete2Select" onchange="renderSaison()"
-            style="width:100%;padding:8px 10px;background:var(--surface2);border:1px solid #38bdf8;border-radius:3px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;"></select>
-        </div>
-        <div class="input-wrap" style="margin:0;">
-          <label style="display:flex;align-items:center;gap:5px;">
-            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f87171;"></span>Athlète 3
-          </label>
-          <select id="saisonAthlete3Select" onchange="renderSaison()"
-            style="width:100%;padding:8px 10px;background:var(--surface2);border:1px solid #f87171;border-radius:3px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;"></select>
-        </div>
-        <div class="input-wrap" style="margin:0;">
-          <label style="display:flex;align-items:center;gap:5px;">
-            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#4ade80;"></span>Athlète 4
-          </label>
-          <select id="saisonAthlete4Select" onchange="renderSaison()"
-            style="width:100%;padding:8px 10px;background:var(--surface2);border:1px solid #4ade80;border-radius:3px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;"></select>
-        </div>
-        <div class="input-wrap" style="margin:0;">
-          <label style="display:flex;align-items:center;gap:5px;">
-            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#c084fc;"></span>Athlète 5
-          </label>
-          <select id="saisonAthlete5Select" onchange="renderSaison()"
-            style="width:100%;padding:8px 10px;background:var(--surface2);border:1px solid #c084fc;border-radius:3px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;"></select>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Graphique progression compét -->
-  <div class="card" style="margin-bottom:12px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-      <div class="card-title" style="margin:0;">// Progression compétitions</div>
-      <div style="display:flex;gap:4px;flex-wrap:wrap;" id="saisonDistBtns"></div>
-    </div>
-    <div id="saisonChartEmpty" style="text-align:center;padding:32px 0;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);">
-      <div style="font-size:28px;margin-bottom:8px;">📊</div>
-      Aucun résultat compétition enregistré.<br>Ajoute des résultats dans la fiche athlète (Profils).
-    </div>
-    <canvas id="saisonChart" style="display:none;"></canvas>
-    <div id="saisonStats" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:none;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;"></div>
-    <!-- Graphique comparaison 2e athlète -->
-    <div id="saisonCompareWrap" style="display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
-      <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">// COMPARAISON</div>
-      <canvas id="saisonChartCompare" style="display:none;"></canvas>
-    </div>
-  </div>
-
-  <!-- Liste des résultats compét -->
-  <div class="card">
-    <div class="card-title">// Résultats compétitions</div>
-    <div id="saisonResultsList"></div>
-  </div>
-
-</div>
 
 </body>
 </html>
