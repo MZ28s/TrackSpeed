@@ -3213,14 +3213,40 @@ function runIAAnalyse() {
     + '📊 **VERDICT GLOBAL** : note X/10 + justification courte\n\n'
     + 'IMPORTANT : Si tous les critères sont respectés, la note doit être entre 8 et 10. Ne pénalise pas les choix qui respectent les critères scientifiques. Réponds en français, sois concis.';
 
-  // Appel API Anthropic
+  // ── Prompt de correction (généré après l'analyse) ──────────────
+  // On passe la structure complète des semaines pour que l'IA corrige précisément
+  var semsData = sorted.map(function(s) {
+    return {
+      num: s.num, year: s.year,
+      phase: s.phase, charge: s.charge,
+      label: s.label || '',
+      competitions: s.competitions || []
+    };
+  });
 
+  var correctionPrompt = 'Tu es expert en périodisation du sprint (Haugen 2019, Bompa 6e éd.).\n'
+    + 'Voici une planification à corriger si nécessaire.\n\n'
+    + 'CONVENTIONS :\n'
+    + '- Phases : prep_gen, deload (charge=30, semaine de décharge), pre_comp, comp, recup\n'
+    + '- Charges : 100=max, 80=élevé, 60=modéré, 30=récup active, 0=AF (affûtage)\n'
+    + '- Prep générale = cycles PROGRESSIFS 60→80→100, avec deload (30) entre cycles si possible\n'
+    + '- Pré-comp = cycles DÉGRESSIFS 100→80→60 (1ère semaine transition = 60 obligatoire)\n'
+    + '- Compétition = fraîcheur maximale, 60% puis AF sur 2-3 dernières semaines\n\n'
+    + 'PLANIFICATION ACTUELLE (' + totalSems + ' semaines) :\n'
+    + JSON.stringify(semsData) + '\n\n'
+    + 'ERREURS IDENTIFIÉES (à corriger) :\n' + blocsLines + '\n\n'
+    + 'TÂCHE : Génère la version CORRIGÉE en JSON strict (sans markdown).\n'
+    + 'Ne modifie QUE ce qui est nécessaire. Conserve les compétitions, camps, vacances.\n'
+    + 'Retourne UNIQUEMENT ce JSON :\n'
+    + '{"semaines":[{"num":N,"year":N,"phase":"...","charge":N,"label":"...","competitions":[],"camp":false,"vacances":false}],"resume":"explication courte des corrections apportées"}';
+
+  // Appel 1 : Analyse
   fetch(WA_PROXY + '/ai', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 8000,
+      max_tokens: 4000,
       messages: [{ role: 'user', content: prompt }]
     })
   })
@@ -3230,7 +3256,20 @@ function runIAAnalyse() {
     btn.disabled = false;
     btn.style.opacity = '1';
     var text = (data.content && data.content[0] && data.content[0].text) || 'Erreur : réponse vide.';
-    resultEl.innerHTML = _renderIAResult(text);
+
+    // Afficher l'analyse + bouton "Générer correction" en attente
+    resultEl.innerHTML = _renderIAResult(text)
+      + '<div id="correctionZone" style="margin-top:12px;">'
+      + '<button onclick="runIACorrection()" id="btnCorrection"'
+      + ' style="width:100%;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.5);'
+      + 'border-radius:8px;padding:12px;font-family:\'Bebas Neue\',sans-serif;font-size:18px;'
+      + 'color:#a78bfa;cursor:pointer;letter-spacing:1px;">🔧 GÉNÉRER UNE PLANIFICATION CORRIGÉE</button>'
+      + '</div>';
+
+    // Stocker les données nécessaires pour la correction
+    window._iaAnalysePlanifId = activePlanifId;
+    window._iaAnalyseCorPrompt = correctionPrompt;
+    window._iaAnalyseNom = planif.nom;
   })
   .catch(function(err) {
     btn.textContent = '🔍 ANALYSER MA PLANIFICATION';
@@ -3238,6 +3277,169 @@ function runIAAnalyse() {
     btn.style.opacity = '1';
     resultEl.innerHTML = '<div style="padding:12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.4);border-radius:6px;font-family:\'DM Mono\',monospace;font-size:9px;color:#ef4444;">Erreur : ' + err.message + '</div>';
   });
+}
+
+// ── Appel 2 : Génération de la correction ─────────────────────────────────
+function runIACorrection() {
+  var btn = document.getElementById('btnCorrection');
+  var zone = document.getElementById('correctionZone');
+  if (!btn || !zone) return;
+
+  btn.textContent = '⏳ Génération de la correction...';
+  btn.disabled = true;
+  btn.style.opacity = '0.7';
+
+  var correctionPrompt = window._iaAnalyseCorPrompt;
+  if (!correctionPrompt) { btn.textContent = '⚠️ Erreur — relance l\'analyse d\'abord'; return; }
+
+  fetch(WA_PROXY + '/ai', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 8000,
+      messages: [{ role: 'user', content: correctionPrompt }]
+    })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    var text = (data.content && data.content[0] && data.content[0].text) || '';
+    if (!text) { btn.textContent = '⚠️ Réponse vide'; btn.disabled = false; return; }
+
+    // Parser le JSON de correction
+    var corrected;
+    try {
+      var clean = text.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+      corrected = JSON.parse(clean);
+    } catch(e) {
+      // Tentative de récupération
+      var m = text.match(/\{[\s\S]*\}/);
+      if (m) { try { corrected = JSON.parse(m[0]); } catch(e2) { corrected = null; } }
+    }
+
+    if (!corrected || !corrected.semaines || !corrected.semaines.length) {
+      zone.innerHTML = '<div style="padding:10px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);'
+        + 'border-radius:6px;font-family:\'DM Mono\',monospace;font-size:9px;color:#ef4444;">'
+        + '⚠️ Impossible de parser la correction. Réessaie.</div>'
+        + '<button onclick="runIACorrection()" style="width:100%;margin-top:8px;background:none;border:1px solid var(--border);'
+        + 'border-radius:6px;padding:10px;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted);cursor:pointer;">'
+        + '🔄 Réessayer</button>';
+      return;
+    }
+
+    // Afficher la correction avec aperçu et bouton importer
+    _renderIACorrection(corrected, zone);
+  })
+  .catch(function(err) {
+    zone.innerHTML = '<div style="padding:10px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);'
+      + 'border-radius:6px;font-family:\'DM Mono\',monospace;font-size:9px;color:#ef4444;">Erreur : ' + err.message + '</div>';
+  });
+}
+
+function _renderIACorrection(corrected, zone) {
+  var sems = corrected.semaines || [];
+  var resume = corrected.resume || 'Corrections appliquées.';
+
+  // Mini frise de la planification corrigée
+  var friseHtml = '<div style="display:flex;gap:2px;flex-wrap:wrap;margin:8px 0;">';
+  sems.forEach(function(s) {
+    var ph = s.phase ? PLANIF_PHASES[s.phase] : null;
+    var chLabel = s.charge === 0 ? 'AF' : (s.charge != null ? s.charge + '%' : '—');
+    friseHtml += '<div style="width:32px;border-radius:3px;text-align:center;flex-shrink:0;'
+      + 'background:' + (ph ? ph.bg : 'var(--surface2)') + ';'
+      + 'border:1px solid ' + (ph ? ph.border : 'var(--border)') + ';">'
+      + '<div style="height:2px;background:' + (ph ? ph.color : 'transparent') + ';"></div>'
+      + '<div style="padding:2px 0;">'
+      + '<div style="font-family:\'DM Mono\',monospace;font-size:6px;color:' + (ph ? ph.color : 'var(--muted)') + ';">S' + s.num + '</div>'
+      + '<div style="font-family:\'DM Mono\',monospace;font-size:5px;color:var(--muted);">' + chLabel + '</div>'
+      + '</div></div>';
+  });
+  friseHtml += '</div>';
+
+  // Stocker la correction pour l'import
+  var corrId = 'corr_' + Date.now();
+  window[corrId] = corrected;
+
+  zone.innerHTML = '<div style="background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.4);'
+    + 'border-radius:8px;overflow:hidden;">'
+
+    // Header
+    + '<div style="background:rgba(167,139,250,0.15);border-bottom:1px solid rgba(167,139,250,0.3);padding:12px 14px;">'
+    + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
+    + '<span style="font-size:16px;">🔧</span>'
+    + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;color:#a78bfa;">PLANIFICATION CORRIGÉE</div>'
+    + '</div>'
+    + '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);line-height:1.5;">'
+    + resume + '</div>'
+    + '</div>'
+
+    // Aperçu frise
+    + '<div style="padding:12px 14px;border-bottom:1px solid rgba(167,139,250,0.2);">'
+    + '<div style="font-family:\'DM Mono\',monospace;font-size:7px;letter-spacing:2px;color:#a78bfa;margin-bottom:4px;">APERÇU</div>'
+    + friseHtml
+    + '</div>'
+
+    // Boutons
+    + '<div style="padding:12px 14px;display:flex;gap:8px;">'
+    + '<button onclick="_importIACorrection(\'' + corrId + '\')" '
+    + 'style="flex:1;background:#a78bfa;border:none;border-radius:6px;padding:11px;'
+    + 'font-family:\'Bebas Neue\',sans-serif;font-size:16px;color:#000;cursor:pointer;letter-spacing:1px;">'
+    + '✅ IMPORTER LA CORRECTION</button>'
+    + '<button onclick="runIACorrection()" '
+    + 'style="background:none;border:1px solid rgba(167,139,250,0.4);border-radius:6px;padding:11px 14px;'
+    + 'font-family:\'DM Mono\',monospace;font-size:9px;color:#a78bfa;cursor:pointer;white-space:nowrap;">'
+    + '🔄 Régénérer</button>'
+    + '</div></div>';
+}
+
+function _importIACorrection(corrId) {
+  var corrected = window[corrId];
+  if (!corrected || !corrected.semaines) return;
+
+  var planifId = window._iaAnalysePlanifId;
+  var planif = planifData.find(function(p){ return p.id === planifId; });
+  if (!planif) return;
+
+  // Créer une nouvelle planification corrigée (ne pas écraser l'originale)
+  var newPlanif = JSON.parse(JSON.stringify(planif)); // deep copy
+  newPlanif.id = 'planif_' + Date.now();
+  newPlanif.nom = planif.nom + ' [Corrigée]';
+
+  // Remplacer les semaines par la version corrigée
+  // Conserver les semaines qui ne sont pas dans la correction
+  var corrSems = corrected.semaines;
+  newPlanif.semaines = (planif.semaines || []).map(function(origSem) {
+    var corrSem = corrSems.find(function(s){ return s.num === origSem.num && s.year === origSem.year; });
+    if (corrSem) {
+      return {
+        num: origSem.num,
+        year: origSem.year,
+        phase: corrSem.phase !== undefined ? corrSem.phase : origSem.phase,
+        charge: corrSem.charge !== undefined ? corrSem.charge : origSem.charge,
+        label: corrSem.label || origSem.label || '',
+        competitions: origSem.competitions || [], // Garder les compétitions originales
+        camp: origSem.camp || false,
+        vacances: origSem.vacances || false,
+      };
+    }
+    return origSem;
+  });
+
+  planifData.push(newPlanif);
+  savePlanifData();
+
+  // Toast + navigation
+  var toast = document.createElement('div');
+  toast.textContent = '✅ Planification corrigée importée !';
+  toast.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);'
+    + 'background:#a78bfa;color:#000;font-family:\'DM Mono\',monospace;font-size:10px;letter-spacing:1px;'
+    + 'padding:10px 20px;border-radius:20px;z-index:99999;white-space:nowrap;';
+  document.body.appendChild(toast);
+  setTimeout(function() {
+    toast.remove();
+    activePlanifId = newPlanif.id;
+    switchPlanifTab('vue');
+  }, 1500);
 }
 
 function _renderIAResult(text) {
