@@ -11251,6 +11251,138 @@ function requestPushPermission() {
   if (Notification.permission !== 'denied') Notification.requestPermission();
 }
 
+// ── Helpers affichage feedback coach ──────────────────────
+var COACH_DAY_LABELS = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+var COACH_DAYS_IDS   = ['lun','mar','mer','jeu','ven','sam','dim'];
+var PHYS_SMILEYS_C   = ['','😩','😞','😐','😊','🔥'];
+var MENTAL_SMILEYS_C = ['','😰','😕','😐','😌','🧠'];
+
+function coachRpeBar(val) {
+  if (!val && val !== 0) return '<span style="color:var(--muted);">—</span>';
+  var pct = ((val-1)/9*100).toFixed(0);
+  var col = val <= 3 ? '#22c55e' : val <= 5 ? '#86efac' : val <= 7 ? '#f59e0b' : val <= 8 ? '#ef4444' : '#991b1b';
+  return '<div style="display:flex;align-items:center;gap:8px;">' +
+    '<div style="flex:1;height:8px;border-radius:4px;background:linear-gradient(to right,#22c55e 0%,#86efac 20%,#fde047 40%,#f59e0b 60%,#ef4444 80%,#991b1b 100%);position:relative;">' +
+      '<div style="position:absolute;top:50%;left:' + pct + '%;transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;background:#0a0a0b;border:2px solid ' + col + ';"></div>' +
+    '</div>' +
+    '<span style="font-family:Bebas Neue,sans-serif;font-size:18px;color:' + col + ';min-width:20px;">' + val + '</span>' +
+  '</div>';
+}
+
+function coachFeedbackCard(fb) {
+  var days = fb.days || {};
+  var rpeAvgColor = fb.rpe <= 3 ? '#22c55e' : fb.rpe <= 5 ? '#86efac' : fb.rpe <= 7 ? '#f59e0b' : fb.rpe <= 8 ? '#ef4444' : '#991b1b';
+
+  // ── En-tête ──
+  var html = '<div class="fb-athlete-card" style="margin-bottom:16px;">';
+
+  // Nom + semaine + RPE moyen
+  html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border);">';
+  html +=   '<div>';
+  html +=     '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;letter-spacing:1px;">' + (fb.athlete_name||'Athlète').toUpperCase() + '</div>';
+  html +=     '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);margin-top:2px;">' + (fb.week_label||fb.week_id||'—') + '</div>';
+  html +=     '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);margin-top:2px;">Envoyé le ' + new Date(fb.created_at).toLocaleDateString('fr-FR') + '</div>';
+  html +=   '</div>';
+  html +=   '<div style="text-align:right;">';
+  html +=     '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);letter-spacing:1px;margin-bottom:4px;">RPE MOY.</div>';
+  html +=     '<div style="font-family:Bebas Neue,sans-serif;font-size:36px;line-height:1;color:' + (fb.rpe ? rpeAvgColor : 'var(--muted)') + ';">' + (fb.rpe ? fb.rpe : '—') + '</div>';
+  html +=   '</div>';
+  html += '</div>';
+
+  // ── Tableau jour par jour ──
+  html += '<div style="margin-bottom:14px;">';
+  html += '<div style="font-family:DM Mono,monospace;font-size:7px;letter-spacing:2px;color:var(--accent);margin-bottom:8px;">PAR JOUR</div>';
+
+  // Header colonnes
+  html += '<div style="display:grid;grid-template-columns:44px repeat(7,1fr);gap:4px;margin-bottom:6px;">';
+  html += '<div></div>';
+  COACH_DAY_LABELS.forEach(function(lbl, i) {
+    var d = COACH_DAYS_IDS[i];
+    var dayData = days[d] || {};
+    var isRepos = dayData.repos;
+    var isCompet = dayData.compet;
+    html += '<div style="text-align:center;font-family:DM Mono,monospace;font-size:7px;color:' + (isRepos ? 'var(--muted)' : 'var(--text)') + ';letter-spacing:.5px;">' +
+      lbl.toUpperCase() +
+      (isCompet ? '<div style="font-size:9px;" title="Compétition">🏆</div>' : '') +
+      (isRepos  ? '<div style="font-size:9px;" title="Repos">😴</div>' : '') +
+    '</div>';
+  });
+  html += '</div>';
+
+  // Ligne RPE
+  html += '<div style="display:grid;grid-template-columns:44px repeat(7,1fr);gap:4px;align-items:center;margin-bottom:6px;">';
+  html += '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);">RPE</div>';
+  COACH_DAYS_IDS.forEach(function(d) {
+    var dayData = days[d] || {};
+    var rpe = dayData.rpe;
+    var col = rpe ? (rpe <= 3 ? '#22c55e' : rpe <= 5 ? '#86efac' : rpe <= 7 ? '#f59e0b' : rpe <= 8 ? '#ef4444' : '#991b1b') : 'var(--border)';
+    html += '<div style="text-align:center;background:' + col + ';border-radius:4px;padding:4px 2px;">' +
+      '<span style="font-family:Bebas Neue,sans-serif;font-size:14px;color:' + (rpe ? '#000' : 'transparent') + ';">' + (rpe || '—') + '</span>' +
+    '</div>';
+  });
+  html += '</div>';
+
+  // Ligne Physique
+  html += '<div style="display:grid;grid-template-columns:44px repeat(7,1fr);gap:4px;align-items:center;margin-bottom:6px;">';
+  html += '<div style="font-family:DM Mono,monospace;font-size:7px;color:#3b82f6;">PHYS</div>';
+  COACH_DAYS_IDS.forEach(function(d) {
+    var v = (days[d] || {}).phys;
+    html += '<div style="text-align:center;font-size:' + (v ? '16px' : '10px') + ';opacity:' + (v ? '1' : '.2') + ';">' + (v ? PHYS_SMILEYS_C[v] : '·') + '</div>';
+  });
+  html += '</div>';
+
+  // Ligne Mental
+  html += '<div style="display:grid;grid-template-columns:44px repeat(7,1fr);gap:4px;align-items:center;margin-bottom:6px;">';
+  html += '<div style="font-family:DM Mono,monospace;font-size:7px;color:#8b5cf6;">MENTAL</div>';
+  COACH_DAYS_IDS.forEach(function(d) {
+    var v = (days[d] || {}).mental;
+    html += '<div style="text-align:center;font-size:' + (v ? '16px' : '10px') + ';opacity:' + (v ? '1' : '.2') + ';">' + (v ? MENTAL_SMILEYS_C[v] : '·') + '</div>';
+  });
+  html += '</div>';
+
+  // Ligne Sommeil
+  html += '<div style="display:grid;grid-template-columns:44px repeat(7,1fr);gap:4px;align-items:center;">';
+  html += '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);">💤</div>';
+  COACH_DAYS_IDS.forEach(function(d) {
+    var dayData = days[d] || {};
+    var dur = coachCalcSleep(dayData.coucher, dayData.lever);
+    var col = dur ? (parseFloat(dur) >= 7 ? '#22c55e' : parseFloat(dur) >= 6 ? '#f59e0b' : '#ef4444') : 'var(--muted)';
+    html += '<div style="text-align:center;font-family:DM Mono,monospace;font-size:7px;color:' + col + ';">' + (dur || '—') + '</div>';
+  });
+  html += '</div>';
+  html += '</div>';
+
+  // ── Objectif & commentaire ──
+  if (fb.objective || fb.comment) {
+    html += '<div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px;display:flex;flex-direction:column;gap:8px;">';
+    if (fb.objective) {
+      html += '<div><div style="font-family:DM Mono,monospace;font-size:7px;letter-spacing:1px;color:var(--muted);margin-bottom:3px;">🎯 OBJECTIF SEMAINE PROCHAINE</div>' +
+        '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--text);">' + fb.objective + '</div></div>';
+    }
+    if (fb.comment) {
+      html += '<div><div style="font-family:DM Mono,monospace;font-size:7px;letter-spacing:1px;color:var(--muted);margin-bottom:3px;">💬 COMMENTAIRE</div>' +
+        '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--text);">' + fb.comment + '</div></div>';
+    }
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function coachCalcSleep(coucher, lever) {
+  if (!coucher || !lever) return null;
+  var c = coucher.split(':').map(Number);
+  var l = lever.split(':').map(Number);
+  var cMin = c[0]*60 + c[1];
+  var lMin = l[0]*60 + l[1];
+  if (lMin <= cMin) lMin += 24*60;
+  var dur = lMin - cMin;
+  var h = Math.floor(dur/60);
+  var m = dur % 60;
+  return h + 'h' + (m > 0 ? String(m).padStart(2,'0') : '');
+}
+
 function renderCoachFeedbacks() {
   var el = document.getElementById('coachFeedbackList');
   if (!el || !_sb || !_sbUser) return;
@@ -11259,24 +11391,10 @@ function renderCoachFeedbacks() {
     .order('created_at', { ascending: false }).limit(50)
     .then(function(r) {
       if (r.error || !r.data || !r.data.length) {
-        el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Aucun feedback reçu.</div>'; return;
+        el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Aucun feedback reçu.</div>';
+        return;
       }
-      var html = '';
-      r.data.forEach(function(fb) {
-        var rpeColor = fb.rpe <= 4 ? '#22c55e' : fb.rpe <= 7 ? '#f59e0b' : '#ef4444';
-        var rpeW = ((fb.rpe-1)/9*100).toFixed(0);
-        html += '<div class="fb-athlete-card">' +
-          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
-            '<div><div style="font-family:Bebas Neue,sans-serif;font-size:18px;">' + (fb.athlete_name||'').toUpperCase() + '</div>' +
-            '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);">' + (fb.week_label||fb.week_id) + '</div></div>' +
-            '<div style="font-family:Bebas Neue,sans-serif;font-size:28px;color:' + rpeColor + ';"> ' + fb.rpe + '<span style="font-size:14px;color:var(--muted);">/10</span></div></div>' +
-          '<div style="margin-bottom:8px;"><div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);margin-bottom:4px;">RPE</div>' +
-          '<div class="fb-rpe-bar"><div class="fb-rpe-marker" style="left:' + rpeW + '%"></div></div></div>' +
-          (fb.objective ? '<div style="font-family:DM Mono,monospace;font-size:9px;margin-top:8px;">🎯 <span style="color:var(--muted);">Objectif :</span> ' + fb.objective + '</div>' : '') +
-          (fb.comment   ? '<div style="font-family:DM Mono,monospace;font-size:9px;margin-top:6px;">💬 ' + fb.comment + '</div>' : '') +
-          '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);margin-top:8px;text-align:right;">' + new Date(fb.created_at).toLocaleDateString('fr-FR') + '</div></div>';
-      });
-      el.innerHTML = html;
+      el.innerHTML = r.data.map(coachFeedbackCard).join('');
     });
 }
 
