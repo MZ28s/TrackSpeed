@@ -10475,12 +10475,7 @@ function renderAthProfileInfo() {
   });
 
   // Statut coach
-  var statusEl = document.getElementById('athCoachStatus');
-  if (statusEl) {
-    statusEl.innerHTML = p.coach_uid
-      ? '<span style="color:#22c55e;">✓ Lié à un coach</span>'
-      : '<span style="color:var(--muted);">⏳ En attente — donne ton ID à ton coach</span>';
-  }
+  renderAthLinkStatus();
 }
 
 function cell(label, value) {
@@ -10726,7 +10721,18 @@ function athGoPage(name) {
   if (page) page.classList.add('active');
   if (btn)  btn.classList.add('active');
   if (name === 'history')  renderAthHistory();
-  if (name === 'profile')  renderAthProfileInfo();
+  if (name === 'profile') {
+    // Recharger le profil depuis Supabase pour avoir coach_uid à jour
+    if (_sb && _athProfile) {
+      _sb.from('athlete_profiles').select('*').eq('user_id', _athProfile.user_id).maybeSingle()
+        .then(function(r) {
+          if (r.data) { _athProfile = r.data; _athCoachUid = r.data.coach_uid || null; }
+          renderAthProfileInfo();
+        });
+    } else {
+      renderAthProfileInfo();
+    }
+  }
   if (name === 'feedback') { renderDailyRpe(); renderDailyForm(); renderSleepRows(); }
   if (name === 'calc')     renderAthCalc();
   if (name === 'force')    renderAthForce();
@@ -11042,6 +11048,131 @@ function submitFeedback() {
 
 // Kept for compat
 function makeScoreDots() {}
+
+// ══════════════════════════════════════════════════════════
+// ══  LIAISON COACH ↔ ATHLÈTE                             ══
+// ══════════════════════════════════════════════════════════
+
+// ── Coach : ouvre la modale pour entrer l'ID athlète ─────
+function showLinkAthleteModal(profileId) {
+  var existing = document.getElementById('linkAthModal');
+  if (existing) existing.remove();
+
+  var modal = document.createElement('div');
+  modal.id = 'linkAthModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99997;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:20px;';
+
+  var inner = document.createElement('div');
+  inner.style.cssText = 'background:var(--surface);border:1px solid var(--accent);border-radius:12px;padding:28px 24px;max-width:360px;width:100%;';
+  inner.innerHTML =
+    '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;">LIER UN COMPTE ATHLÈTE</div>' +
+    '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;margin-bottom:12px;">ENTRER L&#x27;ID ATHLÈTE</div>' +
+    '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-bottom:16px;line-height:1.6;">' +
+      'L&#x27;athlète trouve son ID dans son espace<br>onglet <b style="color:var(--text);">Profil</b> (ex : ATH-4X7K)' +
+    '</div>' +
+    '<input id="linkAthIdInput" type="text" placeholder="ATH-XXXX" maxlength="8" autocapitalize="characters" ' +
+    'style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);' +
+    'border-radius:6px;padding:14px;color:var(--text);font-family:Bebas Neue,sans-serif;' +
+    'font-size:28px;letter-spacing:4px;text-align:center;outline:none;margin-bottom:8px;" ' +
+    'oninput="this.value=this.value.toUpperCase()">' +
+    '<div id="linkAthMsg" style="font-family:DM Mono,monospace;font-size:9px;min-height:16px;margin-bottom:14px;text-align:center;"></div>';
+
+  var confirmBtn = document.createElement('button');
+  confirmBtn.textContent = 'LIER CET ATHLÈTE';
+  confirmBtn.style.cssText = 'width:100%;background:var(--accent);border:none;border-radius:6px;padding:12px;font-family:Bebas Neue,sans-serif;font-size:18px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:8px;';
+  confirmBtn.onclick = function() {
+    var id = (document.getElementById('linkAthIdInput').value || '').trim().toUpperCase();
+    if (!id || id.length < 4) {
+      document.getElementById('linkAthMsg').textContent = 'Entre un ID valide.';
+      document.getElementById('linkAthMsg').style.color = '#ef4444';
+      return;
+    }
+    confirmBtn.textContent = 'Recherche...'; confirmBtn.disabled = true;
+    linkAthleteById(id, profileId, function(ok, msg) {
+      if (ok) { modal.remove(); }
+      else {
+        document.getElementById('linkAthMsg').textContent = msg;
+        document.getElementById('linkAthMsg').style.color = '#ef4444';
+        confirmBtn.textContent = 'LIER CET ATHLÈTE'; confirmBtn.disabled = false;
+      }
+    });
+  };
+
+  var closeBtn = document.createElement('button');
+  closeBtn.textContent = 'Annuler';
+  closeBtn.style.cssText = 'width:100%;background:none;border:1px solid var(--border);border-radius:6px;padding:10px;font-family:DM Mono,monospace;font-size:9px;color:var(--muted);cursor:pointer;';
+  closeBtn.onclick = function() { modal.remove(); };
+
+  inner.appendChild(confirmBtn);
+  inner.appendChild(closeBtn);
+  modal.appendChild(inner);
+  document.body.appendChild(modal);
+
+  setTimeout(function() {
+    var inp = document.getElementById('linkAthIdInput');
+    if (inp) inp.focus();
+  }, 100);
+}
+
+// ── Coach : effectue la liaison ───────────────────────────
+function linkAthleteById(athId, profileId, callback) {
+  if (!_sb || !_sbUser) { callback(false, 'Non connecté.'); return; }
+  athId = athId.toUpperCase().trim();
+
+  _sb.from('athlete_profiles').select('user_id,name,ath_id,coach_uid').eq('ath_id', athId).maybeSingle()
+    .then(function(r) {
+      if (r.error) { callback(false, 'Erreur réseau : ' + r.error.message); return; }
+      if (!r.data)  { callback(false, 'ID introuvable. Vérifie l&#x27;ID avec l&#x27;athlète.'); return; }
+
+      var ath = r.data;
+      if (ath.coach_uid && ath.coach_uid !== _sbUser.id) {
+        callback(false, 'Cet athlète est déjà lié à un autre coach.');
+        return;
+      }
+
+      // Mettre à jour coach_uid dans athlete_profiles
+      _sb.from('athlete_profiles')
+        .update({ coach_uid: _sbUser.id })
+        .eq('ath_id', athId)
+        .then(function(u) {
+          if (u.error) { callback(false, 'Erreur liaison : ' + u.error.message); return; }
+
+          // Lier aussi au profil TrackSpeed local si profileId fourni
+          if (profileId) {
+            var p = profiles.find(function(pr) { return pr.id === profileId; });
+            if (p) {
+              if (!p.athAccountId) p.athAccountId = ath.user_id;
+              if (!p.athId) p.athId = athId;
+              saveProfiles();
+            }
+          }
+
+          alert('✅ ' + (ath.name || athId) + ' est maintenant lié à ton groupe !');
+          callback(true, '');
+        });
+    });
+}
+
+// ── Athlète : afficher son ID + statut dans la page profil ─
+function renderAthLinkStatus() {
+  var statusEl = document.getElementById('athCoachStatus');
+  if (!statusEl || !_athProfile) return;
+
+  if (_athProfile.coach_uid) {
+    statusEl.innerHTML =
+      '<div style="display:flex;align-items:center;gap:8px;padding:10px 0;">' +
+        '<span style="font-size:20px;">✅</span>' +
+        '<span style="font-family:DM Mono,monospace;font-size:9px;color:#22c55e;">Lié à un coach</span>' +
+      '</div>';
+  } else {
+    statusEl.innerHTML =
+      '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);padding:10px 0;line-height:1.7;">' +
+        '⏳ Pas encore lié à un coach.<br>' +
+        'Donne ton ID <b style="color:var(--accent);">' + (_athProfile.ath_id || '—') + '</b> à ton coach<br>' +
+        'et demande-lui de t&#x27;ajouter.' +
+      '</div>';
+  }
+}
 
 function requestPushPermission() {
   if (!('Notification' in window)) return;
