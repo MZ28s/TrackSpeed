@@ -9950,21 +9950,39 @@ function athleteCodeSubmit() {
       }
       var row = r.data;
       _athCoachUid = row.coach_uid;
-      // Charger le profil correspondant
+      // Charger les profils du coach
       return _sb.from('profiles_data').select('data').eq('user_id', row.coach_uid).maybeSingle()
         .then(function(pr) {
-          if (pr.error || !pr.data) { document.getElementById('codeMsg').textContent = 'Profil introuvable.'; return; }
-          var allProfiles = pr.data.data || [];
+          if (pr.error) {
+            console.error('profiles_data error:', pr.error);
+            document.getElementById('codeMsg').textContent = 'Erreur chargement profils.';
+            return;
+          }
+          if (!pr.data) {
+            document.getElementById('codeMsg').textContent = 'Aucune donnée coach.';
+            return;
+          }
+          // profiles_data.data peut être un tableau directement ou { data: [...] }
+          var raw = pr.data.data;
+          var allProfiles = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.data) ? raw.data : []);
+          console.log('profiles found:', allProfiles.length, 'looking for:', row.profile_id);
           var profile = allProfiles.find(function(p) { return p.id === row.profile_id; });
-          if (!profile) { document.getElementById('codeMsg').textContent = 'Athlète introuvable.'; return; }
+          if (!profile) {
+            document.getElementById('codeMsg').textContent = 'Athlète introuvable (id: ' + row.profile_id + ')';
+            return;
+          }
           _athProfile = profile;
-          // Sauvegarder localement pour reconnexion auto
-          localStorage.setItem('ath_session', JSON.stringify({ code: code, profile_id: row.profile_id, coach_uid: row.coach_uid, name: profile.name }));
+          localStorage.setItem('ath_session', JSON.stringify({
+            code: code,
+            profile_id: row.profile_id,
+            coach_uid: row.coach_uid,
+            name: profile.name
+          }));
           enterAthleteMode(profile);
         });
     }).catch(function(e) {
       document.getElementById('codeMsg').textContent = 'Erreur réseau.';
-      console.error(e);
+      console.error('athleteCodeSubmit error:', e);
     });
 }
 
@@ -10004,7 +10022,8 @@ function tryAthleteAutoLogin() {
     _sb.from('profiles_data').select('data').eq('user_id', s.coach_uid).maybeSingle()
       .then(function(pr) {
         if (pr.error || !pr.data) return;
-        var allProfiles = pr.data.data || [];
+        var rawProfiles = pr.data.data;
+        var allProfiles = Array.isArray(rawProfiles) ? rawProfiles : (rawProfiles && Array.isArray(rawProfiles.data) ? rawProfiles.data : []);
         var profile = allProfiles.find(function(p) { return p.id === s.profile_id; });
         if (!profile) return;
         _athCoachUid = s.coach_uid;
@@ -10322,24 +10341,40 @@ function registerPushSW() {
   });
 }
 
-// ── Génération de code par le coach ──────────────────────
+// ── Génération de code par le coach — permanent par profil ──
 function generateAthleteCode(profileId) {
   if (!_sb || !_sbUser) { alert('Connecte-toi d\'abord.'); return; }
-  var code = String(Math.floor(100000 + Math.random() * 900000));
-  var expiry = new Date();
-  expiry.setFullYear(expiry.getFullYear() + 1); // valide 1 an
 
-  _sb.from('athlete_codes').update({ code: code, expiry: expiry.toISOString() })
-    .eq('coach_uid', _sbUser.id).eq('profile_id', profileId).select()
+  // D'abord : vérifier si un code existe déjà pour ce profil
+  _sb.from('athlete_codes').select('*')
+    .eq('coach_uid', _sbUser.id)
+    .eq('profile_id', profileId)
+    .maybeSingle()
     .then(function(r) {
-      if (r.error || !r.data || !r.data.length) {
-        // Pas de ligne existante — INSERT
-        return _sb.from('athlete_codes').insert({
-          coach_uid: _sbUser.id, profile_id: profileId,
-          code: code, expiry: expiry.toISOString()
-        }).then(function() { showAthleteCodeModal(profileId, code); });
+      if (r.data && r.data.code) {
+        // Code existant → afficher directement, ne pas en générer un nouveau
+        showAthleteCodeModal(profileId, r.data.code);
+        return;
       }
-      showAthleteCodeModal(profileId, code);
+      // Pas encore de code → en créer un nouveau permanent
+      var code = String(Math.floor(100000 + Math.random() * 900000));
+      // Vérifier que ce code n'est pas déjà utilisé par un autre profil
+      _sb.from('athlete_codes').select('id').eq('code', code).maybeSingle()
+        .then(function(check) {
+          if (check.data) {
+            // Collision (très rare) → réessayer
+            generateAthleteCode(profileId);
+            return;
+          }
+          _sb.from('athlete_codes').insert({
+            coach_uid: _sbUser.id,
+            profile_id: profileId,
+            code: code
+          }).then(function(ins) {
+            if (ins.error) { alert('Erreur création code : ' + ins.error.message); return; }
+            showAthleteCodeModal(profileId, code);
+          });
+        });
     });
 }
 
