@@ -8994,23 +8994,81 @@ function _updateMultiTable() {
   });
   html += '</tr></thead><tbody>';
 
+  // ── Helper : refs d'un profil depuis ses records ──
+  function getRefsForProfile(p) {
+    var r = p.records || {};
+    var refs = [];
+    if (r.pr100) refs.push({ t: r.pr100, dRef: 100 });
+    if (r.pr200) refs.push({ t: r.pr200, dRef: 200 });
+    if (r.pr60)  refs.push({ t: r.pr60,  dRef: 60  });
+    if (r.pr400) refs.push({ t: r.pr400, dRef: 400 });
+    if (r.pr50)  refs.push({ t: r.pr50,  dRef: 50  });
+    return refs;
+  }
+
+  // ── Helper : temps cible pour un athlète sur un bloc ──
+  function getAthleteTarget(p, col) {
+    var refs = getRefsForProfile(p);
+    if (!refs.length) return null;
+    try {
+      var t = computeTarget(col.dist, refs);
+      return (t / (col.pct / 100)).toFixed(2);
+    } catch(e) { return null; }
+  }
+
   // ── Lignes athlètes ──
   selectedAthletes.forEach(function(pid) {
     var p = profiles.find(function(pr) { return pr.id === pid; });
     if (!p) return;
 
+    // Calcul des temps cibles de cet athlète pour chaque bloc distinct
+    var blockTargets = {};
+    sessionBlocks.forEach(function(b, bi) {
+      var key = b.dist + '_' + b.pct;
+      if (!blockTargets[key]) {
+        blockTargets[key] = getAthleteTarget(p, b);
+      }
+    });
+
+    // Construire le sous-texte des temps cibles sous le nom
+    // Grouper par distance si plusieurs blocs
+    var distinctBlocks = [];
+    var seen = {};
+    sessionBlocks.forEach(function(b, bi) {
+      var key = b.dist + '_' + b.pct;
+      if (!seen[key]) {
+        seen[key] = true;
+        var tgt = blockTargets[key];
+        if (tgt) distinctBlocks.push({ label: sessionBlocks.length > 1 ? 'B'+(bi+1) : '', dist: b.dist, pct: b.pct, tgt: tgt });
+      }
+    });
+
+    var targetsHtml = '';
+    if (distinctBlocks.length) {
+      targetsHtml = '<div style="margin-top:4px;display:flex;flex-direction:column;gap:2px;">';
+      distinctBlocks.forEach(function(d) {
+        targetsHtml += '<span style="font-family:DM Mono,monospace;font-size:8px;color:var(--accent);letter-spacing:0;">'
+          + (d.label ? d.label + ' ' : '') + '↳ ' + d.tgt + 's'
+          + '</span>';
+      });
+      targetsHtml += '</div>';
+    }
+
     html += '<tr>';
-    // Nom athlète sticky
-    html += '<td style="padding:8px 10px;font-family:Bebas Neue,sans-serif;font-size:15px;'
-      + 'color:var(--text);border-bottom:1px solid var(--border);white-space:nowrap;'
-      + 'position:sticky;left:0;background:var(--bg);z-index:1;">' + p.name + '</td>';
+    // Nom athlète sticky + temps cibles
+    html += '<td style="padding:8px 10px;border-bottom:1px solid var(--border);'
+      + 'position:sticky;left:0;background:var(--bg);z-index:1;white-space:nowrap;">'
+      + '<div style="font-family:Bebas Neue,sans-serif;font-size:15px;color:var(--text);">' + p.name + '</div>'
+      + targetsHtml
+      + '</td>';
 
     var lastBi2 = -1;
     cols.forEach(function(c, ci) {
       var isFirst = (c.bi !== lastBi2);
       lastBi2 = c.bi;
       var inputId = 'mt_' + pid + '_' + c.bi + '_' + c.ri;
-      var tgt = targets[ci];
+      // Temps cible propre à cet athlète
+      var tgt = getAthleteTarget(p, c);
       var borderLeft = isFirst && ci > 0 ? 'border-left:2px solid var(--border);' : '';
       html += '<td style="padding:4px 3px;border-bottom:1px solid var(--border);text-align:center;' + borderLeft + '">'
         + '<input type="number" id="' + inputId + '" step="0.01" min="5" max="120" '
