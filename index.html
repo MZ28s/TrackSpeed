@@ -299,7 +299,7 @@ body.light-theme canvas { filter:invert(0); }
   border-radius: 8px;
   padding: 10px 14px;
   margin-bottom: 12px;
-  display: none;
+  display: none; /* shown by JS when athletes selected */
   align-items: center;
   gap: 12px;
 }
@@ -9316,16 +9316,28 @@ function _updateMultiTable() {
       : '';
   }
 
-  if (!hasAthletes || !hasBlocks) {
+  var chronoBar = document.getElementById('multiChronoBar');
+
+  if (!hasAthletes) {
+    if (wrap)       wrap.style.display = 'none';
+    if (saveRow)    saveRow.style.display = 'none';
+    if (chronoBar)  chronoBar.style.display = 'none';
+    if (emptyMsg) {
+      emptyMsg.style.display = 'block';
+      emptyMsg.textContent = '☝️ Sélectionne les athlètes pour afficher le tableau de saisie';
+    }
+    return;
+  }
+
+  // Athlètes sélectionnés → chrono toujours visible
+  if (chronoBar) chronoBar.style.display = 'flex';
+
+  if (!hasBlocks) {
     if (wrap)     wrap.style.display = 'none';
     if (saveRow)  saveRow.style.display = 'none';
     if (emptyMsg) {
       emptyMsg.style.display = 'block';
-      if (!hasBlocks && hasAthletes) {
-        emptyMsg.textContent = '📋 Ajoute des blocs de séance pour saisir les temps';
-      } else if (!hasAthletes) {
-        emptyMsg.textContent = '☝️ Sélectionne les athlètes pour afficher le tableau de saisie';
-      }
+      emptyMsg.textContent = '📋 Ajoute des blocs de séance pour saisir les temps';
     }
     return;
   }
@@ -11180,7 +11192,7 @@ var _multiChronoRunning  = false;
 function multiChronoOpenForBlock(blocIndex) {
   var bar = document.getElementById('multiChronoBar');
   if (!bar) return;
-  bar.classList.add('visible');
+  bar.style.display = 'flex';
 
   // Lire la pause configurée pour ce bloc
   var restMins = 0;
@@ -11190,6 +11202,11 @@ function multiChronoOpenForBlock(blocIndex) {
     restMins = inp ? parseFloat(inp.value) : (sessionBlocks[blocIndex].rest || 0);
     var b = sessionBlocks[blocIndex];
     contextTxt = 'BLOC ' + (blocIndex+1) + ' — ' + b.reps + '× ' + b.dist + 'm  ·  ' + (restMins||0) + ' min pause';
+  } else if (sessionBlocks.length) {
+    var inp = document.getElementById('rest_0');
+    restMins = inp ? parseFloat(inp.value) : (sessionBlocks[0].rest || 0);
+    var b = sessionBlocks[0];
+    contextTxt = 'BLOC 1 — ' + b.reps + '× ' + b.dist + 'm  ·  ' + (restMins||0) + ' min pause';
   }
 
   var ctx = document.getElementById('multiChronoContext');
