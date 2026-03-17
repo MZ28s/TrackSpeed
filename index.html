@@ -304,6 +304,12 @@ body.light-theme canvas { filter:invert(0); }
 <!-- ══ TOGGLE THÈME + COMPTE ══ -->
 <div style="position:fixed;top:0;right:0;z-index:1001;display:flex;align-items:center;gap:6px;padding:8px 10px;">
   <span id="sbSyncBadge" style="font-family:'DM Mono',monospace;font-size:7px;color:#6b6b7a;"></span>
+  <button onclick="showAthleteLoginScreen()" title="Espace athlète"
+    style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;
+           background:rgba(10,10,11,0.85);border:1px solid rgba(245,200,0,0.4);border-radius:20px;
+           padding:5px 10px;color:#F5C800;cursor:pointer;backdrop-filter:blur(8px);">
+    🏃 Athlète
+  </button>
   <button id="sbUserBtn" onclick="sbTogglePanel()" title="Mon compte"
     style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;
            background:rgba(10,10,11,0.85);border:1px solid #2a2a30;border-radius:20px;
@@ -1157,6 +1163,18 @@ body.light-theme canvas { filter:invert(0); }
 <!-- ══ NAV ══ -->
 
 
+
+<!-- ══ PAGE FEEDBACKS COACH ══ -->
+<div class="page" id="page-feedbacks">
+  <div class="page-header">
+    <span class="label-tag">// Suivi athlètes</span>
+    <h1>FEEDBACKS</h1>
+  </div>
+  <div id="coachFeedbackList">
+    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);">Chargement...</div>
+  </div>
+</div>
+
 <nav class="nav">
   <button class="nav-btn active" id="nav-home"    onclick="goPage('page-home')">    <span class="icon">🏠</span>Accueil</button>
   <button class="nav-btn"        id="nav-calc"     onclick="goPage('page-calc')">    <span class="icon">⏱</span>Calcul</button>
@@ -1762,6 +1780,7 @@ function goPage(id) {
   const nb = document.getElementById(navId);
   if (nb) nb.classList.add('active');
   if (id === 'page-home')     renderHome();
+  if (id === 'page-feedbacks') renderCoachFeedbacks();
   if (id === 'page-session')  { renderSession(); updateDashboard(); }
   if (id === 'page-history')  renderHistory();
   if (id === 'page-profiles') renderProfiles();
@@ -5247,6 +5266,7 @@ function renderProfiles() {
         <button class="icon-btn" onclick="selectProfile('${p.id}')" title="Sélectionner">✓</button>
         <button class="icon-btn" onclick="editProfile('${p.id}')" title="Modifier">✏</button>
         <button class="icon-btn" onclick="printFiche('${p.id}')" title="Fiche PDF">📄</button>
+        <button class="icon-btn" onclick="generateAthleteCode('${p.id}')" title="Code athlète" style="color:#F5C800;border-color:rgba(245,200,0,0.4);">🏃</button>
         <button class="icon-btn del" onclick="deleteProfile('${p.id}')" title="Supprimer">✕</button>
       </div>
     </div>`;
@@ -8571,7 +8591,140 @@ function printFiche(pid) {
     #fiche-print .footer { margin-top:32px; font-size:8px; color:#aaa; text-align:right; letter-spacing:1px; }
     #fiche-print .accent { color:#c8181e; }
     #fiche-print .logo { font-family:'Bebas Neue',sans-serif; font-size:11px; letter-spacing:3px; color:#6b6b7a; }
-  </style>
+  
+/* ═══ MODE ATHLÈTE ═══ */
+.athlete-mode .nav { display: none !important; }
+.athlete-mode .page { display: none !important; }
+.athlete-mode #athleteApp { display: flex !important; }
+#athleteApp { display: none; flex-direction: column; min-height: 100vh; padding-bottom: 20px; }
+
+/* Header athlète */
+.ath-header {
+  background: var(--surface);
+  border-bottom: 2px solid var(--accent);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.ath-name { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--accent); letter-spacing: 2px; }
+.ath-week { font-family: 'DM Mono', monospace; font-size: 8px; color: var(--muted); letter-spacing: 1px; }
+
+/* Nav athlète */
+.ath-nav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: rgba(10,10,11,.96); backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border);
+  display: flex; z-index: 100;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.ath-nav-btn {
+  flex: 1; padding: 12px 4px 10px; background: none; border: none;
+  color: var(--muted); cursor: pointer; display: flex; flex-direction: column;
+  align-items: center; gap: 4px; font-family: 'DM Mono', monospace;
+  font-size: 8px; letter-spacing: 1px; text-transform: uppercase; transition: color .2s;
+}
+.ath-nav-btn .icon { font-size: 18px; line-height: 1; }
+.ath-nav-btn.active { color: var(--accent); }
+
+/* Pages athlète */
+.ath-page { display: none; padding: 24px 20px 100px; max-width: 680px; margin: 0 auto; }
+.ath-page.active { display: block; animation: fadeUp .3s ease both; }
+
+/* Feedback form */
+.feedback-day-row {
+  display: grid; grid-template-columns: 80px 1fr 1fr; gap: 10px;
+  align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.day-label { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); letter-spacing: 1px; }
+.star-row { display: flex; gap: 4px; }
+.star-btn {
+  width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border);
+  background: transparent; color: var(--muted); font-size: 11px;
+  cursor: pointer; transition: all .15s; font-family: 'DM Mono', monospace;
+  display: flex; align-items: center; justify-content: center;
+}
+.star-btn.active { background: var(--accent); border-color: var(--accent); color: #000; font-weight: bold; }
+.star-btn.active-phys { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+.star-btn.active-mental { background: #8b5cf6; border-color: #8b5cf6; color: #fff; }
+
+/* RPE slider */
+.rpe-track {
+  width: 100%; height: 8px; border-radius: 4px;
+  background: linear-gradient(to right, #22c55e 0%, #f59e0b 50%, #ef4444 100%);
+  position: relative; cursor: pointer;
+}
+.rpe-thumb {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--bg); border: 3px solid var(--accent);
+  position: absolute; top: 50%; transform: translate(-50%, -50%);
+  cursor: grab; transition: border-color .2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+.rpe-label { font-family: 'Bebas Neue', sans-serif; font-size: 42px; color: var(--accent); line-height: 1; }
+.rpe-desc  { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); margin-top: 2px; }
+
+/* Sleep inputs */
+.sleep-row { display: grid; grid-template-columns: 80px 1fr 1fr; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.sleep-input {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 4px;
+  padding: 7px 10px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px;
+  width: 100%; outline: none; text-align: center;
+}
+.sleep-input:focus { border-color: var(--accent); }
+
+/* Objective / comment */
+.ath-textarea {
+  width: 100%; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 12px 14px; color: var(--text);
+  font-family: 'DM Mono', monospace; font-size: 11px; line-height: 1.6;
+  resize: vertical; min-height: 80px; outline: none;
+}
+.ath-textarea:focus { border-color: var(--accent); }
+
+/* Code access screen */
+#athleteLogin {
+  position: fixed; inset: 0; z-index: 99998;
+  background: #0a0a0b; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; padding: 32px;
+}
+.code-input-row { display: flex; gap: 8px; justify-content: center; margin: 24px 0; }
+.code-digit {
+  width: 44px; height: 56px; border-radius: 6px;
+  border: 2px solid var(--border); background: var(--surface);
+  color: var(--text); font-family: 'Bebas Neue', sans-serif; font-size: 28px;
+  text-align: center; outline: none; transition: border-color .2s;
+  caret-color: var(--accent);
+}
+.code-digit:focus { border-color: var(--accent); }
+
+/* Feedback history chips */
+.fb-chip {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+  padding: 12px 16px; margin-bottom: 10px; cursor: pointer; transition: border-color .2s;
+}
+.fb-chip:hover { border-color: var(--accent); }
+.fb-chip-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+
+/* Coach feedback view */
+.fb-athlete-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 16px; margin-bottom: 12px;
+}
+.fb-rpe-bar {
+  height: 6px; border-radius: 3px;
+  background: linear-gradient(to right, #22c55e, #f59e0b, #ef4444);
+  position: relative;
+}
+.fb-rpe-marker {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--bg); border: 2px solid #fff;
+  position: absolute; top: 50%; transform: translate(-50%, -50%);
+}
+</style>
   <div id="fiche-print" style="display:block;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
       <div>
@@ -9684,10 +9837,590 @@ function deleteCompetResult(pid, saison, idxInFiltered) {
   renderSaison();
 }
 
+
+
+// ════════════════════════════════════════════════════════
+// ══  MODE ATHLÈTE — SYSTÈME COMPLET                    ══
+// ════════════════════════════════════════════════════════
+
+var _athProfile   = null;   // profil athlète connecté
+var _athCoachUid  = null;   // user_id Supabase du coach
+var _athMode      = false;  // true quand un athlète est connecté
+var _feedbackData = {       // état du formulaire en cours
+  rpe: 5,
+  days: { lun:{phys:3,mental:3,coucher:'',lever:''}, mar:{phys:3,mental:3,coucher:'',lever:''},
+          mer:{phys:3,mental:3,coucher:'',lever:''}, jeu:{phys:3,mental:3,coucher:'',lever:''},
+          ven:{phys:3,mental:3,coucher:'',lever:''}, sam:{phys:3,mental:3,coucher:'',lever:''},
+          dim:{phys:3,mental:3,coucher:'',lever:''} },
+  objective: '', comment: ''
+};
+
+var ATH_DAYS = ['lun','mar','mer','jeu','ven','sam','dim'];
+var ATH_DAYS_LABELS = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
+
+var RPE_LABELS = ['','Repos total','Très facile','Facile','Confortable','Modéré',
+  'Modéré+','Difficile','Très difficile','Dur','Maximum'];
+
+// ── Semaine ISO ──────────────────────────────────────────
+function getISOWeekLabel() {
+  var now = new Date();
+  var d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  var day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  var yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  var week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return 'S' + week + ' — ' + d.getUTCFullYear();
+}
+
+function getISOWeekId() {
+  var now = new Date();
+  var d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  var day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  var yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  var week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return d.getUTCFullYear() + '-W' + String(week).padStart(2, '0');
+}
+
+// ── Bouton "Mode Athlète" dans le header coach ───────────
+function showAthleteLoginScreen() {
+  document.getElementById('athleteLogin').style.display = 'flex';
+  document.getElementById('cd0').focus();
+}
+
+function athleteLoginBack() {
+  document.getElementById('athleteLogin').style.display = 'none';
+}
+
+// ── Saisie code 6 chiffres ───────────────────────────────
+function codeDigitInput(idx) {
+  var el = document.getElementById('cd' + idx);
+  var val = el.value.replace(/[^0-9]/g, '');
+  el.value = val ? val[val.length - 1] : '';
+  if (el.value && idx < 5) {
+    document.getElementById('cd' + (idx + 1)).focus();
+  }
+  // Auto-submit when all 6 filled
+  var code = '';
+  for (var k = 0; k < 6; k++) code += (document.getElementById('cd' + k).value || '');
+  if (code.length === 6) athleteCodeSubmit();
+}
+
+function codeDigitKey(e, idx) {
+  if (e.key === 'Backspace' && !document.getElementById('cd' + idx).value && idx > 0) {
+    document.getElementById('cd' + (idx - 1)).focus();
+  }
+}
+
+function athleteCodeSubmit() {
+  var code = '';
+  for (var k = 0; k < 6; k++) code += (document.getElementById('cd' + k).value || '');
+  if (code.length < 6) { document.getElementById('codeMsg').textContent = 'Saisis les 6 chiffres.'; return; }
+
+  document.getElementById('codeMsg').textContent = 'Vérification...';
+
+  // Chercher le code dans tous les profils de tous les coachs
+  if (!_sb) { document.getElementById('codeMsg').textContent = 'Connexion requise.'; return; }
+
+  _sb.from('athlete_codes').select('*').eq('code', code).maybeSingle()
+    .then(function(r) {
+      if (r.error || !r.data) {
+        document.getElementById('codeMsg').textContent = 'Code invalide ou expiré.';
+        return;
+      }
+      var row = r.data;
+      _athCoachUid = row.coach_uid;
+      // Charger le profil correspondant
+      return _sb.from('profiles_data').select('data').eq('user_id', row.coach_uid).maybeSingle()
+        .then(function(pr) {
+          if (pr.error || !pr.data) { document.getElementById('codeMsg').textContent = 'Profil introuvable.'; return; }
+          var allProfiles = pr.data.data || [];
+          var profile = allProfiles.find(function(p) { return p.id === row.profile_id; });
+          if (!profile) { document.getElementById('codeMsg').textContent = 'Athlète introuvable.'; return; }
+          _athProfile = profile;
+          // Sauvegarder localement pour reconnexion auto
+          localStorage.setItem('ath_session', JSON.stringify({ code: code, profile_id: row.profile_id, coach_uid: row.coach_uid, name: profile.name }));
+          enterAthleteMode(profile);
+        });
+    }).catch(function(e) {
+      document.getElementById('codeMsg').textContent = 'Erreur réseau.';
+      console.error(e);
+    });
+}
+
+function enterAthleteMode(profile) {
+  _athMode = true;
+  _athProfile = profile;
+  document.getElementById('athleteLogin').style.display = 'none';
+  document.getElementById('athleteApp').style.display = 'flex';
+  document.getElementById('athHeaderName').textContent = profile.name.toUpperCase();
+  document.getElementById('athHeaderWeek').textContent = getISOWeekLabel();
+  document.getElementById('athFeedbackTitle').textContent = 'SEMAINE ' + getISOWeekLabel();
+  // Demander permission push
+  requestPushPermission();
+  // Charger feedback existant pour cette semaine si déjà envoyé
+  loadCurrentWeekFeedback();
+  // Rendre les pages calc/force
+  renderAthCalc();
+  renderAthForce();
+  renderAthFeedbackHistory();
+  // Initialiser le formulaire
+  initFeedbackForm();
+}
+
+function athleteLogout() {
+  if (!confirm('Se déconnecter de l\'espace athlète ?')) return;
+  _athMode = false; _athProfile = null; _athCoachUid = null;
+  localStorage.removeItem('ath_session');
+  document.getElementById('athleteApp').style.display = 'none';
+}
+
+// Reconnexion auto si session athlète sauvegardée
+function tryAthleteAutoLogin() {
+  var raw = localStorage.getItem('ath_session');
+  if (!raw || !_sb) return;
+  try {
+    var s = JSON.parse(raw);
+    _sb.from('profiles_data').select('data').eq('user_id', s.coach_uid).maybeSingle()
+      .then(function(pr) {
+        if (pr.error || !pr.data) return;
+        var allProfiles = pr.data.data || [];
+        var profile = allProfiles.find(function(p) { return p.id === s.profile_id; });
+        if (!profile) return;
+        _athCoachUid = s.coach_uid;
+        enterAthleteMode(profile);
+      });
+  } catch(e) {}
+}
+
+// ── Navigation athlète ───────────────────────────────────
+function athGoPage(name) {
+  document.querySelectorAll('.ath-page').forEach(function(p) { p.classList.remove('active'); });
+  document.querySelectorAll('.ath-nav-btn').forEach(function(b) { b.classList.remove('active'); });
+  var page = document.getElementById('ath-page-' + name);
+  var btn  = document.getElementById('ath-nav-' + name);
+  if (page) page.classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (name === 'history') renderAthFeedbackHistory();
+}
+
+// ── Init formulaire feedback ─────────────────────────────
+function initFeedbackForm() {
+  // RPE
+  _feedbackData.rpe = 5;
+  updateRpeDisplay(5);
+
+  // Lignes forme par jour
+  var dayRows = document.getElementById('dailyFormRows');
+  if (!dayRows) return;
+  var html = '';
+  ATH_DAYS.forEach(function(d, i) {
+    html += '<div class="feedback-day-row" id="dayrow_' + d + '">' +
+      '<div class="day-label">' + ATH_DAYS_LABELS[i].substring(0,3).toUpperCase() + '</div>' +
+      '<div class="star-row" id="phys_' + d + '">' + makeStarBtns(d, 'phys') + '</div>' +
+      '<div class="star-row" id="mental_' + d + '">' + makeStarBtns(d, 'mental') + '</div>' +
+      '</div>';
+  });
+  dayRows.innerHTML = html;
+
+  // Lignes sommeil
+  var sleepRows = document.getElementById('sleepRows');
+  if (!sleepRows) return;
+  var sleepHtml = '';
+  ATH_DAYS.forEach(function(d, i) {
+    sleepHtml += '<div class="sleep-row">' +
+      '<div class="day-label">' + ATH_DAYS_LABELS[i].substring(0,3).toUpperCase() + '</div>' +
+      '<input class="sleep-input" type="time" id="coucher_' + d + '" value="" onchange="feedbackSleepChange(\'' + d + '\',\'coucher\',this.value)">' +
+      '<input class="sleep-input" type="time" id="lever_' + d + '" value="" onchange="feedbackSleepChange(\'' + d + '\',\'lever\',this.value)">' +
+      '</div>';
+  });
+  sleepRows.innerHTML = sleepHtml;
+}
+
+function makeStarBtns(day, type) {
+  var html = '';
+  for (var n = 1; n <= 5; n++) {
+    var cls = (n <= (_feedbackData.days[day] ? _feedbackData.days[day][type] : 3)) ? ('star-btn active-' + type) : 'star-btn';
+    html += '<button class="' + cls + '" onclick="setDayScore(\'' + day + '\',\'' + type + '\',' + n + ')" data-day="' + day + '" data-type="' + type + '" data-val="' + n + '">' + n + '</button>';
+  }
+  return html;
+}
+
+function setDayScore(day, type, val) {
+  if (!_feedbackData.days[day]) _feedbackData.days[day] = { phys: 3, mental: 3, coucher: '', lever: '' };
+  _feedbackData.days[day][type] = val;
+  // Mettre à jour visuellement
+  var row = document.getElementById(type + '_' + day);
+  if (!row) return;
+  row.querySelectorAll('.star-btn').forEach(function(btn) {
+    var bval = parseInt(btn.dataset.val);
+    btn.className = bval <= val ? ('star-btn active-' + type) : 'star-btn';
+  });
+}
+
+function feedbackSleepChange(day, field, val) {
+  if (!_feedbackData.days[day]) _feedbackData.days[day] = { phys: 3, mental: 3, coucher: '', lever: '' };
+  _feedbackData.days[day][field] = val;
+}
+
+// RPE
+function rpeTrackClick(e) {
+  var track = document.getElementById('rpeTrack');
+  var rect = track.getBoundingClientRect();
+  var pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  var val = Math.max(1, Math.min(10, Math.round(pct * 9) + 1));
+  updateRpeDisplay(val);
+}
+
+function updateRpeDisplay(val) {
+  _feedbackData.rpe = val;
+  var thumb = document.getElementById('rpeThumb');
+  var display = document.getElementById('rpeDisplay');
+  var desc = document.getElementById('rpeDesc');
+  if (thumb) thumb.style.left = ((val - 1) / 9 * 100) + '%';
+  if (display) display.textContent = val;
+  if (desc) desc.textContent = RPE_LABELS[val] || '';
+}
+
+// ── Vérifier si feedback déjà envoyé cette semaine ───────
+function loadCurrentWeekFeedback() {
+  if (!_sb || !_athProfile || !_athCoachUid) return;
+  var weekId = getISOWeekId();
+  _sb.from('athlete_feedback')
+    .select('*')
+    .eq('coach_uid', _athCoachUid)
+    .eq('profile_id', _athProfile.id)
+    .eq('week_id', weekId)
+    .maybeSingle()
+    .then(function(r) {
+      if (r.data) {
+        // Feedback déjà envoyé
+        var btn = document.getElementById('athSubmitBtn');
+        var msg = document.getElementById('athSubmitMsg');
+        if (btn) { btn.textContent = '✅ Feedback envoyé pour cette semaine'; btn.style.background = '#22c55e'; btn.disabled = true; }
+        if (msg) msg.textContent = 'Envoyé le ' + new Date(r.data.created_at).toLocaleDateString('fr-FR');
+      }
+    });
+}
+
+// ── Soumettre le feedback ─────────────────────────────────
+function submitFeedback() {
+  if (!_sb || !_athProfile || !_athCoachUid) return;
+  var btn = document.getElementById('athSubmitBtn');
+  var msg = document.getElementById('athSubmitMsg');
+  if (btn) { btn.textContent = 'Envoi...'; btn.disabled = true; }
+
+  var weekId = getISOWeekId();
+  var data = {
+    coach_uid:  _athCoachUid,
+    profile_id: _athProfile.id,
+    athlete_name: _athProfile.name,
+    week_id:    weekId,
+    week_label: getISOWeekLabel(),
+    rpe:        _feedbackData.rpe,
+    days:       _feedbackData.days,
+    objective:  document.getElementById('athObjective').value,
+    comment:    document.getElementById('athComment').value,
+    created_at: new Date().toISOString()
+  };
+
+  _sb.from('athlete_feedback').insert(data)
+    .then(function(r) {
+      if (r.error) {
+        if (msg) msg.textContent = 'Erreur : ' + r.error.message;
+        msg.style.color = '#ef4444';
+        if (btn) { btn.textContent = '📤 ENVOYER AU COACH'; btn.disabled = false; }
+        return;
+      }
+      if (btn) { btn.textContent = '✅ Feedback envoyé !'; btn.style.background = '#22c55e'; }
+      if (msg) { msg.textContent = 'Ton coach a été notifié.'; msg.style.color = '#22c55e'; }
+      // Notifier le coach via Edge Function
+      notifyCoachFeedback(data);
+    });
+}
+
+// ── Notifier le coach ─────────────────────────────────────
+function notifyCoachFeedback(feedbackData) {
+  if (!_sb) return;
+  // Appel Edge Function Supabase
+  fetch(_SB_URL + '/functions/v1/notify-coach', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _SB_KEY },
+    body: JSON.stringify({
+      coach_uid: feedbackData.coach_uid,
+      athlete_name: feedbackData.athlete_name,
+      week_label: feedbackData.week_label,
+      rpe: feedbackData.rpe
+    })
+  }).catch(function(e) { console.warn('Notify coach failed:', e); });
+}
+
+// ── Historique feedbacks athlète ──────────────────────────
+function renderAthFeedbackHistory() {
+  var el = document.getElementById('athFeedbackHistory');
+  if (!el || !_sb || !_athProfile) return;
+  el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Chargement...</div>';
+  _sb.from('athlete_feedback')
+    .select('*')
+    .eq('profile_id', _athProfile.id)
+    .eq('coach_uid', _athCoachUid)
+    .order('created_at', { ascending: false })
+    .limit(20)
+    .then(function(r) {
+      if (r.error || !r.data || !r.data.length) {
+        el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Aucun feedback envoyé.</div>';
+        return;
+      }
+      var html = '';
+      r.data.forEach(function(fb) {
+        var rpeColor = fb.rpe <= 4 ? '#22c55e' : fb.rpe <= 7 ? '#f59e0b' : '#ef4444';
+        html += '<div class="fb-chip">' +
+          '<div class="fb-chip-header">' +
+            '<span style="font-family:Bebas Neue,sans-serif;font-size:18px;">' + (fb.week_label || fb.week_id) + '</span>' +
+            '<span style="font-family:DM Mono,monospace;font-size:8px;color:' + rpeColor + ';">RPE ' + fb.rpe + '/10</span>' +
+          '</div>' +
+          (fb.objective ? '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:4px;">🎯 ' + fb.objective + '</div>' : '') +
+          (fb.comment ? '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:4px;">💬 ' + fb.comment + '</div>' : '') +
+        '</div>';
+      });
+      el.innerHTML = html;
+    });
+}
+
+// ── Vue Calcul athlète ────────────────────────────────────
+function renderAthCalc() {
+  var el = document.getElementById('athCalcContent');
+  if (!el || !_athProfile) return;
+  var p = _athProfile;
+  var r = p.records || {};
+  var refs = [];
+  if (r.pr100) refs.push({ t: r.pr100, dRef: 100 });
+  if (r.pr200) refs.push({ t: r.pr200, dRef: 200 });
+  if (r.pr60)  refs.push({ t: r.pr60,  dRef: 60  });
+  if (r.pr400) refs.push({ t: r.pr400, dRef: 400 });
+  if (r.pr50)  refs.push({ t: r.pr50,  dRef: 50  });
+
+  if (!refs.length) {
+    el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Aucun record enregistré dans ton profil. Contacte ton coach.</div>';
+    return;
+  }
+
+  var pcts = [60, 70, 75, 80, 85, 90, 95, 100];
+  var dists = [30, 40, 50, 60, 80, 100, 120, 150, 200, 300, 400];
+  var html = '';
+  pcts.forEach(function(pct) {
+    html += '<div class="card" style="margin-bottom:12px;">' +
+      '<div class="card-title">// @ ' + pct + '%</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">';
+    dists.forEach(function(d) {
+      try {
+        var t = computeTarget(d, refs) / (pct / 100);
+        var spd = d / t;
+        html += '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 12px;min-width:80px;">' +
+          '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);">' + d + 'm</div>' +
+          '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:var(--accent);">' + t.toFixed(2) + 's</div>' +
+          '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);">' + spd.toFixed(1) + 'm/s</div>' +
+          '</div>';
+      } catch(e) {}
+    });
+    html += '</div></div>';
+  });
+  el.innerHTML = html;
+}
+
+// ── Vue Force athlète ─────────────────────────────────────
+function renderAthForce() {
+  var el = document.getElementById('athForceContent');
+  if (!el || !_athProfile) return;
+  var rm1 = _athProfile.rm1 || {};
+  var exos = [
+    { id: 'squat', label: 'Back Squat', icon: '🏋' },
+    { id: 'hipthrust', label: 'Hip Thrust', icon: '🔁' },
+    { id: 'rdl', label: 'RDL', icon: '📐' },
+    { id: 'powerclean', label: 'Power Clean', icon: '⚡' },
+    { id: 'bench', label: 'Bench Press', icon: '💪' }
+  ];
+  var pcts = [50, 60, 70, 75, 80, 85, 90, 95, 100];
+  var html = '';
+  exos.forEach(function(exo) {
+    var rm = rm1[exo.id];
+    if (!rm) return;
+    html += '<div class="card" style="margin-bottom:12px;">' +
+      '<div class="card-title">' + exo.icon + ' ' + exo.label + ' — 1RM : <span style="color:var(--accent);">' + rm + 'kg</span></div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">';
+    pcts.forEach(function(pct) {
+      var kg = (rm * pct / 100).toFixed(1);
+      html += '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 12px;min-width:72px;">' +
+        '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);">' + pct + '%</div>' +
+        '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:var(--text);">' + kg + '</div>' +
+        '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);">kg</div>' +
+        '</div>';
+    });
+    html += '</div></div>';
+  });
+  if (!html) el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Aucun 1RM enregistré dans ton profil.</div>';
+  else el.innerHTML = html;
+}
+
+// ── Push notifications ────────────────────────────────────
+var _pushSubscription = null;
+
+function requestPushPermission() {
+  if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
+  if (Notification.permission === 'granted') { registerPushSW(); return; }
+  if (Notification.permission !== 'denied') {
+    Notification.requestPermission().then(function(p) {
+      if (p === 'granted') registerPushSW();
+    });
+  }
+}
+
+function registerPushSW() {
+  // Injecter un service worker minimal inline via blob
+  var swCode = 'self.addEventListener("push",function(e){var d=e.data?e.data.json():{};e.waitUntil(self.registration.showNotification(d.title||"TrackSpeed",{body:d.body||"",icon:"/favicon.ico",badge:"/favicon.ico",data:d}));});self.addEventListener("notificationclick",function(e){e.notification.close();e.waitUntil(clients.openWindow("/"));});';
+  var blob = new Blob([swCode], { type: 'application/javascript' });
+  var swUrl = URL.createObjectURL(blob);
+  navigator.serviceWorker.register(swUrl, { scope: '/' }).then(function(reg) {
+    return reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: null  // VAPID key needed for real push — stored in Edge Function
+    });
+  }).then(function(sub) {
+    _pushSubscription = sub;
+    // Enregistrer la souscription dans Supabase
+    if (_sb && _athProfile) {
+      _sb.from('push_subscriptions').upsert({
+        profile_id: _athProfile.id,
+        coach_uid: _athCoachUid,
+        subscription: JSON.stringify(sub.toJSON()),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'profile_id' }).then(function() {});
+    }
+  }).catch(function(e) {
+    // Push peut échouer si VAPID non configuré — non bloquant
+    console.warn('Push registration:', e.message);
+  });
+}
+
+// ── Génération de code par le coach ──────────────────────
+function generateAthleteCode(profileId) {
+  if (!_sb || !_sbUser) { alert('Connecte-toi d\'abord.'); return; }
+  var code = String(Math.floor(100000 + Math.random() * 900000));
+  var expiry = new Date();
+  expiry.setFullYear(expiry.getFullYear() + 1); // valide 1 an
+
+  _sb.from('athlete_codes').update({ code: code, expiry: expiry.toISOString() })
+    .eq('coach_uid', _sbUser.id).eq('profile_id', profileId).select()
+    .then(function(r) {
+      if (r.error || !r.data || !r.data.length) {
+        // Pas de ligne existante — INSERT
+        return _sb.from('athlete_codes').insert({
+          coach_uid: _sbUser.id, profile_id: profileId,
+          code: code, expiry: expiry.toISOString()
+        }).then(function() { showAthleteCodeModal(profileId, code); });
+      }
+      showAthleteCodeModal(profileId, code);
+    });
+}
+
+// Code courant affiché dans la modale
+var _currentModalCode = '';
+
+function copyAthleteCode(btn, code) {
+  navigator.clipboard.writeText(code).then(function() {
+    btn.textContent = '✓ Copié !';
+    setTimeout(function() { btn.textContent = 'Copier le code'; }, 2000);
+  });
+}
+
+function showAthleteCodeModal(profileId, code) {
+  _currentModalCode = code;
+  var p = profiles.find(function(pr) { return pr.id === profileId; });
+  var name = p ? p.name : 'Athlète';
+  var existing = document.getElementById('athCodeModal');
+  if (existing) existing.remove();
+  var modal = document.createElement('div');
+  modal.id = 'athCodeModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99997;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;padding:20px;';
+  var inner = document.createElement('div');
+  inner.style.cssText = 'background:var(--surface);border:1px solid var(--accent);border-radius:12px;padding:32px;max-width:360px;width:100%;text-align:center;';
+  inner.innerHTML =
+    '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">CODE D&#x27;ACCÈS</div>' +
+    '<div style="font-family:Bebas Neue,sans-serif;font-size:24px;margin-bottom:16px;">' + name.toUpperCase() + '</div>' +
+    '<div style="font-family:Bebas Neue,sans-serif;font-size:48px;color:var(--accent);letter-spacing:8px;margin-bottom:8px;">' + code + '</div>' +
+    '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);margin-bottom:24px;">Partage ce code avec ton athlète.<br>Valide 1 an.</div>';
+  var copyBtn = document.createElement('button');
+  copyBtn.textContent = 'Copier le code';
+  copyBtn.style.cssText = 'width:100%;background:var(--accent);border:none;border-radius:6px;padding:12px;font-family:Bebas Neue,sans-serif;font-size:18px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:10px;';
+  copyBtn.onclick = function() { copyAthleteCode(copyBtn, code); };
+  var closeBtn = document.createElement('button');
+  closeBtn.textContent = 'Fermer';
+  closeBtn.style.cssText = 'width:100%;background:none;border:1px solid var(--border);border-radius:6px;padding:10px;font-family:DM Mono,monospace;font-size:9px;color:var(--muted);cursor:pointer;';
+  closeBtn.onclick = function() { modal.remove(); };
+  inner.appendChild(copyBtn);
+  inner.appendChild(closeBtn);
+  modal.appendChild(inner);
+  document.body.appendChild(modal);
+}
+
+// ── Bouton dans la fiche profil pour générer le code ─────
+function getExistingAthleteCode(profileId, callback) {
+  if (!_sb || !_sbUser) return;
+  _sb.from('athlete_codes').select('code').eq('coach_uid', _sbUser.id).eq('profile_id', profileId).maybeSingle()
+    .then(function(r) { callback(r.data ? r.data.code : null); });
+}
+
+// ── Feedbacks reçus par le coach ─────────────────────────
+function renderCoachFeedbacks() {
+  var el = document.getElementById('coachFeedbackList');
+  if (!el || !_sb || !_sbUser) return;
+  el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Chargement...</div>';
+  _sb.from('athlete_feedback').select('*').eq('coach_uid', _sbUser.id)
+    .order('created_at', { ascending: false }).limit(50)
+    .then(function(r) {
+      if (r.error || !r.data || !r.data.length) {
+        el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Aucun feedback reçu.</div>';
+        return;
+      }
+      var html = '';
+      r.data.forEach(function(fb) {
+        var rpeColor = fb.rpe <= 4 ? '#22c55e' : fb.rpe <= 7 ? '#f59e0b' : '#ef4444';
+        var rpeW = ((fb.rpe - 1) / 9 * 100).toFixed(0);
+        html += '<div class="fb-athlete-card">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+            '<div>' +
+              '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;">' + (fb.athlete_name || '').toUpperCase() + '</div>' +
+              '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);">' + (fb.week_label || fb.week_id) + '</div>' +
+            '</div>' +
+            '<div style="font-family:Bebas Neue,sans-serif;font-size:28px;color:' + rpeColor + ';">' + fb.rpe + '<span style="font-size:14px;color:var(--muted);">/10</span></div>' +
+          '</div>' +
+          '<div style="margin-bottom:8px;">' +
+            '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);margin-bottom:4px;">RPE</div>' +
+            '<div class="fb-rpe-bar"><div class="fb-rpe-marker" style="left:' + rpeW + '%"></div></div>' +
+          '</div>' +
+          (fb.objective ? '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--text);margin-top:8px;">🎯 <span style="color:var(--muted);">Objectif :</span> ' + fb.objective + '</div>' : '') +
+          (fb.comment   ? '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--text);margin-top:6px;">💬 ' + fb.comment + '</div>' : '') +
+          '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);margin-top:8px;text-align:right;">' + new Date(fb.created_at).toLocaleDateString('fr-FR') + '</div>' +
+        '</div>';
+      });
+      el.innerHTML = html;
+    });
+}
+
+// ── Init : vérifier URL param pour mode athlète ───────────
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  if (params.get('athlete') === '1') {
+    setTimeout(showAthleteLoginScreen, 500);
+  }
+})();
+
 // ── INIT ──
 renderProfiles();
 renderHome();
 sbInit();
+// Tenter reconnexion auto mode athlète après init Supabase
+setTimeout(function() { if (!_athMode) tryAthleteAutoLogin(); }, 1500);
 
 // ── AUTO-SYNC : reprend le sync quand l'app redevient visible ou en ligne ──
 var _lastVisibleSync = 0;
@@ -9797,9 +10530,143 @@ setTimeout(() => {
     </div>
     <!-- Message retour -->
     <div id="sbPanelMsg" style="font-family:'DM Mono',monospace;font-size:8px;display:none;padding:6px 8px;border-radius:4px;margin-bottom:10px;"></div>
+    <!-- Feedbacks athlètes -->
+    <div style="margin-bottom:12px;">
+      <button onclick="goPage('page-feedbacks');document.getElementById('sbPanel').style.display='none';"
+        style="width:100%;background:none;border:1px solid rgba(245,200,0,0.3);border-radius:4px;padding:8px;font-family:'DM Mono',monospace;font-size:8px;color:#F5C800;cursor:pointer;letter-spacing:1px;">
+        📋 FEEDBACKS ATHLÈTES
+      </button>
+    </div>
     <!-- Déconnexion -->
     <button onclick="sbSignOut()" style="width:100%;background:none;border:1px solid rgba(239,68,68,0.3);border-radius:4px;padding:8px;font-family:'DM Mono',monospace;font-size:8px;color:#ef4444;cursor:pointer;letter-spacing:1px;">SE DÉCONNECTER</button>
   </div>
 </div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- ══  ÉCRAN CONNEXION ATHLÈTE              ══ -->
+<!-- ══════════════════════════════════════════ -->
+<div id="athleteLogin" style="display:none;">
+  <div style="font-family:'Bebas Neue',sans-serif;font-size:48px;color:var(--accent);letter-spacing:3px;margin-bottom:4px;">TRACKSPEED</div>
+  <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:32px;">ESPACE ATHLÈTE</div>
+  <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;">ENTRE TON CODE D\'ACCÈS</div>
+  <div class="code-input-row">
+    <input class="code-digit" id="cd0" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(0)" onkeydown="codeDigitKey(event,0)">
+    <input class="code-digit" id="cd1" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(1)" onkeydown="codeDigitKey(event,1)">
+    <input class="code-digit" id="cd2" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(2)" onkeydown="codeDigitKey(event,2)">
+    <input class="code-digit" id="cd3" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(3)" onkeydown="codeDigitKey(event,3)">
+    <input class="code-digit" id="cd4" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(4)" onkeydown="codeDigitKey(event,4)">
+    <input class="code-digit" id="cd5" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(5)" onkeydown="codeDigitKey(event,5)">
+  </div>
+  <div id="codeMsg" style="font-family:'DM Mono',monospace;font-size:9px;color:#ef4444;min-height:16px;margin-bottom:16px;text-align:center;"></div>
+  <button onclick="athleteCodeSubmit()" style="background:var(--accent);border:none;border-radius:6px;padding:14px 40px;font-family:'Bebas Neue',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;width:100%;max-width:280px;">ACCÉDER</button>
+  <button onclick="athleteLoginBack()" style="margin-top:16px;background:none;border:none;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);cursor:pointer;letter-spacing:1px;">← RETOUR COACH</button>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- ══  APP ATHLÈTE                          ══ -->
+<!-- ══════════════════════════════════════════ -->
+<div id="athleteApp" style="display:none;flex-direction:column;min-height:100vh;">
+  <!-- Header -->
+  <div class="ath-header">
+    <div>
+      <div class="ath-name" id="athHeaderName">ATHLÈTE</div>
+      <div class="ath-week" id="athHeaderWeek">SEMAINE —</div>
+    </div>
+    <button onclick="athleteLogout()" style="background:none;border:1px solid var(--border);border-radius:4px;padding:6px 10px;font-family:'DM Mono',monospace;font-size:7px;color:var(--muted);cursor:pointer;letter-spacing:1px;">DÉCONNEXION</button>
+  </div>
+
+  <!-- Pages athlète -->
+  <div id="ath-page-feedback" class="ath-page active">
+    <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:4px;">// FEEDBACK SEMAINE</div>
+    <h2 style="font-family:'Bebas Neue',sans-serif;font-size:32px;margin-bottom:20px;" id="athFeedbackTitle">SEMAINE —</h2>
+
+    <!-- RPE global -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">// CHARGE PERÇUE (RPE) DE LA SEMAINE</div>
+      <div style="display:flex;align-items:flex-end;gap:20px;margin:16px 0 8px;">
+        <div>
+          <div class="rpe-label" id="rpeDisplay">5</div>
+          <div class="rpe-desc" id="rpeDesc">Modéré</div>
+        </div>
+        <div style="flex:1;padding-bottom:6px;">
+          <div class="rpe-track" id="rpeTrack" onclick="rpeTrackClick(event)">
+            <div class="rpe-thumb" id="rpeThumb" style="left:44.4%"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:6px;font-family:'DM Mono',monospace;font-size:7px;color:var(--muted);">
+            <span>1 — Très facile</span><span>10 — Max</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Forme par jour -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">// FORME PAR JOUR</div>
+      <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:8px;margin-top:8px;">
+        <div></div>
+        <div style="font-family:'DM Mono',monospace;font-size:7px;color:#3b82f6;letter-spacing:1px;text-align:center;">PHYSIQUE</div>
+        <div style="font-family:'DM Mono',monospace;font-size:7px;color:#8b5cf6;letter-spacing:1px;text-align:center;">MENTAL</div>
+      </div>
+      <div id="dailyFormRows"></div>
+    </div>
+
+    <!-- Sommeil -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">// SOMMEIL</div>
+      <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:8px;margin-top:8px;margin-bottom:6px;">
+        <div></div>
+        <div style="font-family:'DM Mono',monospace;font-size:7px;color:var(--muted);letter-spacing:1px;text-align:center;">COUCHER</div>
+        <div style="font-family:'DM Mono',monospace;font-size:7px;color:var(--muted);letter-spacing:1px;text-align:center;">LEVER</div>
+      </div>
+      <div id="sleepRows"></div>
+    </div>
+
+    <!-- Objectif & commentaire -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">// OBJECTIF DE LA SEMAINE PROCHAINE</div>
+      <textarea class="ath-textarea" id="athObjective" placeholder="Ex: Améliorer mon départ, mieux récupérer entre les séries..." style="margin-top:12px;"></textarea>
+    </div>
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-title">// COMMENTAIRE LIBRE</div>
+      <textarea class="ath-textarea" id="athComment" placeholder="Ressenti général, douleurs, remarques pour ton coach..." style="margin-top:12px;"></textarea>
+    </div>
+
+    <button onclick="submitFeedback()" id="athSubmitBtn"
+      style="width:100%;background:var(--accent);border:none;border-radius:6px;padding:16px;font-family:'Bebas Neue',sans-serif;font-size:22px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:12px;">
+      📤 ENVOYER AU COACH
+    </button>
+    <div id="athSubmitMsg" style="text-align:center;font-family:'DM Mono',monospace;font-size:9px;min-height:16px;"></div>
+  </div>
+
+  <!-- Page Calcul athlète -->
+  <div id="ath-page-calc" class="ath-page">
+    <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:4px;">// CALCUL DE VITESSE</div>
+    <h2 style="font-family:'Bebas Neue',sans-serif;font-size:32px;margin-bottom:20px;">MES TEMPS CIBLES</h2>
+    <div id="athCalcContent"></div>
+  </div>
+
+  <!-- Page Force athlète -->
+  <div id="ath-page-force" class="ath-page">
+    <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:4px;">// FORCE</div>
+    <h2 style="font-family:'Bebas Neue',sans-serif;font-size:32px;margin-bottom:20px;">MES 1RM</h2>
+    <div id="athForceContent"></div>
+  </div>
+
+  <!-- Page Historique feedbacks -->
+  <div id="ath-page-history" class="ath-page">
+    <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:4px;">// HISTORIQUE</div>
+    <h2 style="font-family:'Bebas Neue',sans-serif;font-size:32px;margin-bottom:20px;">MES FEEDBACKS</h2>
+    <div id="athFeedbackHistory"></div>
+  </div>
+
+  <!-- Nav athlète -->
+  <nav class="ath-nav">
+    <button class="ath-nav-btn active" id="ath-nav-feedback" onclick="athGoPage('feedback')"><span class="icon">📋</span>Feedback</button>
+    <button class="ath-nav-btn" id="ath-nav-calc"     onclick="athGoPage('calc')"    ><span class="icon">⏱</span>Calcul</button>
+    <button class="ath-nav-btn" id="ath-nav-force"    onclick="athGoPage('force')"   ><span class="icon">🏋</span>Force</button>
+    <button class="ath-nav-btn" id="ath-nav-history"  onclick="athGoPage('history')" ><span class="icon">📊</span>Historique</button>
+  </nav>
+</div>
+
 </body>
 </html>
