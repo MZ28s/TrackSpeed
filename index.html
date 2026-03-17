@@ -218,11 +218,10 @@ body.light-theme canvas { filter:invert(0); }
 
 /* TOGGLE THÈME */
 #themeToggle {
-  position:fixed; top:14px; right:14px; z-index:200;
-  width:34px; height:34px; border-radius:50%; border:1px solid var(--border);
+  width:32px; height:32px; border-radius:50%; border:1px solid var(--border);
   background:var(--surface); color:var(--muted); font-size:16px;
   cursor:pointer; display:flex; align-items:center; justify-content:center;
-  transition:all .2s;
+  transition:all .2s; flex-shrink:0;
 }
 #themeToggle:hover { border-color:var(--accent); color:var(--accent); }
 </style>
