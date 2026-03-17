@@ -10066,6 +10066,11 @@ function enterAthleteMode(profile) {
   initFeedbackForm();
 }
 
+function athSyncThemeBtn() {
+  var btn = document.getElementById('athThemeBtn');
+  if (btn) btn.textContent = lightTheme ? '🌙' : '☀️';
+}
+
 function athleteLogout() {
   if (!confirm('Se déconnecter ?')) return;
   _athMode = false; _athProfile = null; _athCoachUid = null; _athUser = null;
@@ -10437,6 +10442,7 @@ function enterAthleteMode(profile) {
   if (weekEl)  weekEl.textContent  = getISOWeekLabel();
   if (titleEl) titleEl.textContent = 'SEMAINE ' + getISOWeekLabel();
   setTimeout(function() {
+    athSyncThemeBtn();
     initFeedbackForm();
     loadCurrentWeekFeedback();
     athRenderExoSelector();
@@ -11405,7 +11411,10 @@ setTimeout(() => {
       <div class="ath-header-name" id="athHeaderName">ATHLÈTE</div>
       <div class="ath-header-week" id="athHeaderWeek">—</div>
     </div>
-    <button onclick="athleteLogout()" style="background:none;border:1px solid var(--border);border-radius:4px;padding:5px 10px;font-family:'DM Mono',monospace;font-size:7px;color:var(--muted);cursor:pointer;letter-spacing:1px;">DÉCONNEXION</button>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button onclick="toggleTheme();athSyncThemeBtn()" id="athThemeBtn" title="Thème clair / sombre" style="background:none;border:1px solid var(--border);border-radius:4px;width:32px;height:32px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .15s;">☀️</button>
+      <button onclick="athleteLogout()" style="background:none;border:1px solid var(--border);border-radius:4px;padding:5px 10px;font-family:'DM Mono',monospace;font-size:7px;color:var(--muted);cursor:pointer;letter-spacing:1px;">DÉCONNEXION</button>
+    </div>
   </div>
 
   <!-- FEEDBACK -->
