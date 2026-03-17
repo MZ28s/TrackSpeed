@@ -751,6 +751,9 @@ body.light-theme canvas { filter:invert(0); }
     <!-- ══ PLANIFICATION ══ -->
     <div id="homePlanif" style="margin-bottom:16px;"></div>
 
+    <!-- ══ FEEDBACKS RÉCENTS ══ -->
+    <div id="homeFeedbacks" style="margin-bottom:16px;"></div>
+
     <!-- ══ ATHLÈTES ══ -->
     <div id="homeAthletes" style="margin-bottom:8px;"></div>
 
@@ -1048,25 +1051,7 @@ body.light-theme canvas { filter:invert(0); }
     </div>
   </div>
 
-  <!-- ══ EXPORT / IMPORT ══ -->
-  <div class="card" style="margin-top:12px;">
-    <div class="card-title">// Sauvegarde &amp; Restauration</div>
-    <p style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);line-height:1.6;margin-bottom:12px;">
-      Exporte tous tes données (profils, 1RM, historique) en JSON. Importe pour restaurer sur un autre appareil ou après vidage du navigateur.
-    </p>
-    <div style="display:flex;flex-direction:column;gap:8px;">
-      <button class="btn primary" onclick="exportData()" style="font-size:11px;">
-        📤 Exporter mes données (JSON)
-      </button>
-      <label style="display:block;">
-        <div class="btn" style="font-size:11px;text-align:center;cursor:pointer;width:100%;box-sizing:border-box;">
-          📥 Importer des données (JSON)
-        </div>
-        <input type="file" id="importFileInput" accept=".json" style="display:none;" onchange="importData(event)">
-      </label>
-    </div>
-    <div id="importStatus" style="margin-top:8px;font-family:'DM Mono',monospace;font-size:10px;display:none;"></div>
-  </div>
+
 
 </div>
 
@@ -5128,6 +5113,7 @@ function renderHome() {
   _renderHomeLastSession();
   _renderHomeStats();
   _renderHomePlanif();
+  _renderHomeFeedbacks();
   _renderHomeAthletes();
 }
 
@@ -5310,6 +5296,67 @@ function _renderHomePlanif() {
   el.innerHTML = html;
 }
 
+
+function _renderHomeAthletes() {
+// ── Feedbacks récents (home) ──────────────────────────────
+function _renderHomeFeedbacks() {
+  var el = document.getElementById('homeFeedbacks');
+  if (!el) return;
+
+  // Nécessite Supabase + coach connecté
+  if (!_sb || !_sbUser) { el.innerHTML = ''; return; }
+
+  _sb.from('athlete_feedback')
+    .select('id,athlete_name,week_label,week_id,rpe,created_at,days,objective,comment')
+    .eq('coach_uid', _sbUser.id)
+    .order('created_at', { ascending: false })
+    .limit(5)
+    .then(function(r) {
+      if (r.error || !r.data || !r.data.length) { el.innerHTML = ''; return; }
+
+      var readSet = (function() {
+        try { return new Set(JSON.parse(localStorage.getItem('coach_fb_read_' + _sbUser.id) || '[]')); }
+        catch(e) { return new Set(); }
+      })();
+
+      var unreadCount = r.data.filter(function(fb) { return !readSet.has(fb.id); }).length;
+
+      var html = '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;">'
+        + '<div style="display:flex;align-items:center;gap:8px;">// FEEDBACKS RÉCENTS'
+        + (unreadCount > 0 ? '<span style="background:var(--accent);color:#000;border-radius:10px;padding:1px 7px;font-size:8px;font-weight:700;">' + unreadCount + '</span>' : '')
+        + '</div>'
+        + '<span onclick="goPage(\'page-feedbacks\')" style="font-size:8px;color:var(--muted);cursor:pointer;text-decoration:underline;">Voir tout →</span>'
+        + '</div>';
+
+      html += '<div style="display:flex;flex-direction:column;gap:6px;">';
+
+      r.data.forEach(function(fb) {
+        var isUnread = !readSet.has(fb.id);
+        var rpeVal = fb.rpe;
+        var rpeColor = !rpeVal ? 'var(--muted)' :
+          rpeVal <= 3 ? '#22c55e' : rpeVal <= 5 ? '#86efac' : rpeVal <= 7 ? '#f59e0b' : rpeVal <= 8 ? '#ef4444' : '#991b1b';
+        var date = new Date(fb.created_at).toLocaleDateString('fr-FR', {day:'2-digit', month:'short'});
+
+        html += '<div onclick="goPage(\'page-feedbacks\')" style="'
+          + 'background:var(--surface);border:1px solid ' + (isUnread ? 'rgba(245,200,0,.35)' : 'var(--border)') + ';'
+          + 'border-radius:8px;padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:12px;'
+          + 'transition:border-color .15s;">'
+          + (isUnread ? '<div style="width:7px;height:7px;border-radius:50%;background:var(--accent);flex-shrink:0;"></div>' : '<div style="width:7px;"></div>')
+          + '<div style="flex:1;min-width:0;">'
+          + '<div style="font-family:Bebas Neue,sans-serif;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (fb.athlete_name || '—').toUpperCase() + '</div>'
+          + '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);">' + (fb.week_label || fb.week_id || '—') + '</div>'
+          + '</div>'
+          + '<div style="text-align:right;flex-shrink:0;">'
+          + '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;color:' + rpeColor + ';line-height:1;">' + (rpeVal || '—') + '</div>'
+          + '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);">' + date + '</div>'
+          + '</div>'
+          + '</div>';
+      });
+
+      html += '</div>';
+      el.innerHTML = html;
+    });
+}
 
 function _renderHomeAthletes() {
   var el = document.getElementById('homeAthletes');
@@ -7169,7 +7216,7 @@ function renderLib() {
         </div>
         <div style="text-align:right;flex-shrink:0;margin-left:10px;">
           <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:${meta.color};line-height:1;">${totalM}m</div>
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);">${totalReps} reps</div>
+          <div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);">${totalReps} reps</div>
         </div>
       </div>
 
