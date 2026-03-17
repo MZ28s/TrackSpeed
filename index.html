@@ -585,6 +585,43 @@ body.light-theme canvas { filter:invert(0); }
   letter-spacing: 2px; color: var(--accent);
   margin: 20px 0 10px; text-transform: uppercase;
 }
+
+/* ── Feedback par jour ── */
+.fb-day-row {
+  display: grid;
+  grid-template-columns: 68px 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.fb-day-row:last-child { border-bottom: none; }
+.fb-day-label { display: flex; flex-direction: column; gap: 4px; }
+.fb-day-rpe { flex: 1; }
+
+/* Tag repos/compet */
+.fb-tag-btn {
+  width: 28px; height: 28px; border-radius: 6px;
+  background: transparent; border: 1px solid var(--border);
+  font-size: 14px; cursor: pointer; transition: all .12s;
+  display: flex; align-items: center; justify-content: center;
+}
+.fb-tag-btn.active-repos  { background: rgba(107,114,128,.25); border-color: #9ca3af; }
+.fb-tag-btn.active-compet { background: rgba(245,200,0,.15);   border-color: var(--accent); }
+.fb-tag-btn:hover { border-color: var(--muted); }
+
+/* RPE bar compact */
+.rpe-gradient-bar {
+  width: 100%; height: 8px; border-radius: 4px; position: relative;
+  background: linear-gradient(to right, #22c55e 0%, #86efac 20%, #fde047 40%, #f59e0b 60%, #ef4444 80%, #991b1b 100%);
+}
+.rpe-handle {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--bg); border: 3px solid var(--accent);
+  position: absolute; top: 50%; transform: translate(-50%,-50%);
+  box-shadow: 0 1px 6px rgba(0,0,0,.5); pointer-events: none;
+  transition: left .1s, border-color .15s;
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -10691,89 +10728,234 @@ function athGoPage(name) {
 
 // ── Init form feedback ────────────────────────────────────
 function initFeedbackForm() {
+  // Reset data structure — chaque jour a rpe, phys, mental, coucher, lever, repos, compet
+  var emptyDay = function() { return { rpe: null, phys: null, mental: null, coucher: '', lever: '', repos: false, compet: false }; };
   _feedbackData = {
-    rpe: 5,
-    days: { lun:{phys:3,mental:3,coucher:'',lever:''}, mar:{phys:3,mental:3,coucher:'',lever:''},
-            mer:{phys:3,mental:3,coucher:'',lever:''}, jeu:{phys:3,mental:3,coucher:'',lever:''},
-            ven:{phys:3,mental:3,coucher:'',lever:''}, sam:{phys:3,mental:3,coucher:'',lever:''},
-            dim:{phys:3,mental:3,coucher:'',lever:''} },
+    days: {
+      lun: emptyDay(), mar: emptyDay(), mer: emptyDay(), jeu: emptyDay(),
+      ven: emptyDay(), sam: emptyDay(), dim: emptyDay()
+    },
     objective: '', comment: ''
   };
-  updateRpeDisplay(5);
 
-  // Forme par jour
-  var dayRows = document.getElementById('dailyFormRows');
-  if (dayRows) {
-    var html = '';
-    ATH_DAYS.forEach(function(d, i) {
-      html += '<div class="day-score-grid" style="padding:6px 0;border-bottom:1px solid var(--border);">' +
-        '<div class="day-score-label">' + ATH_DAYS_LABELS[i].substring(0,3).toUpperCase() + '</div>' +
-        '<div class="score-dots" id="phys_' + d + '">' + makeScoreDots(d, 'phys') + '</div>' +
-        '<div class="score-dots" id="mental_' + d + '">' + makeScoreDots(d, 'mental') + '</div>' +
-        '</div>';
-    });
-    dayRows.innerHTML = html;
-  }
-
-  // Sommeil
-  var sleepRows = document.getElementById('sleepRows');
-  if (sleepRows) {
-    var sleepHtml = '';
-    ATH_DAYS.forEach(function(d, i) {
-      sleepHtml += '<div class="sleep-grid" style="padding:5px 0;">' +
-        '<div class="day-score-label">' + ATH_DAYS_LABELS[i].substring(0,3).toUpperCase() + '</div>' +
-        '<input class="sleep-time-input" type="time" id="coucher_' + d + '" onchange="feedbackSleepChange(\'' + d + '\',\'coucher\',this.value)">' +
-        '<input class="sleep-time-input" type="time" id="lever_' + d + '" onchange="feedbackSleepChange(\'' + d + '\',\'lever\',this.value)">' +
-        '</div>';
-    });
-    sleepRows.innerHTML = sleepHtml;
-  }
+  renderDailyRpe();
+  renderDailyForm();
+  renderSleepRows();
 }
 
-function makeScoreDots(day, type) {
-  var val = _feedbackData.days[day] ? _feedbackData.days[day][type] : 3;
+// ── RPE par jour ─────────────────────────────────────────
+function renderDailyRpe() {
+  var el = document.getElementById('dailyRpeRows');
+  if (!el) return;
+  var html = '';
+  ATH_DAYS.forEach(function(d, i) {
+    var day = _feedbackData.days[d];
+    var rpeVal = day.rpe;
+    var isRepos = day.repos;
+    var isCompet = day.compet;
+    var rpeLeft = rpeVal !== null ? ((rpeVal - 1) / 9 * 100) + '%' : '44.4%';
+    var rpeColor = rpeVal !== null ? getRpeColor(rpeVal) : 'var(--muted)';
+
+    html += '<div class="fb-day-row" id="rpe-row-' + d + '" style="' + (isRepos ? 'opacity:.45;' : '') + '">' +
+      '<div class="fb-day-label">' +
+        '<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;color:var(--text);">' + ATH_DAYS_LABELS[i].substring(0,3).toUpperCase() + '</div>' +
+        '<div style="display:flex;gap:4px;margin-top:4px;">' +
+          '<button class="fb-tag-btn ' + (isRepos ? 'active-repos' : '') + '" onclick="toggleDayOption(\'' + d + '\',\'repos\')" title="Repos / Absent">😴</button>' +
+          '<button class="fb-tag-btn ' + (isCompet ? 'active-compet' : '') + '" onclick="toggleDayOption(\'' + d + '\',\'compet\')" title="Compétition">🏆</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="fb-day-rpe ' + (isRepos ? 'disabled' : '') + '">' +
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+          '<div class="rpe-gradient-bar" id="rpeBar_' + d + '" ' + (isRepos ? '' : 'onclick="rpeBarClick(event,\'' + d + '\')"') + ' style="' + (isRepos ? 'cursor:default;opacity:.4;' : 'cursor:pointer;') + '">' +
+            '<div class="rpe-handle" id="rpeHandle_' + d + '" style="left:' + rpeLeft + ';background:var(--bg);border-color:' + rpeColor + ';' + (rpeVal === null ? 'display:none;' : '') + '"></div>' +
+          '</div>' +
+          '<div id="rpeVal_' + d + '" style="font-family:\'Bebas Neue\',sans-serif;font-size:26px;min-width:24px;color:' + rpeColor + ';line-height:1;">' + (rpeVal !== null ? rpeVal : '—') + '</div>' +
+        '</div>' +
+        (isCompet ? '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:var(--accent);margin-top:3px;letter-spacing:1px;">🏆 COMPÉTITION</div>' : '') +
+      '</div>' +
+    '</div>';
+  });
+  el.innerHTML = html;
+  updateRpeAvg();
+}
+
+function getRpeColor(val) {
+  if (val <= 3) return '#22c55e';
+  if (val <= 5) return '#86efac';
+  if (val <= 7) return '#f59e0b';
+  if (val <= 8) return '#ef4444';
+  return '#991b1b';
+}
+
+function rpeBarClick(e, day) {
+  var bar = document.getElementById('rpeBar_' + day);
+  if (!bar) return;
+  var rect = bar.getBoundingClientRect();
+  var pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  var val = Math.max(1, Math.min(10, Math.round(pct * 9) + 1));
+  _feedbackData.days[day].rpe = val;
+  // Update handle
+  var handle = document.getElementById('rpeHandle_' + day);
+  var valEl  = document.getElementById('rpeVal_' + day);
+  var color  = getRpeColor(val);
+  if (handle) { handle.style.left = ((val-1)/9*100)+'%'; handle.style.borderColor = color; handle.style.display = ''; }
+  if (valEl)  { valEl.textContent = val; valEl.style.color = color; }
+  updateRpeAvg();
+}
+
+function toggleDayOption(day, opt) {
+  _feedbackData.days[day][opt] = !_feedbackData.days[day][opt];
+  if (opt === 'repos' && _feedbackData.days[day].repos) {
+    // Si repos activé, réinitialiser RPE du jour
+    _feedbackData.days[day].rpe = null;
+  }
+  renderDailyRpe();
+  renderDailyForm();
+  renderSleepRows();
+}
+
+function updateRpeAvg() {
+  var vals = ATH_DAYS.map(function(d) { return _feedbackData.days[d].rpe; })
+    .filter(function(v) { return v !== null; });
+  var avgEl  = document.getElementById('rpeAvgNum');
+  var descEl = document.getElementById('rpeAvgDesc');
+  if (!vals.length) {
+    if (avgEl)  avgEl.textContent = '—';
+    if (descEl) descEl.textContent = '';
+    return;
+  }
+  var avg = (vals.reduce(function(a,b){ return a+b; }, 0) / vals.length);
+  var rounded = Math.round(avg * 10) / 10;
+  if (avgEl)  { avgEl.textContent = rounded.toFixed(1); avgEl.style.color = getRpeColor(Math.round(avg)); }
+  if (descEl) descEl.textContent = RPE_LABELS[Math.round(avg)] || '';
+}
+
+// ── Forme (smileys) par jour ──────────────────────────────
+var PHYS_SMILEYS   = ['', '😩', '😞', '😐', '😊', '🔥'];
+var MENTAL_SMILEYS = ['', '😰', '😕', '😐', '😌', '🧠'];
+
+function renderDailyForm() {
+  var el = document.getElementById('dailyFormRows');
+  if (!el) return;
+  var html = '<div style="display:grid;grid-template-columns:52px 1fr 1fr;gap:6px;margin-bottom:8px;padding-bottom:4px;">' +
+    '<div></div>' +
+    '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:#3b82f6;letter-spacing:1px;text-align:center;">PHYSIQUE</div>' +
+    '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:#8b5cf6;letter-spacing:1px;text-align:center;">MENTAL</div>' +
+    '</div>';
+
+  ATH_DAYS.forEach(function(d, i) {
+    var day = _feedbackData.days[d];
+    var isRepos = day.repos;
+    var physVal   = day.phys;
+    var mentalVal = day.mental;
+
+    html += '<div style="display:grid;grid-template-columns:52px 1fr 1fr;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);' + (isRepos ? 'opacity:.4;pointer-events:none;' : '') + '">' +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);letter-spacing:.5px;">' + ATH_DAYS_LABELS[i].substring(0,3).toUpperCase() + '</div>' +
+      '<div style="display:flex;gap:3px;justify-content:center;" id="form-phys-' + d + '">' + makeSmileyBtns(d, 'phys', PHYS_SMILEYS, physVal) + '</div>' +
+      '<div style="display:flex;gap:3px;justify-content:center;" id="form-mental-' + d + '">' + makeSmileyBtns(d, 'mental', MENTAL_SMILEYS, mentalVal) + '</div>' +
+    '</div>';
+  });
+  el.innerHTML = html;
+}
+
+function makeSmileyBtns(day, type, smileys, currentVal) {
   var html = '';
   for (var n = 1; n <= 5; n++) {
-    var cls = 'score-dot' + (n <= val ? ' active-' + type : '');
-    html += '<button class="' + cls + '" onclick="setDayScore(\'' + day + '\',\'' + type + '\'," + n + ")" data-day="' + day + '" data-type="' + type + '" data-val="' + n + '">' + n + '</button>';
+    var isActive = (n === currentVal);
+    html += '<button onclick="setDayScore(\'' + day + '\',\'' + type + '\',' + n + ')" ' +
+      'style="background:' + (isActive ? (type==='phys' ? '#1d4ed8' : '#5b21b6') : 'var(--surface2)') + ';' +
+      'border:1px solid ' + (isActive ? (type==='phys' ? '#3b82f6' : '#8b5cf6') : 'var(--border)') + ';' +
+      'border-radius:6px;padding:4px;font-size:16px;cursor:pointer;transition:all .12s;width:34px;height:34px;' +
+      'display:flex;align-items:center;justify-content:center;">' +
+      smileys[n] +
+      '</button>';
   }
   return html;
 }
 
 function setDayScore(day, type, val) {
-  if (!_feedbackData.days[day]) _feedbackData.days[day] = {phys:3,mental:3,coucher:'',lever:''};
+  if (!_feedbackData.days[day]) return;
   _feedbackData.days[day][type] = val;
-  var row = document.getElementById(type + '_' + day);
+  var rowId = type === 'phys' ? 'form-phys-' + day : 'form-mental-' + day;
+  var smileys = type === 'phys' ? PHYS_SMILEYS : MENTAL_SMILEYS;
+  var row = document.getElementById(rowId);
   if (!row) return;
-  row.querySelectorAll('.score-dot').forEach(function(btn) {
-    var bval = parseInt(btn.dataset.val);
-    btn.className = 'score-dot' + (bval <= val ? ' active-' + type : '');
+  row.innerHTML = makeSmileyBtns(day, type, smileys, val);
+}
+
+// ── Sommeil par jour ──────────────────────────────────────
+function renderSleepRows() {
+  var el = document.getElementById('sleepRows');
+  if (!el) return;
+  var html = '<div style="display:grid;grid-template-columns:52px 1fr 1fr 48px;gap:6px;margin-bottom:6px;">' +
+    '<div></div>' +
+    '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:var(--muted);letter-spacing:1px;text-align:center;">COUCHER</div>' +
+    '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:var(--muted);letter-spacing:1px;text-align:center;">LEVER</div>' +
+    '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:var(--accent);letter-spacing:1px;text-align:center;">DURÉE</div>' +
+    '</div>';
+
+  ATH_DAYS.forEach(function(d, i) {
+    var day = _feedbackData.days[d];
+    var isRepos = day.repos;
+    var dur = calcSleepDuration(day.coucher, day.lever);
+    html += '<div style="display:grid;grid-template-columns:52px 1fr 1fr 48px;gap:6px;align-items:center;padding:4px 0;' + (isRepos ? 'opacity:.4;pointer-events:none;' : '') + '">' +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);">' + ATH_DAYS_LABELS[i].substring(0,3).toUpperCase() + '</div>' +
+      '<input class="sleep-time-input" type="time" id="coucher_' + d + '" value="' + (day.coucher || '') + '" onchange="feedbackSleepChange(\'' + d + '\',\'coucher\',this.value)">' +
+      '<input class="sleep-time-input" type="time" id="lever_' + d + '" value="' + (day.lever || '') + '" onchange="feedbackSleepChange(\'' + d + '\',\'lever\',this.value)">' +
+      '<div id="sleep-dur-' + d + '" style="font-family:\'DM Mono\',monospace;font-size:8px;color:' + (dur ? 'var(--accent)' : 'var(--muted)') + ';text-align:center;">' + (dur || '—') + '</div>' +
+    '</div>';
   });
+  el.innerHTML = html;
+  updateSleepAvg();
+}
+
+function calcSleepDuration(coucher, lever) {
+  if (!coucher || !lever) return null;
+  var c = coucher.split(':').map(Number);
+  var l = lever.split(':').map(Number);
+  var cMin = c[0]*60 + c[1];
+  var lMin = l[0]*60 + l[1];
+  if (lMin <= cMin) lMin += 24*60; // nuit qui passe minuit
+  var dur = lMin - cMin;
+  var h = Math.floor(dur/60);
+  var m = dur % 60;
+  return h + 'h' + (m > 0 ? String(m).padStart(2,'0') : '');
 }
 
 function feedbackSleepChange(day, field, val) {
-  if (!_feedbackData.days[day]) _feedbackData.days[day] = {phys:3,mental:3,coucher:'',lever:''};
+  if (!_feedbackData.days[day]) return;
   _feedbackData.days[day][field] = val;
+  // Update duration display
+  var d = _feedbackData.days[day];
+  var dur = calcSleepDuration(d.coucher, d.lever);
+  var durEl = document.getElementById('sleep-dur-' + day);
+  if (durEl) { durEl.textContent = dur || '—'; durEl.style.color = dur ? 'var(--accent)' : 'var(--muted)'; }
+  updateSleepAvg();
 }
 
-function rpeTrackClick(e) {
-  var track = document.getElementById('rpeTrack');
-  if (!track) return;
-  var rect = track.getBoundingClientRect();
-  var pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-  var val  = Math.max(1, Math.min(10, Math.round(pct * 9) + 1));
-  updateRpeDisplay(val);
+function updateSleepAvg() {
+  var durations = ATH_DAYS.map(function(d) {
+    var day = _feedbackData.days[d];
+    if (day.repos) return null;
+    return calcSleepDuration(day.coucher, day.lever);
+  }).filter(function(v) { return v !== null; });
+
+  var avgEl = document.getElementById('sleepAvg');
+  if (!durations.length) { if (avgEl) avgEl.textContent = '—'; return; }
+
+  // Convert to minutes, avg, convert back
+  var totalMin = durations.reduce(function(acc, dur) {
+    var parts = dur.replace('h', ':').split(':');
+    return acc + parseInt(parts[0])*60 + (parseInt(parts[1])||0);
+  }, 0) / durations.length;
+  var h = Math.floor(totalMin/60);
+  var m = Math.round(totalMin%60);
+  if (avgEl) avgEl.textContent = h + 'h' + (m > 0 ? String(m).padStart(2,'0') : '');
 }
 
-function updateRpeDisplay(val) {
-  _feedbackData.rpe = val;
-  var thumb   = document.getElementById('rpeThumb');
-  var display = document.getElementById('rpeDisplay');
-  var desc    = document.getElementById('rpeDesc');
-  if (thumb)   thumb.style.left = ((val - 1) / 9 * 100) + '%';
-  if (display) display.textContent = val;
-  if (desc)    desc.textContent = RPE_LABELS[val] || '';
-}
+function rpeTrackClick(e) { /* kept for compat - not used */ }
+
+function updateRpeDisplay(val) { /* kept for compat */ }
 
 function loadCurrentWeekFeedback() {
   if (!_sb || !_athProfile) return;
@@ -10793,13 +10975,18 @@ function submitFeedback() {
   var btn = document.getElementById('athSubmitBtn');
   var msg = document.getElementById('athSubmitMsg');
   if (btn) { btn.textContent = 'Envoi...'; btn.disabled = true; }
+
+  // Calculer RPE moyen
+  var rpeVals = ATH_DAYS.map(function(d) { return _feedbackData.days[d].rpe; }).filter(function(v) { return v !== null; });
+  var rpeAvg  = rpeVals.length ? Math.round(rpeVals.reduce(function(a,b){return a+b;},0) / rpeVals.length * 10) / 10 : null;
+
   var data = {
     athlete_uid:  _athProfile.user_id,
     athlete_name: _athProfile.name,
     coach_uid:    _athCoachUid,
     week_id:      getISOWeekId(),
     week_label:   getISOWeekLabel(),
-    rpe:          _feedbackData.rpe,
+    rpe:          rpeAvg,
     days:         _feedbackData.days,
     objective:    (document.getElementById('athObjective').value || ''),
     comment:      (document.getElementById('athComment').value   || ''),
@@ -10816,6 +11003,9 @@ function submitFeedback() {
     notifyCoachFeedback(data);
   });
 }
+
+// Kept for compat
+function makeScoreDots() {}
 
 function requestPushPermission() {
   if (!('Notification' in window)) return;
@@ -11092,51 +11282,43 @@ setTimeout(() => {
   ══════════════════════════════════════════ -->
   <div id="ath-page-feedback" class="ath-page active">
 
-    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:20px;">
-      <div>
-        <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);">// FEEDBACK</div>
-        <div id="athFeedbackTitle" style="font-family:'Bebas Neue',sans-serif;font-size:28px;line-height:1.1;margin-top:2px;">SEMAINE —</div>
-      </div>
+    <div style="margin-bottom:18px;">
+      <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);">// FEEDBACK</div>
+      <div id="athFeedbackTitle" style="font-family:'Bebas Neue',sans-serif;font-size:28px;line-height:1.1;margin-top:2px;">SEMAINE —</div>
     </div>
 
-    <!-- RPE -->
+    <!-- ── RPE PAR JOUR ── -->
     <div class="ath-card">
-      <div class="ath-card-title">Charge perçue de la semaine (RPE)</div>
-      <div class="rpe-wrap">
-        <div class="rpe-num" id="rpeDisplay">5</div>
-        <div class="rpe-slider-wrap">
-          <div class="rpe-gradient-bar" id="rpeTrack" onclick="rpeTrackClick(event)">
-            <div class="rpe-handle" id="rpeThumb" style="left:44.4%"></div>
-          </div>
-          <div class="rpe-labels"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span></div>
+      <div class="ath-card-title">Charge perçue (RPE) — par jour</div>
+      <div id="dailyRpeRows"></div>
+      <!-- Moyenne semaine -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;">MOYENNE SEMAINE</div>
+        <div style="display:flex;align-items:baseline;gap:6px;">
+          <span id="rpeAvgNum" style="font-family:'Bebas Neue',sans-serif;font-size:32px;color:var(--accent);">—</span>
+          <span id="rpeAvgDesc" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);"></span>
         </div>
       </div>
-      <div class="rpe-desc-text" id="rpeDesc">Modéré</div>
     </div>
 
-    <!-- Forme par jour -->
+    <!-- ── FORME PAR JOUR ── -->
     <div class="ath-card">
-      <div class="ath-card-title">Forme par jour</div>
-      <div class="day-score-grid" style="margin-bottom:6px;">
-        <div></div>
-        <div style="font-family:'DM Mono',monospace;font-size:7px;color:#3b82f6;letter-spacing:1px;text-align:center;padding-bottom:4px;">PHYSIQUE</div>
-        <div style="font-family:'DM Mono',monospace;font-size:7px;color:#8b5cf6;letter-spacing:1px;text-align:center;padding-bottom:4px;">MENTAL</div>
-      </div>
+      <div class="ath-card-title">Forme physique &amp; mentale — par jour</div>
       <div id="dailyFormRows"></div>
     </div>
 
-    <!-- Sommeil -->
+    <!-- ── SOMMEIL PAR JOUR ── -->
     <div class="ath-card">
-      <div class="ath-card-title">Sommeil</div>
-      <div class="sleep-grid" style="margin-bottom:6px;">
-        <div></div>
-        <div style="font-family:'DM Mono',monospace;font-size:7px;color:var(--muted);letter-spacing:1px;text-align:center;">COUCHER</div>
-        <div style="font-family:'DM Mono',monospace;font-size:7px;color:var(--muted);letter-spacing:1px;text-align:center;">LEVER</div>
-      </div>
+      <div class="ath-card-title">Sommeil — par jour</div>
       <div id="sleepRows"></div>
+      <!-- Total sommeil -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;">MOYENNE NUIT</div>
+        <div id="sleepAvg" style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--accent);">—</div>
+      </div>
     </div>
 
-    <!-- Objectif + Commentaire -->
+    <!-- ── OBJECTIF & COMMENTAIRE ── -->
     <div class="ath-card">
       <div class="ath-card-title">Objectif semaine prochaine</div>
       <textarea class="ath-textarea" id="athObjective" placeholder="Ex : Améliorer mon départ, être plus régulier sur les 60m..."></textarea>
