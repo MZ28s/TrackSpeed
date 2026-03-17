@@ -11025,7 +11025,6 @@ function submitFeedback() {
   var data = {
     athlete_uid:  _athProfile.user_id,
     athlete_name: _athProfile.name,
-    coach_uid:    _athCoachUid,
     week_id:      getISOWeekId(),
     week_label:   getISOWeekLabel(),
     rpe:          rpeAvg,
@@ -11034,6 +11033,9 @@ function submitFeedback() {
     comment:      (document.getElementById('athComment').value   || ''),
     created_at:   new Date().toISOString()
   };
+  // N'inclure coach_uid que s'il existe (évite la contrainte NOT NULL)
+  if (_athCoachUid) data.coach_uid = _athCoachUid;
+
   _sb.from('athlete_feedback').insert(data).then(function(r) {
     if (r.error) {
       if (msg) { msg.textContent = 'Erreur : ' + r.error.message; msg.style.color = '#ef4444'; }
