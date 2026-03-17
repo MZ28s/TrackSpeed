@@ -304,12 +304,7 @@ body.light-theme canvas { filter:invert(0); }
 <!-- ══ TOGGLE THÈME + COMPTE ══ -->
 <div style="position:fixed;top:0;right:0;z-index:1001;display:flex;align-items:center;gap:6px;padding:8px 10px;">
   <span id="sbSyncBadge" style="font-family:'DM Mono',monospace;font-size:7px;color:#6b6b7a;"></span>
-  <button onclick="showAthleteLoginScreen()" title="Espace athlète"
-    style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;
-           background:rgba(10,10,11,0.85);border:1px solid rgba(245,200,0,0.4);border-radius:20px;
-           padding:5px 10px;color:#F5C800;cursor:pointer;backdrop-filter:blur(8px);">
-    🏃 Athlète
-  </button>
+
   <button id="sbUserBtn" onclick="sbTogglePanel()" title="Mon compte"
     style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;
            background:rgba(10,10,11,0.85);border:1px solid #2a2a30;border-radius:20px;
@@ -1438,13 +1433,38 @@ function loginHide() { var e = document.getElementById('loginScreen'); if (e) e.
 
 function loginSwitchTab(tab) {
   _loginTab = tab;
-  var isL = tab === 'login';
-  var tl = document.getElementById('loginTab'), ts = document.getElementById('signupTab');
-  var btn = document.getElementById('loginBtn'), fw = document.getElementById('loginForgotWrap');
+  var isL  = tab === 'login';
+  var isS  = tab === 'signup';
+  var isA  = tab === 'athlete';
+
+  var tl  = document.getElementById('loginTab');
+  var ts  = document.getElementById('signupTab');
+  var ta  = document.getElementById('athleteTab');
+  var btn = document.getElementById('loginBtn');
+  var fw  = document.getElementById('loginForgotWrap');
+  var coachPanel   = document.getElementById('loginCoachPanel');
+  var athletePanel = document.getElementById('loginAthletePanel');
+  var sub = document.getElementById('loginScreenSub');
+
+  // Onglets
   if (tl) { tl.style.borderBottomColor = isL ? '#F5C800' : 'transparent'; tl.style.color = isL ? '#F5C800' : '#6b6b7a'; }
-  if (ts) { ts.style.borderBottomColor = !isL ? '#F5C800' : 'transparent'; ts.style.color = !isL ? '#F5C800' : '#6b6b7a'; }
-  if (btn) btn.textContent = isL ? 'SE CONNECTER' : 'CRÉER MON COMPTE';
+  if (ts) { ts.style.borderBottomColor = isS ? '#F5C800' : 'transparent'; ts.style.color = isS ? '#F5C800' : '#6b6b7a'; }
+  if (ta) { ta.style.borderBottomColor = isA ? '#F5C800' : 'transparent'; ta.style.color = isA ? '#F5C800' : '#6b6b7a'; }
+
+  // Panels
+  if (coachPanel)   coachPanel.style.display   = isA ? 'none' : 'block';
+  if (athletePanel) athletePanel.style.display  = isA ? 'block' : 'none';
+
+  // Sous-titre
+  if (sub) sub.style.display = isA ? 'none' : 'block';
+
+  // Bouton coach
+  if (btn) btn.textContent = isS ? 'CRÉER MON COMPTE' : 'SE CONNECTER';
   if (fw) fw.style.display = isL ? 'block' : 'none';
+
+  // Focus premier champ code si onglet athlète
+  if (isA) setTimeout(function() { var cd0 = document.getElementById('cd0'); if (cd0) cd0.focus(); }, 100);
+
   loginClearMsg();
 }
 
@@ -1512,7 +1532,7 @@ function submitPasswordReset() {
   });
 }
 
-function loginSkip() { _sbSkipped = true; loginHide(); sbUpdateNavBar(); }
+function loginSkip() { /* disabled — account required */ }
 
 function loginShowProfile() {
   if (_sbUser) {
@@ -9884,12 +9904,12 @@ function getISOWeekId() {
 
 // ── Bouton "Mode Athlète" dans le header coach ───────────
 function showAthleteLoginScreen() {
-  document.getElementById('athleteLogin').style.display = 'flex';
-  document.getElementById('cd0').focus();
+  loginShow();
+  loginSwitchTab('athlete');
 }
 
 function athleteLoginBack() {
-  document.getElementById('athleteLogin').style.display = 'none';
+  loginSwitchTab('login');
 }
 
 // ── Saisie code 6 chiffres ───────────────────────────────
@@ -9951,7 +9971,7 @@ function athleteCodeSubmit() {
 function enterAthleteMode(profile) {
   _athMode = true;
   _athProfile = profile;
-  document.getElementById('athleteLogin').style.display = 'none';
+  loginHide();
   document.getElementById('athleteApp').style.display = 'flex';
   document.getElementById('athHeaderName').textContent = profile.name.toUpperCase();
   document.getElementById('athHeaderWeek').textContent = getISOWeekLabel();
@@ -10457,11 +10477,18 @@ setTimeout(() => {
     <div style="font-family:'DM Mono',monospace;font-size:9px;color:#6b6b7a;letter-spacing:3px;margin-top:4px;">OUTIL DE COACHING SPRINT</div>
   </div>
   <div style="background:#111114;border:1px solid #1e1e24;border-radius:12px;width:100%;max-width:380px;overflow:hidden;">
+    <!-- Onglets -->
     <div style="display:flex;border-bottom:1px solid #1e1e24;">
-      <button id="loginTab" onclick="loginSwitchTab('login')" style="flex:1;padding:14px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;background:none;border:none;border-bottom:2px solid #F5C800;color:#F5C800;cursor:pointer;">CONNEXION</button>
-      <button id="signupTab" onclick="loginSwitchTab('signup')" style="flex:1;padding:14px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;background:none;border:none;border-bottom:2px solid transparent;color:#6b6b7a;cursor:pointer;">CRÉER UN COMPTE</button>
+      <button id="loginTab" onclick="loginSwitchTab('login')"
+        style="flex:1;padding:12px 4px;font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;background:none;border:none;border-bottom:2px solid #F5C800;color:#F5C800;cursor:pointer;">CONNEXION</button>
+      <button id="signupTab" onclick="loginSwitchTab('signup')"
+        style="flex:1;padding:12px 4px;font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;background:none;border:none;border-bottom:2px solid transparent;color:#6b6b7a;cursor:pointer;">INSCRIPTION</button>
+      <button id="athleteTab" onclick="loginSwitchTab('athlete')"
+        style="flex:1;padding:12px 4px;font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;background:none;border:none;border-bottom:2px solid transparent;color:#6b6b7a;cursor:pointer;">🏃 ATHLÈTE</button>
     </div>
-    <div style="padding:28px 24px;">
+
+    <!-- Panel Coach (connexion / inscription) -->
+    <div id="loginCoachPanel" style="padding:28px 24px;">
       <div style="margin-bottom:16px;">
         <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:8px;">EMAIL</label>
         <input id="loginEmail" type="email" placeholder="ton@email.com" autocomplete="email"
@@ -10478,15 +10505,26 @@ setTimeout(() => {
       </div>
       <div id="loginMsg" style="font-family:'DM Mono',monospace;font-size:9px;line-height:1.5;margin-bottom:16px;display:none;padding:10px 12px;border-radius:6px;"></div>
       <button id="loginBtn" onclick="loginSubmit()" style="width:100%;background:#F5C800;border:none;border-radius:6px;padding:14px;font-family:'Bebas Neue',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:16px;">SE CONNECTER</button>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
-        <div style="flex:1;height:1px;background:#1e1e24;"></div>
-        <span style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;">ou</span>
-        <div style="flex:1;height:1px;background:#1e1e24;"></div>
+
+    </div>
+
+    <!-- Panel Athlète -->
+    <div id="loginAthletePanel" style="display:none;padding:28px 24px;">
+      <div style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;margin-bottom:6px;">CODE D'ACCÈS FOURNI PAR TON COACH</div>
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:#f0f0f0;margin-bottom:24px;line-height:1.6;">Entre le code à 6 chiffres<br>que ton coach t'a communiqué.</div>
+      <div style="display:flex;gap:8px;justify-content:center;margin-bottom:20px;">
+        <input class="code-digit" id="cd0" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(0)" onkeydown="codeDigitKey(event,0)">
+        <input class="code-digit" id="cd1" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(1)" onkeydown="codeDigitKey(event,1)">
+        <input class="code-digit" id="cd2" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(2)" onkeydown="codeDigitKey(event,2)">
+        <input class="code-digit" id="cd3" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(3)" onkeydown="codeDigitKey(event,3)">
+        <input class="code-digit" id="cd4" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(4)" onkeydown="codeDigitKey(event,4)">
+        <input class="code-digit" id="cd5" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(5)" onkeydown="codeDigitKey(event,5)">
       </div>
-      <button onclick="loginSkip()" style="width:100%;background:none;border:1px solid #1e1e24;border-radius:6px;padding:12px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;color:#6b6b7a;cursor:pointer;">Continuer sans compte (données locales uniquement)</button>
+      <div id="codeMsg" style="font-family:'DM Mono',monospace;font-size:9px;color:#ef4444;min-height:16px;margin-bottom:16px;text-align:center;"></div>
+      <button onclick="athleteCodeSubmit()" style="width:100%;background:#F5C800;border:none;border-radius:6px;padding:14px;font-family:'Bebas Neue',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;">ACCÉDER</button>
     </div>
   </div>
-  <div style="margin-top:20px;font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;text-align:center;line-height:1.8;">Avec un compte, tes données sont sauvegardées en ligne<br>et accessibles depuis n'importe quel appareil.</div>
+  <div id="loginScreenSub" style="margin-top:20px;font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;text-align:center;line-height:1.8;">Avec un compte, tes données sont sauvegardées en ligne<br>et accessibles depuis n'importe quel appareil.</div>
 </div>
 
 
@@ -10542,25 +10580,7 @@ setTimeout(() => {
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════ -->
-<!-- ══  ÉCRAN CONNEXION ATHLÈTE              ══ -->
-<!-- ══════════════════════════════════════════ -->
-<div id="athleteLogin" style="display:none;">
-  <div style="font-family:'Bebas Neue',sans-serif;font-size:48px;color:var(--accent);letter-spacing:3px;margin-bottom:4px;">TRACKSPEED</div>
-  <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:32px;">ESPACE ATHLÈTE</div>
-  <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;">ENTRE TON CODE D\'ACCÈS</div>
-  <div class="code-input-row">
-    <input class="code-digit" id="cd0" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(0)" onkeydown="codeDigitKey(event,0)">
-    <input class="code-digit" id="cd1" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(1)" onkeydown="codeDigitKey(event,1)">
-    <input class="code-digit" id="cd2" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(2)" onkeydown="codeDigitKey(event,2)">
-    <input class="code-digit" id="cd3" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(3)" onkeydown="codeDigitKey(event,3)">
-    <input class="code-digit" id="cd4" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(4)" onkeydown="codeDigitKey(event,4)">
-    <input class="code-digit" id="cd5" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(5)" onkeydown="codeDigitKey(event,5)">
-  </div>
-  <div id="codeMsg" style="font-family:'DM Mono',monospace;font-size:9px;color:#ef4444;min-height:16px;margin-bottom:16px;text-align:center;"></div>
-  <button onclick="athleteCodeSubmit()" style="background:var(--accent);border:none;border-radius:6px;padding:14px 40px;font-family:'Bebas Neue',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;width:100%;max-width:280px;">ACCÉDER</button>
-  <button onclick="athleteLoginBack()" style="margin-top:16px;background:none;border:none;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);cursor:pointer;letter-spacing:1px;">← RETOUR COACH</button>
-</div>
+
 
 <!-- ══════════════════════════════════════════ -->
 <!-- ══  APP ATHLÈTE                          ══ -->
