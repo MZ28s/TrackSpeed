@@ -11097,8 +11097,9 @@ function submitFeedback() {
     comment:      (document.getElementById('athComment').value   || ''),
     created_at:   new Date().toISOString()
   };
-  // N'inclure coach_uid que s'il existe (évite la contrainte NOT NULL)
+  // Champs optionnels — inclure seulement si non null
   if (_athCoachUid) data.coach_uid = _athCoachUid;
+  if (_athProfile && _athProfile.id) data.profile_id = _athProfile.id;
 
   _sb.from('athlete_feedback').insert(data).then(function(r) {
     if (r.error) {
