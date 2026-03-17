@@ -1193,20 +1193,31 @@ var _sbSyncTimeout = null;
 var _sbSkipped = false;
 var _loginTab = 'login';
 
+// Routing selon le rôle après auth
+function routeAfterAuth(user) {
+  var role = user && user.user_metadata && user.user_metadata.role;
+  if (role === 'athlete') {
+    _sbUser = null; // L'athlète n'est pas le coach
+    loadAthleteProfile(user);
+  } else {
+    _sbUser = user;
+    sbPullAll().then(function() { loginHide(); sbUpdateNavBar(); });
+  }
+}
+
 function sbInit() {
   if (typeof window.supabase === 'undefined') { setTimeout(sbInit, 300); return; }
   _sb = window.supabase.createClient(_SB_URL, _SB_KEY);
   _sb.auth.getSession().then(function(res) {
     var s = res.data && res.data.session;
-    if (s) { _sbUser = s.user; sbPullAll().then(function() { loginHide(); sbUpdateNavBar(); }); }
+    if (s) { routeAfterAuth(s.user); }
     else { loginShow(); }
   }).catch(function() { loginShow(); });
   _sb.auth.onAuthStateChange(function(event, session) {
-    _sbUser = session ? session.user : null;
-    if (event === 'SIGNED_IN')       { sbPullAll().then(function() { loginHide(); sbUpdateNavBar(); }); }
-    if (event === 'SIGNED_OUT')       { sbUpdateNavBar(); }
-    if (event === 'PASSWORD_RECOVERY'){ showPasswordResetForm(); }
-    if (event === 'TOKEN_REFRESHED')  { sbScheduleSync(); }
+    if (event === 'SIGNED_OUT') { _sbUser = null; sbUpdateNavBar(); }
+    if (event === 'PASSWORD_RECOVERY') { showPasswordResetForm(); }
+    if (event === 'TOKEN_REFRESHED' && _sbUser) { sbScheduleSync(); }
+    // SIGNED_IN géré par loginSubmit directement pour éviter double appel
   });
 }
 
@@ -1555,14 +1566,7 @@ function loginSubmit() {
       .then(function(r) {
         if (btn) { btn.disabled = false; btn.textContent = 'SE CONNECTER'; }
         if (r.error) { loginSetMsg(r.error.message, true); return; }
-        var user = r.data.user;
-        var role = user.user_metadata && user.user_metadata.role;
-        if (role === 'athlete') {
-          // Athlète qui se connecte → mode athlète
-          _athUser = user;
-          loadAthleteProfile(user);
-        }
-        // Si coach ou pas de rôle → flux normal géré par onAuthStateChange
+        routeAfterAuth(r.data.user);
       });
   }
 }
@@ -9946,6 +9950,114 @@ function generateAthId() {
   return id;
 }
 
+// ── Charger profil athlète depuis Supabase ───────────────
+function loadAthleteProfile(user) {
+  if (!_sb || !user) return;
+  _sb.from('athlete_profiles').select('*').eq('user_id', user.id).maybeSingle()
+    .then(function(r) {
+      if (r.error) { console.error('loadAthleteProfile:', r.error); return; }
+      if (!r.data) {
+        // Profil absent — le créer avec les métadonnées d'inscription
+        var meta   = user.user_metadata || {};
+        var athId  = meta.ath_id || generateAthId();
+        var newProfile = {
+          user_id:    user.id,
+          ath_id:     athId,
+          name:       meta.name   || user.email,
+          first_name: meta.firstName || '',
+          last_name:  meta.lastName  || '',
+          dob:        meta.dob       || null,
+          genre:      meta.genre     || '',
+          categorie:  meta.categorie || '',
+          email:      user.email,
+          coach_uid:  null
+        };
+        _sb.from('athlete_profiles').insert(newProfile)
+          .then(function(ins) {
+            if (ins.error) { console.error('insert athlete_profile:', ins.error); return; }
+            enterAthleteMode(newProfile);
+          });
+        return;
+      }
+      enterAthleteMode(r.data);
+    });
+}
+
+// ── Entrer en mode athlète ───────────────────────────────
+function enterAthleteMode(profile) {
+  _athMode     = true;
+  _athProfile  = profile;
+  _athCoachUid = profile.coach_uid || null;
+  loginHide();
+  document.getElementById('athleteApp').style.display = 'flex';
+  var nameEl = document.getElementById('athHeaderName');
+  var weekEl = document.getElementById('athHeaderWeek');
+  var titleEl = document.getElementById('athFeedbackTitle');
+  if (nameEl)  nameEl.textContent  = (profile.name || 'Athlète').toUpperCase();
+  if (weekEl)  weekEl.textContent  = getISOWeekLabel();
+  if (titleEl) titleEl.textContent = 'SEMAINE ' + getISOWeekLabel();
+  requestPushPermission();
+  loadCurrentWeekFeedback();
+  renderAthCalc();
+  renderAthForce();
+  renderAthFeedbackHistory();
+  renderAthProfileInfo();
+  initFeedbackForm();
+}
+
+function athleteLogout() {
+  if (!confirm('Se déconnecter ?')) return;
+  _athMode = false; _athProfile = null; _athCoachUid = null; _athUser = null;
+  if (_sb) _sb.auth.signOut();
+  document.getElementById('athleteApp').style.display = 'none';
+  loginShow(); loginSwitchTab('login');
+}
+
+// ── Profil info athlète — ID + statut coach ───────────────
+function renderAthProfileInfo() {
+  var el = document.getElementById('athProfileInfo');
+  if (!el || !_athProfile) return;
+  var athId    = _athProfile.ath_id    || '—';
+  var name     = _athProfile.name      || '—';
+  var dob      = _athProfile.dob       ? new Date(_athProfile.dob).toLocaleDateString('fr-FR') : '—';
+  var genre    = _athProfile.genre     || '—';
+  var categorie = _athProfile.categorie || '—';
+  var linked   = !!_athProfile.coach_uid;
+  el.innerHTML =
+    '<div class="card" style="margin-bottom:12px;">' +
+      '<div class="card-title">// MON IDENTIFIANT ATHLÈTE</div>' +
+      '<div style="font-family:Bebas Neue,sans-serif;font-size:48px;color:var(--accent);letter-spacing:6px;margin:16px 0 8px;text-align:center;">' + athId + '</div>' +
+      '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);line-height:1.7;text-align:center;">Communique cet identifiant à ton coach<br>pour qu&#39;il te lie à son groupe.</div>' +
+    '</div>' +
+    '<div class="card" style="margin-bottom:12px;">' +
+      '<div class="card-title">// MES INFORMATIONS</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;">' +
+        '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:10px 12px;">' +
+          '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);margin-bottom:4px;">NOM</div>' +
+          '<div style="font-family:Bebas Neue,sans-serif;font-size:16px;">' + name.toUpperCase() + '</div>' +
+        '</div>' +
+        '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:10px 12px;">' +
+          '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);margin-bottom:4px;">NAISSANCE</div>' +
+          '<div style="font-family:Bebas Neue,sans-serif;font-size:16px;">' + dob + '</div>' +
+        '</div>' +
+        '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:10px 12px;">' +
+          '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);margin-bottom:4px;">GENRE</div>' +
+          '<div style="font-family:Bebas Neue,sans-serif;font-size:16px;">' + (genre === 'F' ? 'Femme' : genre === 'M' ? 'Homme' : genre) + '</div>' +
+        '</div>' +
+        '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:10px 12px;">' +
+          '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);margin-bottom:4px;">CATÉGORIE</div>' +
+          '<div style="font-family:Bebas Neue,sans-serif;font-size:16px;">' + categorie + '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="card">' +
+      '<div class="card-title">// STATUT COACH</div>' +
+      '<div style="font-family:DM Mono,monospace;font-size:10px;color:' + (linked ? '#22c55e' : 'var(--muted)') + ';margin-top:10px;padding:12px;background:var(--surface2);border-radius:4px;text-align:center;">' +
+        (linked ? '✓ Lié à un coach' : '⏳ En attente — donne ton ID à ton coach') +
+      '</div>' +
+    '</div>';
+}
+
 // ── loginSwitchTab gère le 3ème panel ───────────────────
 function showAthleteLoginScreen() { loginShow(); loginSwitchTab('athlete'); }
 function athleteLoginBack()       { loginSwitchTab('login'); }
@@ -10249,15 +10361,7 @@ function renderCoachFeedbacks() {
 function athleteCodeSubmit()   {}
 function generateAthleteCode() {}
 function tryAthleteAutoLogin() {
-  if (!_sb) return;
-  _sb.auth.getSession().then(function(res) {
-    var session = res.data && res.data.session;
-    if (!session) return;
-    var user = session.user;
-    if (!user.user_metadata || user.user_metadata.role !== 'athlete') return;
-    _athUser = user;
-    loadAthleteProfile(user);
-  });
+  // Géré par sbInit -> routeAfterAuth maintenant
 }
 
 // ── INIT ──
