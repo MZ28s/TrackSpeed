@@ -302,8 +302,21 @@ body.light-theme canvas { filter:invert(0); }
   <div id="presentationContent"></div>
 </div>
 
-<!-- ══ TOGGLE THÈME ══ -->
-<button id="themeToggle" onclick="toggleTheme()" title="Thème clair / sombre">☀️</button>
+<!-- ══ TOGGLE THÈME + COMPTE ══ -->
+<div style="position:fixed;top:0;right:0;z-index:1001;display:flex;align-items:center;gap:6px;padding:8px 10px;">
+  <span id="sbSyncBadge" style="font-family:'DM Mono',monospace;font-size:7px;color:#6b6b7a;"></span>
+  <button id="sbUserBtn" onclick="sbTogglePanel()" title="Mon compte"
+    style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;
+           background:rgba(10,10,11,0.85);border:1px solid #2a2a30;border-radius:20px;
+           padding:5px 11px;color:#6b6b7a;cursor:pointer;backdrop-filter:blur(8px);">
+    ☁ Compte
+  </button>
+  <button id="themeToggle" onclick="toggleTheme()" title="Thème clair / sombre"
+    style="background:rgba(10,10,11,0.85);border:1px solid #2a2a30;border-radius:20px;
+           padding:5px 9px;font-size:14px;cursor:pointer;backdrop-filter:blur(8px);">
+    ☀️
+  </button>
+</div>
 
 <!-- ══ PAGE ACCUEIL ══ -->
 <div class="page active" id="page-home">
@@ -1217,6 +1230,8 @@ function sbPullAll() {
         else document.body.classList.remove('light-theme');
       }
       renderProfiles(); renderHome();
+      loginHide();
+      sbUpdateNavBar();
     });
 }
 
@@ -1240,17 +1255,80 @@ function sbSyncAll() {
 }
 
 function sbUpdateNavBar() {
-  var bar = document.getElementById('sbNavBar');
   var btn = document.getElementById('sbUserBtn');
-  if (!bar || !btn) return;
-  bar.style.display = 'flex';
+  if (!btn) return;
   if (_sbUser) {
-    btn.textContent = _sbUser.email.split('@')[0].substring(0, 12);
-    btn.style.color = '#F5C800'; btn.style.borderColor = '#F5C800';
+    var short = _sbUser.email.split('@')[0].substring(0, 14);
+    btn.innerHTML = '👤 ' + short;
+    btn.style.color = '#F5C800';
+    btn.style.borderColor = 'rgba(245,200,0,0.4)';
+    // Mettre à jour le panel
+    var emailEl = document.getElementById('sbPanelEmail');
+    if (emailEl) emailEl.textContent = _sbUser.email;
   } else {
-    btn.textContent = 'Se connecter';
-    btn.style.color = '#6b6b7a'; btn.style.borderColor = '#1e1e24';
+    btn.innerHTML = '☁ Compte';
+    btn.style.color = '#6b6b7a';
+    btn.style.borderColor = '#1e1e24';
   }
+}
+
+function sbTogglePanel() {
+  if (!_sbUser) { loginShow(); return; }
+  var panel = document.getElementById('sbPanel');
+  if (!panel) return;
+  var isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  // Fermer en cliquant ailleurs
+  if (!isOpen) {
+    setTimeout(function() {
+      document.addEventListener('click', function closePanelOnClick(e) {
+        if (!panel.contains(e.target) && e.target.id !== 'sbUserBtn') {
+          panel.style.display = 'none';
+          document.removeEventListener('click', closePanelOnClick);
+        }
+      });
+    }, 10);
+  }
+}
+
+function sbPanelMsg(text, isErr) {
+  var el = document.getElementById('sbPanelMsg');
+  if (!el) return;
+  el.textContent = text;
+  el.style.display = 'block';
+  el.style.background = isErr ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)';
+  el.style.color = isErr ? '#ef4444' : '#22c55e';
+  setTimeout(function() { if (el) el.style.display = 'none'; }, 3000);
+}
+
+function sbUpdateEmail() {
+  if (!_sb || !_sbUser) return;
+  var email = (document.getElementById('sbNewEmail').value || '').trim();
+  if (!email) { sbPanelMsg('Entre un email valide.', true); return; }
+  _sb.auth.updateUser({ email: email }).then(function(r) {
+    if (r.error) { sbPanelMsg(r.error.message, true); }
+    else { sbPanelMsg('Email modifié. Vérifie ta boîte mail.', false); document.getElementById('sbNewEmail').value = ''; }
+  });
+}
+
+function sbUpdatePassword() {
+  if (!_sb || !_sbUser) return;
+  var pass = document.getElementById('sbNewPassword').value || '';
+  if (pass.length < 6) { sbPanelMsg('Mot de passe trop court (6 min).', true); return; }
+  _sb.auth.updateUser({ password: pass }).then(function(r) {
+    if (r.error) { sbPanelMsg(r.error.message, true); }
+    else { sbPanelMsg('Mot de passe modifié !', false); document.getElementById('sbNewPassword').value = ''; }
+  });
+}
+
+function sbSignOut() {
+  if (!_sb) return;
+  _sb.auth.signOut().then(function() {
+    _sbUser = null;
+    document.getElementById('sbPanel').style.display = 'none';
+    sbUpdateNavBar();
+    loginShow();
+  });
 }
 
 function loginShow() { var e = document.getElementById('loginScreen'); if (e) e.style.display = 'flex'; }
@@ -9443,10 +9521,37 @@ setTimeout(() => {
   <div style="margin-top:20px;font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;text-align:center;line-height:1.8;">Avec un compte, tes données sont sauvegardées en ligne<br>et accessibles depuis n'importe quel appareil.</div>
 </div>
 
-<!-- Barre utilisateur -->
-<div id="sbNavBar" style="display:none;position:fixed;top:0;right:0;z-index:1000;padding:6px 12px;align-items:center;gap:8px;">
-  <span id="sbSyncBadge" style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;">☁</span>
-  <button id="sbUserBtn" onclick="loginShowProfile()" style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;background:none;border:1px solid #1e1e24;border-radius:20px;padding:4px 10px;color:#6b6b7a;cursor:pointer;">☁ Connexion</button>
+
+<!-- Panel profil utilisateur -->
+<div id="sbPanel" style="display:none;position:fixed;top:48px;right:12px;z-index:10000;background:#111114;border:1px solid #1e1e24;border-radius:10px;width:300px;box-shadow:0 8px 32px rgba(0,0,0,0.6);overflow:hidden;">
+  <div style="padding:16px 18px;border-bottom:1px solid #1e1e24;">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:#F5C800;letter-spacing:1px;">MON COMPTE</div>
+    <div id="sbPanelEmail" style="font-family:'DM Mono',monospace;font-size:9px;color:#6b6b7a;margin-top:2px;"></div>
+  </div>
+  <div style="padding:14px 18px;">
+    <!-- Modifier email -->
+    <div style="margin-bottom:12px;">
+      <label style="font-family:'DM Mono',monospace;font-size:7px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:5px;">NOUVEL EMAIL</label>
+      <div style="display:flex;gap:6px;">
+        <input id="sbNewEmail" type="email" placeholder="nouveau@email.com"
+          style="flex:1;background:#16161a;border:1px solid #1e1e24;border-radius:4px;padding:7px 10px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:10px;outline:none;">
+        <button onclick="sbUpdateEmail()" style="background:#F5C800;border:none;border-radius:4px;padding:7px 10px;font-family:'DM Mono',monospace;font-size:8px;color:#000;cursor:pointer;white-space:nowrap;">OK</button>
+      </div>
+    </div>
+    <!-- Modifier mot de passe -->
+    <div style="margin-bottom:14px;">
+      <label style="font-family:'DM Mono',monospace;font-size:7px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:5px;">NOUVEAU MOT DE PASSE</label>
+      <div style="display:flex;gap:6px;">
+        <input id="sbNewPassword" type="password" placeholder="••••••••" minlength="6"
+          style="flex:1;background:#16161a;border:1px solid #1e1e24;border-radius:4px;padding:7px 10px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:10px;outline:none;">
+        <button onclick="sbUpdatePassword()" style="background:#F5C800;border:none;border-radius:4px;padding:7px 10px;font-family:'DM Mono',monospace;font-size:8px;color:#000;cursor:pointer;white-space:nowrap;">OK</button>
+      </div>
+    </div>
+    <!-- Message retour -->
+    <div id="sbPanelMsg" style="font-family:'DM Mono',monospace;font-size:8px;display:none;padding:6px 8px;border-radius:4px;margin-bottom:10px;"></div>
+    <!-- Déconnexion -->
+    <button onclick="sbSignOut()" style="width:100%;background:none;border:1px solid rgba(239,68,68,0.3);border-radius:4px;padding:8px;font-family:'DM Mono',monospace;font-size:8px;color:#ef4444;cursor:pointer;letter-spacing:1px;">SE DÉCONNECTER</button>
+  </div>
 </div>
 </body>
 </html>
