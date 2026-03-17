@@ -1196,42 +1196,93 @@ function sbInit() {
   });
 }
 
+function sbSyncBadgeSet(text, color, autoReset) {
+  var b = document.getElementById('sbSyncBadge');
+  if (!b) return;
+  b.textContent = text; b.style.color = color;
+  if (autoReset) setTimeout(function() { if (b) { b.textContent = ''; } }, 3000);
+}
+
 function sbPush(table, data) {
-  if (!_sbUser || !_sb) return Promise.resolve();
-  return _sb.from(table).upsert({ user_id: _sbUser.id, data: data, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
-    .then(function(r) { if (r.error) console.warn('sbPush:', r.error.message); });
+  if (!_sbUser || !_sb) return Promise.resolve({ ok: false, reason: 'not_logged_in' });
+  return _sb.from(table).upsert(
+    { user_id: _sbUser.id, data: data, updated_at: new Date().toISOString() },
+    { onConflict: 'user_id' }
+  ).then(function(r) {
+    if (r.error) { console.error('sbPush [' + table + ']:', r.error.message, r.error); return { ok: false, reason: r.error.message }; }
+    return { ok: true };
+  }).catch(function(e) {
+    console.error('sbPush exception [' + table + ']:', e);
+    return { ok: false, reason: e.message };
+  });
 }
 
 function sbPull(table) {
   if (!_sbUser || !_sb) return Promise.resolve(null);
-  return _sb.from(table).select('data').eq('user_id', _sbUser.id).single()
-    .then(function(r) { return r.data ? r.data.data : null; });
+  return _sb.from(table).select('data').eq('user_id', _sbUser.id).maybeSingle()
+    .then(function(r) {
+      if (r.error) { console.error('sbPull [' + table + ']:', r.error.message, r.error); return null; }
+      return (r.data && r.data.data !== undefined) ? r.data.data : null;
+    }).catch(function(e) {
+      console.error('sbPull exception [' + table + ']:', e);
+      return null;
+    });
+}
+
+function sbApplySettings(s) {
+  if (!s) return;
+  if (s.theme) {
+    localStorage.setItem('sc_theme', s.theme);
+    lightTheme = s.theme === 'light';
+    document.body.classList.toggle('light-theme', lightTheme);
+    var btn = document.getElementById('themeToggle');
+    if (btn) btn.textContent = lightTheme ? '🌙' : '☀️';
+  }
+  if (s.activeStandards) {
+    activeStandards = s.activeStandards;
+    localStorage.setItem('sc_active_standards', JSON.stringify(activeStandards));
+  }
+  if (s.saison_genre) {
+    saison_genre = s.saison_genre;
+    saison_genre_override = true;
+    localStorage.setItem('sc_saison_genre', saison_genre);
+  }
 }
 
 function sbPullAll() {
-  return Promise.all([sbPull('profiles_data'), sbPull('history_data'), sbPull('planif_data'), sbPull('settings_data')])
-    .then(function(rs) {
-      if (rs[0] !== null) { localStorage.setItem('sc_profiles', JSON.stringify(rs[0])); profiles    = rs[0]; }
-      if (rs[1] !== null) { localStorage.setItem('sc_history',  JSON.stringify(rs[1])); historyData = rs[1]; }
-      if (rs[2] !== null) { localStorage.setItem('sc_planifs',  JSON.stringify(rs[2])); planifData  = rs[2]; }
-      if (rs[3] !== null && rs[3].theme) {
-        localStorage.setItem('sc_theme', rs[3].theme);
-        lightTheme = rs[3].theme === 'light';
-        if (lightTheme) document.body.classList.add('light-theme');
-        else document.body.classList.remove('light-theme');
-      }
-      if (rs[3] !== null && rs[3].activeStandards) {
-        activeStandards = rs[3].activeStandards;
-        localStorage.setItem('sc_active_standards', JSON.stringify(activeStandards));
-      }
-      if (rs[3] !== null && rs[3].saison_genre) {
-        saison_genre = rs[3].saison_genre;
-        localStorage.setItem('sc_saison_genre', saison_genre);
-      }
-      renderProfiles(); renderHome();
-      loginHide();
-      sbUpdateNavBar();
-    });
+  sbSyncBadgeSet('⟳ sync…', '#F5C800', false);
+  return Promise.all([
+    sbPull('profiles_data'),
+    sbPull('history_data'),
+    sbPull('planif_data'),
+    sbPull('settings_data')
+  ]).then(function(rs) {
+    var changed = false;
+    if (rs[0] !== null) {
+      profiles = rs[0];
+      localStorage.setItem('sc_profiles', JSON.stringify(profiles));
+      changed = true;
+    }
+    if (rs[1] !== null) {
+      historyData = rs[1];
+      localStorage.setItem('sc_history', JSON.stringify(historyData));
+      changed = true;
+    }
+    if (rs[2] !== null) {
+      planifData = rs[2];
+      localStorage.setItem('sc_planifs', JSON.stringify(planifData));
+      changed = true;
+    }
+    sbApplySettings(rs[3]);
+    renderProfiles(); renderHome();
+    loginHide(); sbUpdateNavBar();
+    sbSyncBadgeSet('✓ sync', '#22c55e', true);
+    return changed;
+  }).catch(function(e) {
+    console.error('sbPullAll failed:', e);
+    sbSyncBadgeSet('⚠ sync', '#ef4444', true);
+    loginHide(); sbUpdateNavBar();
+  });
 }
 
 function sbScheduleSync() {
@@ -1241,15 +1292,45 @@ function sbScheduleSync() {
 }
 
 function sbSyncAll() {
-  if (!_sbUser) return;
-  Promise.all([
+  if (!_sbUser) return Promise.resolve();
+  sbSyncBadgeSet('⟳ sync…', '#F5C800', false);
+  var settings = {
+    theme: lightTheme ? 'light' : 'dark',
+    activeStandards: activeStandards,
+    saison_genre: saison_genre
+  };
+  return Promise.all([
     sbPush('profiles_data', profiles),
     sbPush('history_data',  historyData),
     sbPush('planif_data',   planifData),
-    sbPush('settings_data', { theme: lightTheme ? 'light' : 'dark', activeStandards: activeStandards, saison_genre: saison_genre })
-  ]).then(function() {
-    var b = document.getElementById('sbSyncBadge');
-    if (b) { b.textContent = 'Sync OK'; b.style.color = '#22c55e'; setTimeout(function() { if (b) { b.textContent = 'cloud'; b.style.color = '#6b6b7a'; } }, 2000); }
+    sbPush('settings_data', settings)
+  ]).then(function(results) {
+    var allOk = results.every(function(r) { return r && r.ok; });
+    if (allOk) {
+      sbSyncBadgeSet('✓ sync', '#22c55e', true);
+    } else {
+      var failed = ['profils','historique','planif','réglages'].filter(function(_,i){ return !results[i] || !results[i].ok; });
+      sbSyncBadgeSet('⚠ ' + failed.join(','), '#ef4444', false);
+      console.error('sbSyncAll partial failure:', results);
+    }
+  }).catch(function(e) {
+    console.error('sbSyncAll exception:', e);
+    sbSyncBadgeSet('⚠ erreur sync', '#ef4444', false);
+  });
+}
+
+function sbForcePull() {
+  if (!_sbUser || !_sb) { alert('Non connecté.'); return; }
+  sbPullAll().then(function() {
+    renderProfiles(); renderHome();
+    alert('✅ Données rechargées depuis le cloud.');
+  });
+}
+
+function sbForcePush() {
+  if (!_sbUser || !_sb) { alert('Non connecté.'); return; }
+  sbSyncAll().then(function() {
+    alert('✅ Données envoyées vers le cloud.');
   });
 }
 
@@ -9593,6 +9674,10 @@ setTimeout(() => {
     <!-- Message retour -->
     <div id="sbPanelMsg" style="font-family:'DM Mono',monospace;font-size:8px;display:none;padding:6px 8px;border-radius:4px;margin-bottom:10px;"></div>
     <!-- Déconnexion -->
+    <div style="display:flex;gap:6px;margin-bottom:10px;">
+      <button onclick="sbForcePull()" style="flex:1;background:none;border:1px solid rgba(245,200,0,0.3);border-radius:4px;padding:8px;font-family:'DM Mono',monospace;font-size:7px;color:#F5C800;cursor:pointer;letter-spacing:1px;" title="Recharger les données depuis le cloud">⬇ CLOUD → APP</button>
+      <button onclick="sbForcePush()" style="flex:1;background:none;border:1px solid rgba(34,197,94,0.3);border-radius:4px;padding:8px;font-family:'DM Mono',monospace;font-size:7px;color:#22c55e;cursor:pointer;letter-spacing:1px;" title="Envoyer les données locales vers le cloud">⬆ APP → CLOUD</button>
+    </div>
     <button onclick="sbSignOut()" style="width:100%;background:none;border:1px solid rgba(239,68,68,0.3);border-radius:4px;padding:8px;font-family:'DM Mono',monospace;font-size:8px;color:#ef4444;cursor:pointer;letter-spacing:1px;">SE DÉCONNECTER</button>
   </div>
 </div>
