@@ -1558,14 +1558,23 @@ function loginSubmit() {
             coach_uid:  null
           }).then(function() {});
         }
-        loginSetMsg('Compte créé ! Vérifie ton email puis connecte-toi.', false);
+        loginSetMsg('Compte créé ! Un email de confirmation t\'a été envoyé. Clique sur le lien puis reviens te connecter.', false);
       });
   } else {
     // CONNEXION
     _sb.auth.signInWithPassword({ email: email, password: pass })
       .then(function(r) {
         if (btn) { btn.disabled = false; btn.textContent = 'SE CONNECTER'; }
-        if (r.error) { loginSetMsg(r.error.message, true); return; }
+        if (r.error) {
+          var msg = r.error.message;
+          if (msg.toLowerCase().includes('email not confirmed') || msg.toLowerCase().includes('email_not_confirmed')) {
+            msg = 'Confirme ton email avant de te connecter. Vérifie ta boîte mail.';
+          } else if (msg.toLowerCase().includes('invalid login') || msg.toLowerCase().includes('invalid credentials')) {
+            msg = 'Email ou mot de passe incorrect.';
+          }
+          loginSetMsg(msg, true);
+          return;
+        }
         routeAfterAuth(r.data.user);
       });
   }
