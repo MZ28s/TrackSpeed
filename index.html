@@ -1288,9 +1288,7 @@ body.light-theme canvas { filter:invert(0); }
     <span class="label-tag">// Suivi athlètes</span>
     <h1>FEEDBACKS</h1>
   </div>
-  <div id="coachFeedbackList">
-    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);">Chargement...</div>
-  </div>
+  <div id="feedbacksList"></div>
 </div>
 
 <nav class="nav">
@@ -11176,9 +11174,12 @@ function coachFeedbackCard(fb) {
   html+='<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);margin-top:2px;">'+(fb.week_label||fb.week_id||'—')+'</div>';
   html+='<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);margin-top:2px;">Envoyé le '+new Date(fb.created_at).toLocaleDateString('fr-FR')+'</div>';
   html+='</div></div>';
+  html+='<div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">';
   html+='<div style="text-align:right;"><div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);letter-spacing:1px;margin-bottom:4px;">RPE MOY.</div>';
-  html+='<div style="font-family:Bebas Neue,sans-serif;font-size:36px;line-height:1;color:'+(fb.rpe?rpeAvgColor:'var(--muted)');
-  html+=';"> '+(fb.rpe?fb.rpe:'—')+'</div></div></div>';
+  html+='<div style="font-family:Bebas Neue,sans-serif;font-size:36px;line-height:1;color:'+(fb.rpe?rpeAvgColor:'var(--muted)')+';"> '+(fb.rpe?fb.rpe:'—')+'</div></div>';
+  var delOnclick = 'deleteFeedback(' + JSON.stringify(fb.id) + ',event)';
+  html+='<button onclick="'+delOnclick+'" style="background:none;border:1px solid rgba(239,68,68,.4);border-radius:4px;padding:4px 8px;font-family:DM Mono,monospace;font-size:8px;color:#ef4444;cursor:pointer;white-space:nowrap;transition:all .15s;" title="Supprimer ce feedback">🗑 Suppr.</button>';
+  html+='</div></div>';
   // Tableau jours
   html+='<div style="margin-bottom:14px;"><div style="font-family:DM Mono,monospace;font-size:7px;letter-spacing:2px;color:var(--accent);margin-bottom:8px;">PAR JOUR</div>';
   // Header
@@ -11503,6 +11504,24 @@ function renderCoachFeedbacks() {
     });
 }
 
+
+function deleteFeedback(fbId, event) {
+  if (event) event.stopPropagation();
+  if (!confirm('Supprimer ce feedback ? Cette action est irréversible.')) return;
+  if (!_sb || !_sbUser) return;
+  _sb.from('athlete_feedback').delete().eq('id', fbId).eq('coach_uid', _sbUser.id)
+    .then(function(r) {
+      if (r.error) { alert('Erreur : ' + r.error.message); return; }
+      // Retirer du readSet local
+      var key = getFeedbackReadKey();
+      try {
+        var s = new Set(JSON.parse(localStorage.getItem(key) || '[]'));
+        s.delete(fbId);
+        localStorage.setItem(key, JSON.stringify([...s]));
+      } catch(e) {}
+      renderCoachFeedbacks();
+    });
+}
 
 function athleteCodeSubmit()   {}
 function generateAthleteCode() {}
