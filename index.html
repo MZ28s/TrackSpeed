@@ -226,10 +226,7 @@ body.light-theme canvas { filter:invert(0); }
 }
 #themeToggle:hover { border-color:var(--accent); color:var(--accent); }
 </style>
-
-<!-- ══ SUPABASE SDK ══ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
 </head>
 <body>
 
@@ -827,55 +824,11 @@ body.light-theme canvas { filter:invert(0); }
 
       <!-- Tableau des temps — toujours visible si athlètes sélectionnés -->
       <div id="multiTimesWrap" style="display:none;margin-bottom:14px;">
-
-        <!-- ── Chrono inline séance ── -->
-        <div id="inlineChronoBar" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-          <!-- Affichage temps -->
-          <div id="inlineChronoDisplay" style="font-family:'Bebas Neue',sans-serif;font-size:36px;color:var(--accent);line-height:1;min-width:80px;cursor:pointer;" onclick="inlineChronoToggle()">00:00</div>
-          <!-- Barre de progression -->
-          <div style="flex:1;min-width:80px;">
-            <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:6px;">
-              <div id="inlineChronoBar2" style="height:100%;width:100%;background:var(--accent);border-radius:3px;transition:width 0.5s linear;"></div>
-            </div>
-            <div id="inlineChronoLabel" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;">RÉCUPÉRATION</div>
-          </div>
-          <!-- Boutons -->
-          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-            <!-- Preset pauses rapides + saisie manuelle -->
-            <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
-              <button onclick="inlineChronoSet(60)"  style="font-family:'DM Mono',monospace;font-size:8px;padding:4px 8px;border-radius:3px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;">1'</button>
-              <button onclick="inlineChronoSet(120)" style="font-family:'DM Mono',monospace;font-size:8px;padding:4px 8px;border-radius:3px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;">2'</button>
-              <button onclick="inlineChronoSet(180)" style="font-family:'DM Mono',monospace;font-size:8px;padding:4px 8px;border-radius:3px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;">3'</button>
-              <button onclick="inlineChronoSet(240)" style="font-family:'DM Mono',monospace;font-size:8px;padding:4px 8px;border-radius:3px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;">4'</button>
-              <button onclick="inlineChronoSet(300)" style="font-family:'DM Mono',monospace;font-size:8px;padding:4px 8px;border-radius:3px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;">5'</button>
-              <!-- Durée personnalisée -->
-              <div style="display:flex;align-items:center;gap:6px;margin-left:4px;">
-                <input id="inlineChronoSlider" type="range" min="15" max="900" step="15" value="180"
-                  style="width:80px;accent-color:var(--accent);cursor:pointer;"
-                  oninput="_iChronoSliderUpdate()">
-                <span id="inlineChronoSliderVal"
-                  style="font-family:'DM Mono',monospace;font-size:9px;color:var(--accent);min-width:28px;cursor:pointer;"
-                  onclick="inlineChronoSet(parseInt(document.getElementById('inlineChronoSlider').value),true)"
-                  title="Cliquer pour démarrer">3'00</span>
-              </div>
-            </div>
-            <!-- Start / Reset -->
-            <button id="inlineChronoBtn" onclick="inlineChronoToggle()"
-              style="font-family:'Bebas Neue',sans-serif;font-size:15px;padding:6px 14px;border-radius:4px;background:var(--accent);border:none;color:#000;cursor:pointer;min-width:70px;">
-              ▶ START
-            </button>
-            <button onclick="inlineChronoReset()"
-              style="font-family:'DM Mono',monospace;font-size:10px;padding:6px 10px;border-radius:4px;background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;">
-              ↺
-            </button>
-          </div>
-        </div>
-
         <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;">
           SAISIE DES TEMPS
           <span style="color:var(--accent);margin-left:8px;">🟢 ±0.15s · 🟡 + rapide · 🔴 + lent</span>
         </div>
-        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;position:relative;">
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
           <table id="multiTimesGrid" style="width:100%;border-collapse:collapse;font-family:'DM Mono',monospace;font-size:11px;min-width:300px;"></table>
         </div>
       </div>
@@ -1045,6 +998,17 @@ body.light-theme canvas { filter:invert(0); }
       </div>
     </button>
   </div>
+    </button>
+    <button onclick="openSAWidget()"
+      style="flex:1;background:none;border:1px solid var(--border);border-radius:6px;
+             padding:8px 12px;display:flex;align-items:center;gap:8px;cursor:pointer;">
+      <span style="font-size:16px;">🇨🇭</span>
+      <div style="text-align:left;min-width:0;">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text);font-weight:bold;letter-spacing:1px;white-space:nowrap;">SWISS ATHLETICS</div>
+        <div style="font-family:'DM Mono',monospace;font-size:7px;color:var(--muted);margin-top:1px;">Listes des meilleurs</div>
+      </div>
+    </button>
+  </div>
 
   <!-- Sélecteur saison + athlète -->
   <div class="card" style="margin-bottom:12px;">
@@ -1126,8 +1090,6 @@ body.light-theme canvas { filter:invert(0); }
 
 
 
-</div>
-
 <!-- ══ PAGE PLANIFICATION ANNUELLE ══ -->
 <div class="page" id="page-planif">
   <div class="page-header">
@@ -1200,13 +1162,6 @@ body.light-theme canvas { filter:invert(0); }
   <button class="nav-btn"        id="nav-session"  onclick="goPage('page-session')"> <span class="icon">📋</span>Séance</button>
   <button class="nav-btn"        id="nav-force"    onclick="goPage('page-force')">   <span class="icon">🏋</span>Force</button>
   <button class="nav-btn"        id="nav-planif"   onclick="goPage('page-planif')">  <span class="icon">📅</span>Planif</button>
-  <button id="sbUserBtn"
-    style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;
-           background:none;border:1px solid var(--border);border-radius:20px;
-           padding:4px 10px;color:var(--muted);cursor:pointer;white-space:nowrap;
-           position:absolute;top:8px;right:12px;display:flex;align-items:center;gap:4px;">
-    <span style="font-size:10px;">☁</span> Connexion
-  </button>
 </nav>
 
 <script>
@@ -1214,218 +1169,151 @@ body.light-theme canvas { filter:invert(0); }
 // ══  SUPABASE — AUTH & SYNC  ════════════════════════════
 // ════════════════════════════════════════════════════════
 
-const _SB_URL = 'https://vkhammhuignhwzbmxhwc.supabase.co';
-const _SB_KEY = 'sb_publishable_3u7Tp7CkyCFjvF3eT2TyFQ_RmrG5zDq';
-const _sb = supabase.createClient(_SB_URL, _SB_KEY);
+var _SB_URL = 'https://vkhammhuignhwzbmxhwc.supabase.co';
+var _SB_KEY = 'sb_publishable_3u7Tp7CkyCFjvF3eT2TyFQ_RmrG5zDq';
+var _sb = null;
+var _sbUser = null;
+var _sbSyncTimeout = null;
+var _sbSkipped = false;
+var _loginTab = 'login';
 
-let _sbUser = null;
-let _sbSyncTimeout = null;
-let _sbSkipped = false; // mode sans compte
-
-// ── Init : vérifier session existante ──
-async function sbInit() {
-  const { data: { session } } = await _sb.auth.getSession();
-  if (session) {
-    _sbUser = session.user;
-    await sbPullAll();
-    loginHide();
-    sbUpdateNavBar();
-  } else {
-    loginShow();
-  }
-
-  _sb.auth.onAuthStateChange(async (event, session) => {
-    _sbUser = session?.user || null;
-    if (event === 'SIGNED_IN') {
-      await sbPullAll();
-      loginHide();
-      sbUpdateNavBar();
-    }
-    if (event === 'SIGNED_OUT') {
-      sbUpdateNavBar();
-    }
+function sbInit() {
+  if (typeof window.supabase === 'undefined') { setTimeout(sbInit, 300); return; }
+  _sb = window.supabase.createClient(_SB_URL, _SB_KEY);
+  _sb.auth.getSession().then(function(res) {
+    var s = res.data && res.data.session;
+    if (s) { _sbUser = s.user; sbPullAll().then(function() { loginHide(); sbUpdateNavBar(); }); }
+    else { loginShow(); }
+  }).catch(function() { loginShow(); });
+  _sb.auth.onAuthStateChange(function(event, session) {
+    _sbUser = session ? session.user : null;
+    if (event === 'SIGNED_IN') { sbPullAll().then(function() { loginHide(); sbUpdateNavBar(); }); }
+    if (event === 'SIGNED_OUT') { sbUpdateNavBar(); }
   });
-  } catch(e) {
-    console.warn('Supabase init error:', e.message);
-    loginShow();
-  }
 }
 
-// ── Push / Pull ──
-async function sbPush(table, data) {
-  if (!_sbUser) return;
-  const { error } = await _sb.from(table).upsert({
-    user_id: _sbUser.id, data: data, updated_at: new Date().toISOString()
-  }, { onConflict: 'user_id' });
-  if (error) console.warn('Supabase push:', error.message);
+function sbPush(table, data) {
+  if (!_sbUser || !_sb) return Promise.resolve();
+  return _sb.from(table).upsert({ user_id: _sbUser.id, data: data, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+    .then(function(r) { if (r.error) console.warn('sbPush:', r.error.message); });
 }
 
-async function sbPull(table) {
-  if (!_sbUser) return null;
-  const { data, error } = await _sb.from(table).select('data').eq('user_id', _sbUser.id).single();
-  if (error && error.code !== 'PGRST116') console.warn('Supabase pull:', error.message);
-  return data?.data || null;
+function sbPull(table) {
+  if (!_sbUser || !_sb) return Promise.resolve(null);
+  return _sb.from(table).select('data').eq('user_id', _sbUser.id).single()
+    .then(function(r) { return r.data ? r.data.data : null; });
 }
 
-async function sbPullAll() {
-  const [prof, hist, planif, sett] = await Promise.all([
-    sbPull('profiles_data'),
-    sbPull('history_data'),
-    sbPull('planif_data'),
-    sbPull('settings_data'),
-  ]);
-  if (prof   !== null) { localStorage.setItem('sc_profiles', JSON.stringify(prof));  profiles    = prof; }
-  if (hist   !== null) { localStorage.setItem('sc_history',  JSON.stringify(hist));  historyData = hist; }
-  if (planif !== null) { localStorage.setItem('sc_planifs',  JSON.stringify(planif)); planifData  = planif; }
-  if (sett   !== null && sett.theme) {
-    localStorage.setItem('sc_theme', sett.theme);
-    lightTheme = sett.theme === 'light';
-    if (lightTheme) document.body.classList.add('light-theme');
-    else document.body.classList.remove('light-theme');
-  }
-  renderProfiles(); renderHome();
+function sbPullAll() {
+  return Promise.all([sbPull('profiles_data'), sbPull('history_data'), sbPull('planif_data'), sbPull('settings_data')])
+    .then(function(rs) {
+      if (rs[0] !== null) { localStorage.setItem('sc_profiles', JSON.stringify(rs[0])); profiles    = rs[0]; }
+      if (rs[1] !== null) { localStorage.setItem('sc_history',  JSON.stringify(rs[1])); historyData = rs[1]; }
+      if (rs[2] !== null) { localStorage.setItem('sc_planifs',  JSON.stringify(rs[2])); planifData  = rs[2]; }
+      if (rs[3] !== null && rs[3].theme) {
+        localStorage.setItem('sc_theme', rs[3].theme);
+        lightTheme = rs[3].theme === 'light';
+        if (lightTheme) document.body.classList.add('light-theme');
+        else document.body.classList.remove('light-theme');
+      }
+      renderProfiles(); renderHome();
+    });
 }
 
-// ── Sync auto ──
 function sbScheduleSync() {
   if (!_sbUser) return;
   clearTimeout(_sbSyncTimeout);
-  _sbSyncTimeout = setTimeout(sbSyncAll, 1500);
+  _sbSyncTimeout = setTimeout(sbSyncAll, 2000);
 }
 
-async function sbSyncAll() {
+function sbSyncAll() {
   if (!_sbUser) return;
-  await Promise.all([
+  Promise.all([
     sbPush('profiles_data', profiles),
     sbPush('history_data',  historyData),
     sbPush('planif_data',   planifData),
-    sbPush('settings_data', { theme: lightTheme ? 'light' : 'dark' }),
-  ]);
-  const badge = document.getElementById('sbSyncBadge');
-  if (badge) {
-    badge.textContent = '✓ Sync';
-    badge.style.color = '#22c55e';
-    setTimeout(() => { if (badge) { badge.textContent = '☁'; badge.style.color = '#6b6b7a'; } }, 2000);
-  }
+    sbPush('settings_data', { theme: lightTheme ? 'light' : 'dark' })
+  ]).then(function() {
+    var b = document.getElementById('sbSyncBadge');
+    if (b) { b.textContent = 'Sync OK'; b.style.color = '#22c55e'; setTimeout(function() { if (b) { b.textContent = 'cloud'; b.style.color = '#6b6b7a'; } }, 2000); }
+  });
 }
 
-// ── Barre nav ──
 function sbUpdateNavBar() {
-  const bar = document.getElementById('sbNavBar');
-  const btn = document.getElementById('sbUserBtn');
+  var bar = document.getElementById('sbNavBar');
+  var btn = document.getElementById('sbUserBtn');
   if (!bar || !btn) return;
   bar.style.display = 'flex';
   if (_sbUser) {
-    const short = _sbUser.email.split('@')[0].substring(0, 12);
-    btn.textContent = '👤 ' + short;
-    btn.style.color = '#F5C800';
-    btn.style.borderColor = '#F5C800';
-    btn.title = _sbUser.email;
-  } else if (_sbSkipped) {
-    btn.textContent = '☁ Se connecter';
-    btn.style.color = '#6b6b7a';
-    btn.style.borderColor = '#1e1e24';
-    btn.onclick = () => loginShow();
+    btn.textContent = _sbUser.email.split('@')[0].substring(0, 12);
+    btn.style.color = '#F5C800'; btn.style.borderColor = '#F5C800';
+  } else {
+    btn.textContent = 'Se connecter';
+    btn.style.color = '#6b6b7a'; btn.style.borderColor = '#1e1e24';
   }
 }
 
-// ══════════════════════════════════════════
-// ── FONCTIONS PAGE DE CONNEXION ──────────
-// ══════════════════════════════════════════
-
-var _loginTab = 'login';
-
-function loginShow() {
-  const el = document.getElementById('loginScreen');
-  if (el) el.style.display = 'flex';
-}
-
-function loginHide() {
-  const el = document.getElementById('loginScreen');
-  if (el) el.style.display = 'none';
-}
+function loginShow() { var e = document.getElementById('loginScreen'); if (e) e.style.display = 'flex'; }
+function loginHide() { var e = document.getElementById('loginScreen'); if (e) e.style.display = 'none'; }
 
 function loginSwitchTab(tab) {
   _loginTab = tab;
-  const isLogin = tab === 'login';
-  const tl = document.getElementById('loginTab');
-  const ts = document.getElementById('signupTab');
-  const btn = document.getElementById('loginBtn');
-  const forgot = document.getElementById('loginForgotWrap');
-  if (tl) { tl.style.borderBottomColor = isLogin ? '#F5C800' : 'transparent'; tl.style.color = isLogin ? '#F5C800' : '#6b6b7a'; }
-  if (ts) { ts.style.borderBottomColor = !isLogin ? '#F5C800' : 'transparent'; ts.style.color = !isLogin ? '#F5C800' : '#6b6b7a'; }
-  if (btn) btn.textContent = isLogin ? 'SE CONNECTER' : 'CRÉER MON COMPTE';
-  if (forgot) forgot.style.display = isLogin ? 'block' : 'none';
+  var isL = tab === 'login';
+  var tl = document.getElementById('loginTab'), ts = document.getElementById('signupTab');
+  var btn = document.getElementById('loginBtn'), fw = document.getElementById('loginForgotWrap');
+  if (tl) { tl.style.borderBottomColor = isL ? '#F5C800' : 'transparent'; tl.style.color = isL ? '#F5C800' : '#6b6b7a'; }
+  if (ts) { ts.style.borderBottomColor = !isL ? '#F5C800' : 'transparent'; ts.style.color = !isL ? '#F5C800' : '#6b6b7a'; }
+  if (btn) btn.textContent = isL ? 'SE CONNECTER' : 'CRÉER MON COMPTE';
+  if (fw) fw.style.display = isL ? 'block' : 'none';
   loginClearMsg();
 }
 
-function loginSetMsg(text, isError) {
-  const el = document.getElementById('loginMsg');
-  if (!el) return;
-  el.textContent = text;
-  el.style.display = 'block';
-  el.style.background = isError ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)';
-  el.style.color = isError ? '#ef4444' : '#22c55e';
-  el.style.border = isError ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(34,197,94,0.3)';
+function loginSetMsg(text, isErr) {
+  var e = document.getElementById('loginMsg'); if (!e) return;
+  e.textContent = text; e.style.display = 'block';
+  e.style.background = isErr ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)';
+  e.style.color = isErr ? '#ef4444' : '#22c55e';
+  e.style.border = '1px solid ' + (isErr ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)');
 }
 
-function loginClearMsg() {
-  const el = document.getElementById('loginMsg');
-  if (el) el.style.display = 'none';
-}
+function loginClearMsg() { var e = document.getElementById('loginMsg'); if (e) e.style.display = 'none'; }
 
-async function loginSubmit() {
-  if (typeof supabase === 'undefined' || !_sb) {
-    loginSetMsg('Erreur de connexion au service. Réessaie dans un instant.', true);
-    return;
-  }
-  const email = (document.getElementById('loginEmail')?.value || '').trim();
-  const pass  = document.getElementById('loginPassword')?.value || '';
-  const btn   = document.getElementById('loginBtn');
-
+function loginSubmit() {
+  if (!_sb) { loginSetMsg('Service non disponible.', true); return; }
+  var email = (document.getElementById('loginEmail').value || '').trim();
+  var pass  = document.getElementById('loginPassword').value || '';
+  var btn   = document.getElementById('loginBtn');
   if (!email || !pass) { loginSetMsg('Email et mot de passe requis.', true); return; }
-  if (pass.length < 6)  { loginSetMsg('Le mot de passe doit faire au moins 6 caractères.', true); return; }
-
+  if (pass.length < 6) { loginSetMsg('Mot de passe trop court (6 caractères minimum).', true); return; }
   if (btn) { btn.textContent = '...'; btn.disabled = true; }
-
-  if (_loginTab === 'signup') {
-    const { error } = await _sb.auth.signUp({ email, password: pass });
-    if (btn) { btn.disabled = false; btn.textContent = 'CRÉER MON COMPTE'; }
-    if (error) { loginSetMsg(error.message, true); }
-    else { loginSetMsg('✅ Compte créé ! Vérifie ton email pour confirmer, puis connecte-toi.', false); }
-  } else {
-    const { error } = await _sb.auth.signInWithPassword({ email, password: pass });
+  var p = _loginTab === 'signup' ? _sb.auth.signUp({ email: email, password: pass }) : _sb.auth.signInWithPassword({ email: email, password: pass });
+  p.then(function(r) {
+    if (btn) { btn.disabled = false; btn.textContent = _loginTab === 'signup' ? 'CRÉER MON COMPTE' : 'SE CONNECTER'; }
+    if (r.error) { loginSetMsg(r.error.message, true); }
+    else if (_loginTab === 'signup') { loginSetMsg('Compte cree ! Verifie ton email puis connecte-toi.', false); }
+  }).catch(function(e) {
     if (btn) { btn.disabled = false; btn.textContent = 'SE CONNECTER'; }
-    if (error) { loginSetMsg('Email ou mot de passe incorrect.', true); }
-    // Si succès, onAuthStateChange gère la suite
-  }
+    loginSetMsg('Erreur: ' + e.message, true);
+  });
 }
 
-async function loginForgot() {
-  const email = (document.getElementById('loginEmail')?.value || '').trim();
-  if (!email) { loginSetMsg('Entre ton email d'abord.', true); return; }
-  const { error } = await _sb.auth.resetPasswordForEmail(email);
-  if (error) { loginSetMsg(error.message, true); }
-  else { loginSetMsg('📧 Email de réinitialisation envoyé !', false); }
+function loginForgot() {
+  if (!_sb) return;
+  var email = (document.getElementById('loginEmail').value || '').trim();
+  if (!email) { loginSetMsg('Entre ton email.', true); return; }
+  _sb.auth.resetPasswordForEmail(email).then(function(r) {
+    loginSetMsg(r.error ? r.error.message : 'Email envoye !', !!r.error);
+  });
 }
 
-function loginSkip() {
-  _sbSkipped = true;
-  loginHide();
-  sbUpdateNavBar();
-  // S'assurer que l'app est bien initialisée
-  renderProfiles();
-  renderHome();
-}
+function loginSkip() { _sbSkipped = true; loginHide(); sbUpdateNavBar(); }
 
 function loginShowProfile() {
   if (_sbUser) {
-    if (confirm('Se déconnecter de ' + _sbUser.email + ' ?')) {
-      _sb.auth.signOut().then(() => { _sbUser = null; sbUpdateNavBar(); loginShow(); });
+    if (confirm('Se deconnecter ?')) {
+      _sb.auth.signOut().then(function() { _sbUser = null; sbUpdateNavBar(); loginShow(); });
     }
-  } else {
-    loginShow();
-  }
+  } else { loginShow(); }
 }
 
 
@@ -1929,13 +1817,6 @@ function renderPlanifIA() {
     + '<div>'
     + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:var(--text);line-height:1;">GÉNÉRATION IA DE PLANIFICATION</div>'
     + '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);margin-top:3px;">L\'IA crée une périodisation optimale basée sur la science du sprint</div>'
-    + '</div></div>'
-    + '<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:6px;padding:10px 14px;margin-bottom:4px;display:flex;gap:8px;align-items:flex-start;">'
-    + '<span style="font-size:14px;flex-shrink:0;">&#9888;&#65039;</span>'
-    + '<div style="font-family:DM Mono,monospace;font-size:8px;color:rgba(245,158,11,0.85);line-height:1.7;">'
-    + '<strong>Version B&eacute;ta &mdash; &agrave; utiliser avec recul.</strong> '
-    + "L'IA peut faire des erreurs dans la structure des phases, les charges ou la p&eacute;riodisation. "
-    + "V&eacute;rifie toujours le r&eacute;sultat et ajuste selon ton expertise."
     + '</div></div>'
 
     // ── Formulaire ──
@@ -4941,12 +4822,11 @@ function renderResults() {
 }
 
 // ── PROFILES ──
-function saveProfiles() { localStorage.setItem('sc_profiles', JSON.stringify(profiles)); }
+function saveProfiles() { localStorage.setItem('sc_profiles', JSON.stringify(profiles)); sbScheduleSync(); }
 
 function getPRVal(id) {
   const v = parseFloat(document.getElementById(id).value);
   return isNaN(v) ? null : v;
-  sbScheduleSync();
 }
 
 
@@ -6912,35 +6792,6 @@ function addBlock() {
   renderSession();
 }
 
-function toggleEditBlock(i) {
-  const el = document.getElementById('editBlock_' + i);
-  if (!el) return;
-  const isOpen = el.style.display !== 'none';
-  // Fermer tous les autres
-  sessionBlocks.forEach((_, j) => {
-    const other = document.getElementById('editBlock_' + j);
-    if (other) other.style.display = 'none';
-  });
-  el.style.display = isOpen ? 'none' : 'block';
-}
-
-function applyEditBlock(i) {
-  const reps = parseInt(document.getElementById('editReps_' + i)?.value);
-  const dist = parseInt(document.getElementById('editDist_' + i)?.value);
-  const pct  = parseInt(document.getElementById('editPct_'  + i)?.value);
-  const rest = parseFloat(document.getElementById('editRest_' + i)?.value);
-  if (!reps || !dist || !pct || reps < 1 || dist < 5 || pct < 50) {
-    alert('Valeurs invalides.');
-    return;
-  }
-  sessionBlocks[i].reps = reps;
-  sessionBlocks[i].dist = dist;
-  sessionBlocks[i].pct  = pct;
-  sessionBlocks[i].rest = isNaN(rest) ? 0 : rest;
-  renderSession();
-  updateDashboard();
-}
-
 function removeBlock(i) {
   sessionBlocks.splice(i, 1);
   renderSession();
@@ -6984,65 +6835,23 @@ function renderSession() {
       infoStr = fmt(tAtPct)+' · '+fmtS(spd)+' · '+(spd*3.6).toFixed(1)+' km/h';
     }
     chipsHtml += `
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:2px;overflow:hidden;">
-        <!-- Affichage normal du bloc -->
-        <div style="padding:14px 18px;display:flex;align-items:center;gap:12px;">
-          <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--accent);min-width:32px;">${b.reps}×</div>
-          <div style="flex:1;">
-            <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;">${b.dist}m <span style="color:var(--accent);font-size:18px;">@ ${b.pct}%</span></div>
-            <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:2px;">
-              ${infoStr}${b.rest > 0 ? ' · récup '+b.rest+'min' : ' · pas de récup'}
-            </div>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:4px;">
-            <button class="icon-btn" onclick="moveBlock(${i},-1)" ${i===0?'disabled style="opacity:.3"':''}>↑</button>
-            <button class="icon-btn" onclick="moveBlock(${i},1)"  ${i===sessionBlocks.length-1?'disabled style="opacity:.3"':''}>↓</button>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:4px;">
-            <button class="icon-btn" onclick="toggleEditBlock(${i})"
-              title="Modifier ce bloc"
-              style="font-size:13px;background:transparent;border:1px solid var(--border);color:var(--muted);">✏️</button>
-            <button class="icon-btn" onclick="openChronoFromSession(${i});event.stopPropagation()"
-              title="Lancer le chrono"
-              style="font-size:13px;background:transparent;border:1px solid var(--accent);color:var(--accent);">⏱</button>
-            <button class="icon-btn del" onclick="removeBlock(${i})">✕</button>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:2px;padding:14px 18px;display:flex;align-items:center;gap:12px;">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--accent);min-width:32px;">${b.reps}×</div>
+        <div style="flex:1;">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;">${b.dist}m <span style="color:var(--accent);font-size:18px;">@ ${b.pct}%</span></div>
+          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:2px;">
+            ${infoStr}${b.rest > 0 ? ' · récup '+b.rest+'min' : ' · pas de récup'}
           </div>
         </div>
-        <!-- Formulaire d'édition inline (caché par défaut) -->
-        <div id="editBlock_${i}" style="display:none;border-top:1px solid var(--border);padding:14px 18px;background:var(--surface);">
-          <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:12px;">// MODIFIER LE BLOC</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;align-items:end;">
-            <div>
-              <label style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);display:block;margin-bottom:4px;">RÉPÉTITIONS</label>
-              <input type="number" id="editReps_${i}" value="${b.reps}" min="1" max="50"
-                style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px 10px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;-moz-appearance:textfield;">
-            </div>
-            <div>
-              <label style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);display:block;margin-bottom:4px;">DISTANCE (m)</label>
-              <input type="number" id="editDist_${i}" value="${b.dist}" min="5" max="500"
-                style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px 10px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;-moz-appearance:textfield;">
-            </div>
-            <div>
-              <label style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);display:block;margin-bottom:4px;">INTENSITÉ (%)</label>
-              <input type="number" id="editPct_${i}" value="${b.pct}" min="50" max="120"
-                style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px 10px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;-moz-appearance:textfield;">
-            </div>
-            <div>
-              <label style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);display:block;margin-bottom:4px;">RÉCUP (min)</label>
-              <input type="number" id="editRest_${i}" value="${b.rest}" min="0" max="60" step="0.5"
-                style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px 10px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;-moz-appearance:textfield;">
-            </div>
-          </div>
-          <div style="display:flex;gap:8px;margin-top:12px;">
-            <button onclick="applyEditBlock(${i})"
-              style="flex:1;background:var(--accent);border:none;border-radius:3px;padding:10px;font-family:'Bebas Neue',sans-serif;font-size:16px;color:#000;cursor:pointer;letter-spacing:1px;">
-              ✓ APPLIQUER
-            </button>
-            <button onclick="toggleEditBlock(${i})"
-              style="background:none;border:1px solid var(--border);border-radius:3px;padding:10px 16px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;">
-              Annuler
-            </button>
-          </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <button class="icon-btn" onclick="moveBlock(${i},-1)" ${i===0?'disabled style="opacity:.3"':''}>↑</button>
+          <button class="icon-btn" onclick="moveBlock(${i},1)"  ${i===sessionBlocks.length-1?'disabled style="opacity:.3"':''}>↓</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <button class="icon-btn" onclick="openChronoFromSession(${i});event.stopPropagation()"
+            title="Lancer le chrono avec la pause de ce bloc"
+            style="font-size:13px;background:transparent;border:1px solid var(--accent);color:var(--accent);">⏱</button>
+          <button class="icon-btn del" onclick="removeBlock(${i})">✕</button>
         </div>
       </div>`;
   });
@@ -7076,15 +6885,18 @@ function renderSession() {
       html += `
         <div style="background:var(--surface2);border:1px solid var(--border);border-radius:2px;
           padding:12px 16px;margin-bottom:8px;">
+          <!-- Ligne principale : cible + saisie temps réel -->
           <div style="display:grid;grid-template-columns:40px 1fr 1fr;gap:10px;align-items:center;margin-bottom:8px;">
             <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--muted);">
               ${r}/${b.reps}
             </div>
+            <!-- Temps cible -->
             <div>
               <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;margin-bottom:3px;">CIBLE</div>
               <div style="font-family:'DM Mono',monospace;font-size:16px;color:var(--text);">${fmt(tAtPct)}</div>
               <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--accent2);">${fmtS(spd)} · ${(spd*3.6).toFixed(1)} km/h</div>
             </div>
+            <!-- Temps réel saisi -->
             <div>
               <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;margin-bottom:3px;">RÉALISÉ</div>
               <input type="number" id="${rid}" placeholder="${tAtPct.toFixed(2)}"
@@ -7096,6 +6908,7 @@ function renderSession() {
               <div id="ecart_${bi}_${r}" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:2px;min-height:14px;"></div>
             </div>
           </div>
+          <!-- Note -->
           <input type="text" id="${nid}" placeholder="Note... (ex: bonne foulée, départ lent)"
             style="width:100%;background:transparent;border:none;border-top:1px solid var(--border);
               padding:8px 0 0;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;
@@ -8082,19 +7895,44 @@ var _saOverlay = null;
 function openSAWidget() {
   if (_saOverlay) { _saOverlay.remove(); _saOverlay = null; return; }
 
-  var state = { indoor: 'false', year: String(new Date().getFullYear()) };
+  var SA_CATS = [
+    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g45s-bk', label: 'U16 \u2642' },
+    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g45u-bl', label: 'U16 \u2640' },
+    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g45w-bm', label: 'U18 \u2642' },
+    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g45y-bn', label: 'U18 \u2640' },
+    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g45z-bo', label: 'U20 \u2642' },
+    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g461-bp', label: 'U20 \u2640' },
+    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g467-bs', label: 'Seniors \u2642' },
+    { id: '5c4o3k5m-d686mo-j986g2ie-1-j986g469-bt', label: 'Seniors \u2640' },
+    { id: 'M', label: 'Tous \u2642' },
+    { id: 'W', label: 'Toutes \u2640' },
+  ];
+  var state = {
+    catId: '5c4o3k5m-d686mo-j986g2ie-1-j986g45w-bm',
+    indoor: 'false',
+    year: String(new Date().getFullYear())
+  };
 
   function buildUrl() {
     return 'https://alabus.swiss-athletics.ch/satweb/faces/bestlist.xhtml'
       + '?lang=fr&mobile=false&year=' + state.year
       + '&indoor=' + state.indoor
+      + '&category=' + encodeURIComponent(state.catId)
       + '&tops=30&onlyCategoryAthletes=false&onlyHomologated=false&listType=1';
   }
   function reloadIframe() {
     var f = document.getElementById('saIframe');
     if (f) f.src = buildUrl();
   }
-  function updateBtns() {
+  function updateCatBtns() {
+    document.querySelectorAll('#saCatBtns button').forEach(function(btn) {
+      var active = btn.dataset.catId === state.catId;
+      btn.style.background  = active ? 'var(--accent)' : 'var(--surface2)';
+      btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
+      btn.style.color       = active ? '#000' : 'var(--muted)';
+    });
+  }
+  function updateSeasonBtns() {
     var out = document.getElementById('saOutBtn');
     var ind = document.getElementById('saInBtn');
     if (!out || !ind) return;
@@ -8107,16 +7945,44 @@ function openSAWidget() {
     ind.style.color       = !isOut ? '#000' : 'var(--muted)';
   }
 
+  // Overlay
   var overlay = document.createElement('div');
   overlay.id = 'saOverlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;display:flex;flex-direction:column;';
 
+  // Header
   var header = document.createElement('div');
-  header.style.cssText = 'flex-shrink:0;background:var(--surface);border-bottom:2px solid var(--border);padding:8px 14px;display:flex;align-items:center;gap:10px;';
+  header.style.cssText = 'flex-shrink:0;background:var(--surface);border-bottom:2px solid var(--border);padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
 
+  // Titre
   var title = document.createElement('span');
-  title.textContent = '🇨🇭 SWISS ATHLETICS';
-  title.style.cssText = "font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--text);flex:1;";
+  title.textContent = '\uD83C\uDDE8\uD83C\uDDED SWISS ATHLETICS';
+  title.style.cssText = "font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--text);flex-shrink:0;";
+
+  // Zone boutons catégorie
+  var catWrap = document.createElement('div');
+  catWrap.id = 'saCatBtns';
+  catWrap.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;flex:1;';
+  SA_CATS.forEach(function(c) {
+    var btn = document.createElement('button');
+    btn.textContent = c.label;
+    btn.dataset.catId = c.id;
+    var active = c.id === state.catId;
+    btn.style.cssText = "font-family:'DM Mono',monospace;font-size:9px;padding:4px 9px;border-radius:4px;cursor:pointer;white-space:nowrap;"
+      + 'background:' + (active ? 'var(--accent)' : 'var(--surface2)') + ';'
+      + 'border:1px solid ' + (active ? 'var(--accent)' : 'var(--border)') + ';'
+      + 'color:' + (active ? '#000' : 'var(--muted)') + ';';
+    btn.addEventListener('click', function() {
+      state.catId = c.id;
+      updateCatBtns();
+      reloadIframe();
+    });
+    catWrap.appendChild(btn);
+  });
+
+  // Contrôles droite
+  var controls = document.createElement('div');
+  controls.style.cssText = 'flex-shrink:0;display:flex;align-items:center;gap:6px;';
 
   var yearSel = document.createElement('select');
   yearSel.id = 'saYearSel';
@@ -8131,25 +7997,28 @@ function openSAWidget() {
 
   var outBtn = document.createElement('button');
   outBtn.id = 'saOutBtn'; outBtn.textContent = 'Outdoor';
-  outBtn.style.cssText = "font-family:'DM Mono',monospace;font-size:9px;padding:4px 12px;border-radius:4px;cursor:pointer;background:var(--accent);border:1px solid var(--accent);color:#000;";
-  outBtn.addEventListener('click', function() { state.indoor = 'false'; updateBtns(); reloadIframe(); });
+  outBtn.style.cssText = "font-family:'DM Mono',monospace;font-size:9px;padding:4px 10px;border-radius:4px;cursor:pointer;background:var(--accent);border:1px solid var(--accent);color:#000;";
+  outBtn.addEventListener('click', function() { state.indoor = 'false'; updateSeasonBtns(); reloadIframe(); });
 
   var inBtn = document.createElement('button');
   inBtn.id = 'saInBtn'; inBtn.textContent = 'Indoor';
-  inBtn.style.cssText = "font-family:'DM Mono',monospace;font-size:9px;padding:4px 12px;border-radius:4px;cursor:pointer;background:var(--surface2);border:1px solid var(--border);color:var(--muted);";
-  inBtn.addEventListener('click', function() { state.indoor = 'true'; updateBtns(); reloadIframe(); });
+  inBtn.style.cssText = "font-family:'DM Mono',monospace;font-size:9px;padding:4px 10px;border-radius:4px;cursor:pointer;background:var(--surface2);border:1px solid var(--border);color:var(--muted);";
+  inBtn.addEventListener('click', function() { state.indoor = 'true'; updateSeasonBtns(); reloadIframe(); });
 
   var closeBtn = document.createElement('button');
-  closeBtn.textContent = '×';
-  closeBtn.style.cssText = 'background:none;border:none;font-size:18px;color:var(--muted);cursor:pointer;padding:0 4px;';
+  closeBtn.textContent = '\u2715';
+  closeBtn.style.cssText = 'flex-shrink:0;background:none;border:none;font-size:18px;color:var(--muted);cursor:pointer;padding:0 4px;';
   closeBtn.addEventListener('click', closeSAWidget);
 
+  controls.appendChild(yearSel);
+  controls.appendChild(outBtn);
+  controls.appendChild(inBtn);
   header.appendChild(title);
-  header.appendChild(yearSel);
-  header.appendChild(outBtn);
-  header.appendChild(inBtn);
+  header.appendChild(catWrap);
+  header.appendChild(controls);
   header.appendChild(closeBtn);
 
+  // iframe
   var iframeWrap = document.createElement('div');
   iframeWrap.style.cssText = 'flex:1;overflow:hidden;background:#fff;';
   var iframe = document.createElement('iframe');
@@ -8167,191 +8036,6 @@ function openSAWidget() {
 function closeSAWidget() {
   var o = document.getElementById('saOverlay');
   if (o) { o.remove(); _saOverlay = null; }
-}
-
-// ════════════════════════════════════════════════════════
-// ══  CHRONO INLINE SÉANCE  ══════════════════════════════
-// ════════════════════════════════════════════════════════
-
-var _iChrono = {
-  duration:  180,
-  remaining: 180,
-  running:   false,
-  interval:  null,
-  startTime: null,   // timestamp réel du départ (pour résister à l'écran éteint)
-  wakeLock:  null,
-};
-
-// ── Wake Lock : empêche l'écran de s'éteindre (si supporté) ──
-async function _iChronoRequestWakeLock() {
-  if ('wakeLock' in navigator) {
-    try {
-      _iChrono.wakeLock = await navigator.wakeLock.request('screen');
-    } catch(e) { /* pas supporté ou refusé */ }
-  }
-}
-function _iChronoReleaseWakeLock() {
-  if (_iChrono.wakeLock) { _iChrono.wakeLock.release(); _iChrono.wakeLock = null; }
-}
-
-// ── Audio silencieux : maintient le timer actif même écran éteint sur iOS ──
-var _iChronoAudioCtx = null;
-var _iChronoAudioNode = null;
-function _iChronoStartAudio() {
-  try {
-    if (!_iChronoAudioCtx) {
-      _iChronoAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    // Oscillo silencieux (volume 0) — maintient le contexte audio actif
-    var osc = _iChronoAudioCtx.createOscillator();
-    var gain = _iChronoAudioCtx.createGain();
-    gain.gain.value = 0.001; // quasi-silence
-    osc.connect(gain);
-    gain.connect(_iChronoAudioCtx.destination);
-    osc.start();
-    _iChronoAudioNode = { osc: osc, gain: gain };
-  } catch(e) {}
-}
-function _iChronoStopAudio() {
-  if (_iChronoAudioNode) {
-    try { _iChronoAudioNode.osc.stop(); } catch(e) {}
-    _iChronoAudioNode = null;
-  }
-}
-
-// ── Page visibility : recalcul du temps restant après retour d'arrière-plan ──
-document.addEventListener('visibilitychange', function() {
-  if (!_iChrono.running) return;
-  if (document.visibilityState === 'visible' && _iChrono.startTime) {
-    // Recalculer le temps restant basé sur le temps réel écoulé
-    var elapsed = Math.floor((Date.now() - _iChrono.startTime) / 1000);
-    _iChrono.remaining = Math.max(0, _iChrono.duration - elapsed);
-    _iChronoUpdateDisplay();
-    if (_iChrono.remaining <= 0) {
-      _iChronoFinish();
-    }
-  }
-});
-
-function inlineChronoSet(seconds, autoStart) {
-  inlineChronoReset();
-  _iChrono.duration  = seconds;
-  _iChrono.remaining = seconds;
-  _iChronoUpdateDisplay();
-  // Surbrillance des presets
-  document.querySelectorAll('#inlineChronoBar button').forEach(function(btn) {
-    var s = btn.textContent.trim();
-    var val = s.endsWith("'") ? parseInt(s) * 60 : 0;
-    btn.style.borderColor = (val === seconds && val > 0) ? 'var(--accent)' : 'var(--border)';
-    btn.style.color       = (val === seconds && val > 0) ? 'var(--accent)' : 'var(--muted)';
-  });
-  // Lancer automatiquement si demandé (ex: clic sur R1/R2)
-  if (autoStart && seconds > 0) {
-    setTimeout(_iChronoStart, 50);
-  }
-}
-
-function _iChronoSliderUpdate() {
-  var slider = document.getElementById('inlineChronoSlider');
-  var val    = document.getElementById('inlineChronoSliderVal');
-  if (!slider || !val) return;
-  var secs = parseInt(slider.value);
-  var m = Math.floor(secs / 60);
-  var s = secs % 60;
-  val.textContent = m + "'" + String(s).padStart(2, "0");
-  // Configurer sans démarrer (l'utilisateur clique sur la valeur pour démarrer)
-  inlineChronoSet(secs, false);
-}
-
-function inlineChronoToggle() {
-  if (_iChrono.running) {
-    _iChronoPause();
-  } else {
-    _iChronoStart();
-  }
-}
-
-function _iChronoStart() {
-  if (_iChrono.remaining <= 0) _iChrono.remaining = _iChrono.duration;
-  _iChrono.running   = true;
-  _iChrono.startTime = Date.now() - (_iChrono.duration - _iChrono.remaining) * 1000;
-
-  var btn = document.getElementById('inlineChronoBtn');
-  if (btn) { btn.textContent = '⏸ PAUSE'; btn.style.background = 'var(--surface2)'; btn.style.color = 'var(--muted)'; btn.style.border = '1px solid var(--border)'; }
-
-  _iChronoRequestWakeLock();
-  _iChronoStartAudio();
-
-  _iChrono.interval = setInterval(function() {
-    var elapsed = Math.floor((Date.now() - _iChrono.startTime) / 1000);
-    _iChrono.remaining = Math.max(0, _iChrono.duration - elapsed);
-    _iChronoUpdateDisplay();
-    if (_iChrono.remaining <= 0) _iChronoFinish();
-  }, 250); // tick rapide pour précision
-}
-
-function _iChronoPause() {
-  clearInterval(_iChrono.interval);
-  _iChrono.running = false;
-  _iChronoStopAudio();
-  _iChronoReleaseWakeLock();
-  var btn = document.getElementById('inlineChronoBtn');
-  if (btn) { btn.textContent = '▶ START'; btn.style.background = 'var(--accent)'; btn.style.color = '#000'; btn.style.border = 'none'; }
-}
-
-function inlineChronoReset() {
-  clearInterval(_iChrono.interval);
-  _iChrono.running   = false;
-  _iChrono.remaining = _iChrono.duration;
-  _iChrono.startTime = null;
-  _iChronoStopAudio();
-  _iChronoReleaseWakeLock();
-  var btn = document.getElementById('inlineChronoBtn');
-  if (btn) { btn.textContent = '▶ START'; btn.style.background = 'var(--accent)'; btn.style.color = '#000'; btn.style.border = 'none'; }
-  var lbl = document.getElementById('inlineChronoLabel');
-  if (lbl) lbl.textContent = 'RÉCUPÉRATION';
-  _iChronoUpdateDisplay();
-}
-
-function _iChronoFinish() {
-  clearInterval(_iChrono.interval);
-  _iChrono.running = false;
-  _iChronoStopAudio();
-  _iChronoReleaseWakeLock();
-  var btn = document.getElementById('inlineChronoBtn');
-  if (btn) { btn.textContent = '▶ START'; btn.style.background = 'var(--accent)'; btn.style.color = '#000'; btn.style.border = 'none'; }
-  var lbl = document.getElementById('inlineChronoLabel');
-  if (lbl) lbl.textContent = '✅ TEMPS !';
-  chronoBeep(); // réutilise le beep du chrono principal
-  _iChronoUpdateDisplay();
-}
-
-function _iChronoUpdateDisplay() {
-  var rem = Math.max(0, _iChrono.remaining);
-  var m = Math.floor(rem / 60);
-  var s = rem % 60;
-  var txt = String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
-
-  var disp = document.getElementById('inlineChronoDisplay');
-  if (disp) {
-    disp.textContent = txt;
-    disp.style.color = rem <= 10 && _iChrono.running ? '#ef4444' : 'var(--accent)';
-  }
-
-  var pct = _iChrono.duration > 0 ? (rem / _iChrono.duration) * 100 : 100;
-  var bar = document.getElementById('inlineChronoBar2');
-  if (bar) {
-    bar.style.width = Math.max(0, pct) + '%';
-    bar.style.background = pct > 30 ? 'var(--accent)' : '#ef4444';
-  }
-}
-
-// Synchroniser inlineChronoSet depuis les blocs (appelé par openChronoFromSession)
-function inlineChronoFromBlock(blocIndex) {
-  if (typeof blocIndex === 'undefined' || !sessionBlocks[blocIndex]) return;
-  var b = sessionBlocks[blocIndex];
-  var restSecs = Math.round(b.rest * 60);
-  if (restSecs > 0) inlineChronoSet(restSecs);
 }
 
 // ══ EXPORT / IMPORT DONNÉES ══════════════════════════════════════
@@ -9064,9 +8748,11 @@ function _updateMultiTable() {
     if (saveRow)  saveRow.style.display = 'none';
     if (emptyMsg) {
       emptyMsg.style.display = 'block';
-      emptyMsg.textContent = !hasBlocks && hasAthletes
-        ? '📋 Ajoute des blocs de séance pour saisir les temps'
-        : '☝️ Sélectionne les athlètes pour afficher le tableau de saisie';
+      if (!hasBlocks && hasAthletes) {
+        emptyMsg.textContent = '📋 Ajoute des blocs de séance pour saisir les temps';
+      } else if (!hasAthletes) {
+        emptyMsg.textContent = '☝️ Sélectionne les athlètes pour afficher le tableau de saisie';
+      }
     }
     return;
   }
@@ -9075,7 +8761,7 @@ function _updateMultiTable() {
   if (wrap)     wrap.style.display = 'block';
   if (saveRow)  saveRow.style.display = 'block';
 
-  // ── Colonnes : une par répétition de chaque bloc ──
+  // ── Construire les colonnes (une par répétition de chaque bloc) ──
   var cols = [];
   sessionBlocks.forEach(function(b, bi) {
     for (var r = 0; r < b.reps; r++) {
@@ -9084,75 +8770,35 @@ function _updateMultiTable() {
     }
   });
 
-  // ── Temps cible GLOBAL (depuis calculateur) pour l'en-tête ──
-  var globalTargets = cols.map(function(c) {
+  // ── Calculer les temps cibles ──
+  var targets = cols.map(function(c) {
     if (!currentRefs || !currentRefs.length) return null;
-    try { return (computeTarget(c.dist, currentRefs) / (c.pct / 100)).toFixed(2); }
-    catch(e) { return null; }
+    try {
+      var t = computeTarget(c.dist, currentRefs);
+      return (t / (c.pct / 100)).toFixed(2);
+    } catch(e) { return null; }
   });
 
-  // ── Calculer le temps cible d'un athlète pour un bloc donné ──
-  // Priorité : records du profil > calculateur global
-  function getAthleteTarget(pid, dist, pct) {
-    var p = profiles.find(function(pr) { return pr.id === pid; });
-    if (!p) return null;
-
-    // Construire les refs depuis les records du profil
-    var refs = [];
-    var rec = p.records || {};
-    if (rec.pr50  != null) refs.push({ t: rec.pr50,  dRef: 50  });
-    if (rec.pr60  != null) refs.push({ t: rec.pr60,  dRef: 60  });
-    if (rec.pr100 != null) refs.push({ t: rec.pr100, dRef: 100 });
-    if (rec.pr200 != null) refs.push({ t: rec.pr200, dRef: 200 });
-    if (rec.pr400 != null) refs.push({ t: rec.pr400, dRef: 400 });
-
-    if (!refs.length) return null; // pas de records → pas de cible perso
-    try {
-      return (computeTarget(dist, refs) / (pct / 100)).toFixed(2);
-    } catch(e) { return null; }
-  }
-
-  // ── Résumé des temps cibles par athlète pour chaque BLOC DISTINCT ──
-  // (une ligne par bloc si plusieurs distances différentes)
-  function getAthleteBlockSummary(pid) {
-    // Dédupliquer les blocs par (dist, pct)
-    var seen = {};
-    var lines = [];
-    sessionBlocks.forEach(function(b, bi) {
-      var key = b.dist + '_' + b.pct;
-      if (seen[key]) return;
-      seen[key] = true;
-      var t = getAthleteTarget(pid, b.dist, b.pct);
-      if (!t) return;
-      var prefix = sessionBlocks.length > 1 ? b.dist + 'm@' + b.pct + '%: ' : '';
-      lines.push(prefix + t + 's');
-    });
-    return lines;
-  }
-
-  // ── En-tête ──
+  // ── En-tête du tableau ──
   var html = '<thead><tr>';
+
+  // Colonne athlète — sticky
   html += '<th style="text-align:left;padding:8px 10px;font-size:8px;letter-spacing:1px;'
     + 'color:var(--muted);border-bottom:2px solid var(--accent);white-space:nowrap;'
-    + 'position:sticky;left:0;background:var(--bg);z-index:3;min-width:120px;max-width:150px;">ATHLÈTE</th>';
+    + 'position:sticky;left:0;background:var(--bg);z-index:2;min-width:80px;">ATHLÈTE</th>';
 
+  // Grouper par bloc pour l'en-tête
   var lastBi = -1;
   cols.forEach(function(c, ci) {
-    var isFirst = (c.bi !== lastBi); lastBi = c.bi;
-    var tgt = globalTargets[ci];
-    var restSecs = Math.round((sessionBlocks[c.bi].rest || 0) * 60);
-    var restLabel = sessionBlocks[c.bi].rest > 0 ? sessionBlocks[c.bi].rest + 'min' : 'aucune';
+    var isFirst = (c.bi !== lastBi);
+    lastBi = c.bi;
+    var tgt = targets[ci];
     var borderLeft = isFirst && ci > 0 ? 'border-left:2px solid var(--border);' : '';
     html += '<th style="padding:6px 4px;font-size:8px;letter-spacing:1px;color:var(--muted);'
-      + 'border-bottom:2px solid var(--accent);text-align:center;min-width:76px;' + borderLeft + '">'
-      + '<button onclick="inlineChronoSet(' + restSecs + ',true)" '
-      + 'title="Lancer le chrono : récup ' + restLabel + '" '
-      + 'style="font-family:Bebas Neue,sans-serif;font-size:13px;color:var(--text);cursor:pointer;'
-      + 'background:none;border:none;padding:3px 6px;border-radius:3px;width:100%;'
-      + 'display:flex;align-items:center;justify-content:center;gap:4px;">'
-      + c.label + ' <span style="font-size:9px;color:var(--accent);">⏱</span></button>'
-      + '<div style="color:var(--muted);font-size:8px;">' + c.dist + 'm @ ' + c.pct + '%</div>'
-      + (tgt ? '<div style="color:var(--accent);font-size:9px;margin-top:2px;">↳ ' + tgt + 's</div>' : '')
+      + 'border-bottom:2px solid var(--accent);text-align:center;min-width:72px;' + borderLeft + '">'
+      + '<div style="color:var(--text);font-size:10px;font-weight:bold;">' + c.label + '</div>'
+      + '<div style="color:var(--muted);font-size:8px;">' + c.dist + 'm@' + c.pct + '%</div>'
+      + (tgt ? '<div style="color:var(--accent);font-size:9px;margin-top:1px;">↳ ' + tgt + 's</div>' : '')
       + '</th>';
   });
   html += '</tr></thead><tbody>';
@@ -9162,46 +8808,23 @@ function _updateMultiTable() {
     var p = profiles.find(function(pr) { return pr.id === pid; });
     if (!p) return;
 
-    var blockSummary = getAthleteBlockSummary(pid);
-
     html += '<tr>';
+    // Nom athlète sticky
+    html += '<td style="padding:8px 10px;font-family:Bebas Neue,sans-serif;font-size:15px;'
+      + 'color:var(--text);border-bottom:1px solid var(--border);white-space:nowrap;'
+      + 'position:sticky;left:0;background:var(--bg);z-index:1;">' + p.name + '</td>';
 
-    // Cellule nom + cibles perso : sticky
-    html += '<td style="padding:0;border-bottom:1px solid var(--border);'
-      + 'position:sticky;left:0;background:var(--bg);z-index:2;min-width:120px;max-width:150px;">';
-    html += '<div style="padding:6px 10px;">';
-
-    // Nom
-    html += '<div style="font-family:Bebas Neue,sans-serif;font-size:16px;color:var(--text);'
-      + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.1;">'
-      + p.name + '</div>';
-
-    // Temps cibles depuis les records du profil
-    if (blockSummary.length) {
-      blockSummary.forEach(function(line) {
-        html += '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--accent);'
-          + 'white-space:nowrap;line-height:1.5;">' + line + '</div>';
-      });
-    } else {
-      // Pas de records → indiquer
-      html += '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);'
-        + 'font-style:italic;margin-top:2px;">Pas de records</div>';
-    }
-
-    html += '</div></td>';
-
-    // Cellules de saisie
     var lastBi2 = -1;
     cols.forEach(function(c, ci) {
-      var isFirst = (c.bi !== lastBi2); lastBi2 = c.bi;
+      var isFirst = (c.bi !== lastBi2);
+      lastBi2 = c.bi;
       var inputId = 'mt_' + pid + '_' + c.bi + '_' + c.ri;
-      // Placeholder = cible perso de l'athlète pour ce bloc
-      var tgt = getAthleteTarget(pid, c.dist, c.pct) || globalTargets[ci] || '';
+      var tgt = targets[ci];
       var borderLeft = isFirst && ci > 0 ? 'border-left:2px solid var(--border);' : '';
       html += '<td style="padding:4px 3px;border-bottom:1px solid var(--border);text-align:center;' + borderLeft + '">'
         + '<input type="number" id="' + inputId + '" step="0.01" min="5" max="120" '
         + 'placeholder="' + (tgt || '—') + '" '
-        + 'style="width:68px;padding:6px 4px;background:var(--surface2);border:1px solid var(--border);'
+        + 'style="width:66px;padding:6px 4px;background:var(--surface2);border:1px solid var(--border);'
         + 'border-radius:3px;color:var(--text);font-family:DM Mono,monospace;font-size:12px;'
         + 'text-align:center;-moz-appearance:textfield;" '
         + 'data-tgt="' + (tgt || '') + '" oninput="highlightMultiCell(this,this.dataset.tgt)">'
@@ -9781,137 +9404,49 @@ setTimeout(() => {
 
 
 
-<!-- ══════════════════════════════════════════════ -->
-<!-- ══  PAGE DE CONNEXION SUPABASE  ══════════════ -->
-<!-- ══════════════════════════════════════════════ -->
-<div id="loginScreen" style="
-  position:fixed;inset:0;z-index:99999;
-  background:#0a0a0b;
-  display:flex;flex-direction:column;
-  align-items:center;justify-content:center;
-  padding:20px;
-">
-  <!-- Logo / Titre -->
-  <div style="text-align:center;margin-bottom:40px;">
-    <div style="font-family:'Bebas Neue',sans-serif;font-size:48px;color:#F5C800;letter-spacing:4px;line-height:1;">
-      TRACKSPEED
-    </div>
-    <div style="font-family:'DM Mono',monospace;font-size:9px;color:#6b6b7a;letter-spacing:3px;margin-top:4px;">
-      OUTIL DE COACHING SPRINT
-    </div>
+<!-- ══ PAGE DE CONNEXION ══ -->
+<div id="loginScreen" style="position:fixed;inset:0;z-index:99999;background:#0a0a0b;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;">
+  <div style="text-align:center;margin-bottom:36px;">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:52px;color:#F5C800;letter-spacing:4px;line-height:1;">TRACKSPEED</div>
+    <div style="font-family:'DM Mono',monospace;font-size:9px;color:#6b6b7a;letter-spacing:3px;margin-top:4px;">OUTIL DE COACHING SPRINT</div>
   </div>
-
-  <!-- Carte connexion -->
-  <div style="
-    background:#111114;border:1px solid #1e1e24;border-radius:12px;
-    width:100%;max-width:380px;overflow:hidden;
-  ">
-    <!-- Onglets -->
+  <div style="background:#111114;border:1px solid #1e1e24;border-radius:12px;width:100%;max-width:380px;overflow:hidden;">
     <div style="display:flex;border-bottom:1px solid #1e1e24;">
-      <button id="loginTab" onclick="loginSwitchTab('login')"
-        style="flex:1;padding:14px;font-family:'DM Mono',monospace;font-size:9px;
-               letter-spacing:2px;background:none;border:none;
-               border-bottom:2px solid #F5C800;color:#F5C800;cursor:pointer;">
-        CONNEXION
-      </button>
-      <button id="signupTab" onclick="loginSwitchTab('signup')"
-        style="flex:1;padding:14px;font-family:'DM Mono',monospace;font-size:9px;
-               letter-spacing:2px;background:none;border:none;
-               border-bottom:2px solid transparent;color:#6b6b7a;cursor:pointer;">
-        CRÉER UN COMPTE
-      </button>
+      <button id="loginTab" onclick="loginSwitchTab('login')" style="flex:1;padding:14px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;background:none;border:none;border-bottom:2px solid #F5C800;color:#F5C800;cursor:pointer;">CONNEXION</button>
+      <button id="signupTab" onclick="loginSwitchTab('signup')" style="flex:1;padding:14px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;background:none;border:none;border-bottom:2px solid transparent;color:#6b6b7a;cursor:pointer;">CRÉER UN COMPTE</button>
     </div>
-
-    <!-- Formulaire -->
     <div style="padding:28px 24px;">
       <div style="margin-bottom:16px;">
-        <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;
-                      letter-spacing:2px;display:block;margin-bottom:8px;">EMAIL</label>
-        <input id="loginEmail" type="email" placeholder="ton@email.com"
-          autocomplete="email"
-          style="width:100%;box-sizing:border-box;background:#16161a;
-                 border:1px solid #1e1e24;border-radius:6px;
-                 padding:12px 14px;color:#f0f0f0;
-                 font-family:'DM Mono',monospace;font-size:13px;outline:none;"
-          onfocus="this.style.borderColor='#F5C800'"
-          onblur="this.style.borderColor='#1e1e24'">
+        <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:8px;">EMAIL</label>
+        <input id="loginEmail" type="email" placeholder="ton@email.com" autocomplete="email"
+          style="width:100%;box-sizing:border-box;background:#16161a;border:1px solid #1e1e24;border-radius:6px;padding:12px 14px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:13px;outline:none;">
       </div>
       <div style="margin-bottom:8px;">
-        <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;
-                      letter-spacing:2px;display:block;margin-bottom:8px;">MOT DE PASSE</label>
-        <input id="loginPassword" type="password" placeholder="••••••••"
-          autocomplete="current-password"
-          style="width:100%;box-sizing:border-box;background:#16161a;
-                 border:1px solid #1e1e24;border-radius:6px;
-                 padding:12px 14px;color:#f0f0f0;
-                 font-family:'DM Mono',monospace;font-size:13px;outline:none;"
-          onfocus="this.style.borderColor='#F5C800'"
-          onblur="this.style.borderColor='#1e1e24'"
+        <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:8px;">MOT DE PASSE</label>
+        <input id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password"
+          style="width:100%;box-sizing:border-box;background:#16161a;border:1px solid #1e1e24;border-radius:6px;padding:12px 14px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:13px;outline:none;"
           onkeydown="if(event.key==='Enter')loginSubmit()">
       </div>
-
-      <!-- Mot de passe oublié -->
       <div id="loginForgotWrap" style="text-align:right;margin-bottom:20px;">
-        <button onclick="loginForgot()"
-          style="background:none;border:none;font-family:'DM Mono',monospace;
-                 font-size:8px;color:#6b6b7a;cursor:pointer;text-decoration:underline;">
-          Mot de passe oublié ?
-        </button>
+        <button onclick="loginForgot()" style="background:none;border:none;font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;cursor:pointer;text-decoration:underline;">Mot de passe oublié ?</button>
       </div>
-
-      <!-- Message erreur/succès -->
-      <div id="loginMsg" style="
-        font-family:'DM Mono',monospace;font-size:9px;line-height:1.5;
-        margin-bottom:16px;display:none;padding:10px 12px;border-radius:6px;
-      "></div>
-
-      <!-- Bouton principal -->
-      <button id="loginBtn" onclick="loginSubmit()"
-        style="width:100%;background:#F5C800;border:none;border-radius:6px;
-               padding:14px;font-family:'Bebas Neue',sans-serif;font-size:20px;
-               color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:16px;">
-        SE CONNECTER
-      </button>
-
-      <!-- Séparateur -->
+      <div id="loginMsg" style="font-family:'DM Mono',monospace;font-size:9px;line-height:1.5;margin-bottom:16px;display:none;padding:10px 12px;border-radius:6px;"></div>
+      <button id="loginBtn" onclick="loginSubmit()" style="width:100%;background:#F5C800;border:none;border-radius:6px;padding:14px;font-family:'Bebas Neue',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:16px;">SE CONNECTER</button>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
         <div style="flex:1;height:1px;background:#1e1e24;"></div>
         <span style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;">ou</span>
         <div style="flex:1;height:1px;background:#1e1e24;"></div>
       </div>
-
-      <!-- Utiliser sans compte -->
-      <button onclick="loginSkip()"
-        style="width:100%;background:none;border:1px solid #1e1e24;border-radius:6px;
-               padding:12px;font-family:'DM Mono',monospace;font-size:9px;
-               letter-spacing:1px;color:#6b6b7a;cursor:pointer;">
-        Continuer sans compte (données locales uniquement)
-      </button>
+      <button onclick="loginSkip()" style="width:100%;background:none;border:1px solid #1e1e24;border-radius:6px;padding:12px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;color:#6b6b7a;cursor:pointer;">Continuer sans compte (données locales uniquement)</button>
     </div>
   </div>
-
-  <!-- Info -->
-  <div style="margin-top:20px;font-family:'DM Mono',monospace;font-size:8px;
-              color:#6b6b7a;text-align:center;line-height:1.8;max-width:320px;">
-    Avec un compte, tes données sont sauvegardées en ligne<br>et accessibles depuis n'importe quel appareil.
-  </div>
+  <div style="margin-top:20px;font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;text-align:center;line-height:1.8;">Avec un compte, tes données sont sauvegardées en ligne<br>et accessibles depuis n'importe quel appareil.</div>
 </div>
 
-<!-- Indicateur sync dans la nav -->
-<div id="sbNavBar" style="
-  display:none;position:fixed;top:0;right:0;z-index:1000;
-  padding:6px 12px;display:none;align-items:center;gap:8px;
-">
+<!-- Barre utilisateur -->
+<div id="sbNavBar" style="display:none;position:fixed;top:0;right:0;z-index:1000;padding:6px 12px;align-items:center;gap:8px;">
   <span id="sbSyncBadge" style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;">☁</span>
-  <button id="sbUserBtn" onclick="loginShowProfile()"
-    style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;
-           background:none;border:1px solid #1e1e24;border-radius:20px;
-           padding:4px 10px;color:#6b6b7a;cursor:pointer;">
-    ☁ Connexion
-  </button>
+  <button id="sbUserBtn" onclick="loginShowProfile()" style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;background:none;border:1px solid #1e1e24;border-radius:20px;padding:4px 10px;color:#6b6b7a;cursor:pointer;">☁ Connexion</button>
 </div>
-
 </body>
-</htmlconst _SB_URL = 'https://vkhammhuignhwzbmxhwc.supabase.co';
-const _SB_KEY = 'sb_publishable_3u7Tp7CkyCFjvF3eT2TyFQ_RmrG5zDq';
->
+</html>
