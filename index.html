@@ -910,6 +910,13 @@ body.light-theme canvas { filter:invert(0); }
 
     <div id="sessionList"></div>
 
+    <!-- ══ BOUTON SAUVEGARDER SÉANCE ══ -->
+    <div id="sessionSaveRow" style="display:none;margin-top:12px;margin-bottom:4px;">
+      <button onclick="saveSessionWithTimes()" class="btn primary" style="width:100%;font-size:12px;padding:12px;letter-spacing:1px;">
+        💾 SAUVEGARDER LA SÉANCE (avec temps saisis)
+      </button>
+    </div>
+
     <!-- ══ SAISIE MULTI-ATHLÈTES (toujours visible) ══ -->
     <div id="multiAthleteSection" style="margin-top:16px;border-top:2px solid var(--accent);padding-top:16px;">
 
@@ -1346,20 +1353,15 @@ function sbSyncBadgeSet(text, color, autoReset) {
 
 function sbPush(table, data) {
   if (!_sbUser || !_sb) return Promise.resolve({ ok: false, reason: 'not_logged_in' });
-  var payload = { data: data, updated_at: new Date().toISOString() };
-  // Try UPDATE first; if no row matched, INSERT
-  return _sb.from(table).update(payload).eq('user_id', _sbUser.id).select()
+  var payload = { user_id: _sbUser.id, data: data, updated_at: new Date().toISOString() };
+  // upsert = INSERT or UPDATE on conflict (user_id must be unique in each table)
+  return _sb.from(table).upsert(payload, { onConflict: 'user_id' })
     .then(function(r) {
-      if (r.error) { console.error('sbPush update [' + table + ']:', r.error.message); return { ok: false, reason: r.error.message }; }
-      // .select() returns updated rows; empty array means no row existed yet
-      var updated = r.data && r.data.length > 0;
-      if (updated) return { ok: true };
-      // No row existed yet — INSERT
-      return _sb.from(table).insert({ user_id: _sbUser.id, data: data, updated_at: new Date().toISOString() })
-        .then(function(r2) {
-          if (r2.error) { console.error('sbPush insert [' + table + ']:', r2.error.message); return { ok: false, reason: r2.error.message }; }
-          return { ok: true };
-        });
+      if (r.error) {
+        console.error('sbPush upsert [' + table + ']:', r.error.message);
+        return { ok: false, reason: r.error.message };
+      }
+      return { ok: true };
     }).catch(function(e) {
       console.error('sbPush exception [' + table + ']:', e);
       return { ok: false, reason: e.message };
@@ -1459,8 +1461,14 @@ function sbSyncAll() {
       sbSyncBadgeSet('✓ sync', '#22c55e', true);
     } else {
       var failed = ['profils','historique','planif','réglages'].filter(function(_,i){ return !results[i] || !results[i].ok; });
+      var reasons = results.map(function(r,i){ return r && !r.ok ? (r.reason||'?') : null; }).filter(Boolean);
       sbSyncBadgeSet('⚠ ' + failed.join(','), '#ef4444', false);
-      console.error('sbSyncAll partial failure:', results);
+      console.error('sbSyncAll partial failure:', results, 'Reasons:', reasons);
+      // Show persistent error if critical tables failed
+      if (failed.includes('historique') || failed.includes('profils')) {
+        var badge = document.getElementById('sbSyncBadge');
+        if (badge) { badge.title = 'Erreur: ' + reasons.join(', '); }
+      }
     }
   }).catch(function(e) {
     console.error('sbSyncAll exception:', e);
@@ -2037,7 +2045,7 @@ var PLANIF_IMPORTANCE = [
 
 function savePlanifData() {
   localStorage.setItem('sc_planifs', JSON.stringify(planifData));
-  sbScheduleSync();
+  if (_sbUser) { sbScheduleSync(); }
 }
 
 // ── Helpers semaines ISO ──
@@ -5218,7 +5226,10 @@ function renderResults() {
 }
 
 // ── PROFILES ──
-function saveProfiles() { localStorage.setItem('sc_profiles', JSON.stringify(profiles)); sbScheduleSync(); }
+function saveProfiles() {
+  localStorage.setItem('sc_profiles', JSON.stringify(profiles));
+  if (_sbUser) { sbScheduleSync(); }
+}
 
 function getPRVal(id) {
   const v = parseFloat(document.getElementById(id).value);
@@ -5460,7 +5471,10 @@ function renderProfiles() {
 }
 
 // ── HISTORY ──
-function saveHistoryData() { localStorage.setItem('sc_history', JSON.stringify(historyData)); sbScheduleSync(); }
+function saveHistoryData() {
+  localStorage.setItem('sc_history', JSON.stringify(historyData));
+  if (_sbUser) { sbScheduleSync(); }
+}
 
 function saveToHistory() {
   if (!currentRefs.length) { alert('Aucun calcul à sauvegarder.'); return; }
@@ -7235,6 +7249,7 @@ function renderSession() {
   if (!sessionBlocks.length) {
     bc.innerHTML = '<div class="empty-state" style="padding:20px"><span class="empty-icon">📋</span>Aucun bloc — ajoutez un bloc ci-dessus</div>';
     document.getElementById('sessionPlanCard').style.display = 'none';
+    var sr = document.getElementById('sessionSaveRow'); if (sr) sr.style.display = 'none';
     return;
   }
 
@@ -7300,11 +7315,14 @@ function renderSession() {
 
   document.getElementById('sessionPlanCard').style.display = 'block';
 
+  var saveRow = document.getElementById('sessionSaveRow');
   if (!currentRefs.length) {
     document.getElementById('sessionSummary').textContent = '';
     document.getElementById('sessionList').innerHTML = '<div class="empty-state" style="padding:20px"><span class="empty-icon">⏱</span>Entrez un temps dans le calculateur pour voir les temps cibles</div>';
+    if (saveRow) saveRow.style.display = 'none';
     return;
   }
+  if (saveRow) saveRow.style.display = 'block';
 
   let html = '', totalTime = 0, totalReps = 0, repIndex = 0;
 
@@ -7475,7 +7493,17 @@ function saveSessionWithTimes() {
   });
   if (historyData[pid].length > 50) historyData[pid] = historyData[pid].slice(0,50);
   saveHistoryData();
-  alert('✅ Séance sauvegardée avec les temps réels !');
+  // Feedback visuel
+  var btn = document.querySelector('#sessionSaveRow .btn');
+  if (btn) {
+    var orig = btn.textContent;
+    btn.textContent = '✅ Séance sauvegardée !';
+    btn.style.background = '#22c55e'; btn.style.borderColor = '#22c55e';
+    setTimeout(function() {
+      btn.textContent = orig;
+      btn.style.background = ''; btn.style.borderColor = '';
+    }, 2500);
+  }
 }
 
 
