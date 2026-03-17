@@ -226,6 +226,10 @@ body.light-theme canvas { filter:invert(0); }
 }
 #themeToggle:hover { border-color:var(--accent); color:var(--accent); }
 </style>
+
+<!-- ══ SUPABASE SDK ══ -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 </head>
 <body>
 
@@ -844,14 +848,15 @@ body.light-theme canvas { filter:invert(0); }
               <button onclick="inlineChronoSet(180)" style="font-family:'DM Mono',monospace;font-size:8px;padding:4px 8px;border-radius:3px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;">3'</button>
               <button onclick="inlineChronoSet(240)" style="font-family:'DM Mono',monospace;font-size:8px;padding:4px 8px;border-radius:3px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;">4'</button>
               <button onclick="inlineChronoSet(300)" style="font-family:'DM Mono',monospace;font-size:8px;padding:4px 8px;border-radius:3px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;">5'</button>
-              <!-- Saisie manuelle mm:ss -->
-              <div style="display:flex;align-items:center;gap:3px;margin-left:2px;">
-                <input id="inlineChronoCustom" type="text" placeholder="mm:ss" maxlength="5"
-                  style="width:52px;padding:4px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:'DM Mono',monospace;font-size:9px;text-align:center;outline:none;"
-                  oninput="this.value=this.value.replace(/[^0-9:]/g,'')"
-                  onkeydown="if(event.key==='Enter')inlineChronoSetCustom()">
-                <button onclick="inlineChronoSetCustom()"
-                  style="font-family:'DM Mono',monospace;font-size:8px;padding:4px 7px;border-radius:3px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;">OK</button>
+              <!-- Durée personnalisée -->
+              <div style="display:flex;align-items:center;gap:6px;margin-left:4px;">
+                <input id="inlineChronoSlider" type="range" min="15" max="900" step="15" value="180"
+                  style="width:80px;accent-color:var(--accent);cursor:pointer;"
+                  oninput="_iChronoSliderUpdate()">
+                <span id="inlineChronoSliderVal"
+                  style="font-family:'DM Mono',monospace;font-size:9px;color:var(--accent);min-width:28px;cursor:pointer;"
+                  onclick="inlineChronoSet(parseInt(document.getElementById('inlineChronoSlider').value),true)"
+                  title="Cliquer pour démarrer">3'00</span>
               </div>
             </div>
             <!-- Start / Reset -->
@@ -1195,9 +1200,265 @@ body.light-theme canvas { filter:invert(0); }
   <button class="nav-btn"        id="nav-session"  onclick="goPage('page-session')"> <span class="icon">📋</span>Séance</button>
   <button class="nav-btn"        id="nav-force"    onclick="goPage('page-force')">   <span class="icon">🏋</span>Force</button>
   <button class="nav-btn"        id="nav-planif"   onclick="goPage('page-planif')">  <span class="icon">📅</span>Planif</button>
+  <button id="sbUserBtn"
+    style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;
+           background:none;border:1px solid var(--border);border-radius:20px;
+           padding:4px 10px;color:var(--muted);cursor:pointer;white-space:nowrap;
+           position:absolute;top:8px;right:12px;display:flex;align-items:center;gap:4px;">
+    <span style="font-size:10px;">☁</span> Connexion
+  </button>
+  <span id="sbSyncBadge" style="position:absolute;top:8px;right:120px;font-family:'DM Mono',monospace;font-size:7px;color:var(--muted);opacity:0.7;">☁</span>
 </nav>
 
 <script>
+// ════════════════════════════════════════════════════════
+// ══  SUPABASE — AUTH & SYNC  ════════════════════════════
+// ════════════════════════════════════════════════════════
+
+const _SB_URL =  + SUPABASE_URL + ;
+const _SB_KEY =  + SUPABASE_KEY + ;
+const _sb = supabase.createClient(_SB_URL, _SB_KEY);
+
+let _sbUser = null;
+let _sbSyncTimeout = null;
+
+// ── Initialisation ──
+async function sbInit() {
+  const { data: { session } } = await _sb.auth.getSession();
+  if (session) {
+    _sbUser = session.user;
+    await sbPullAll();
+    sbRenderUser();
+  }
+  _sb.auth.onAuthStateChange(async (event, session) => {
+    _sbUser = session?.user || null;
+    if (event === 'SIGNED_IN') {
+      await sbPullAll();
+      sbRenderUser();
+      sbHideAuthModal();
+    }
+    if (event === 'SIGNED_OUT') {
+      sbRenderUser();
+    }
+  });
+}
+
+// ── Push : envoyer les données locales vers Supabase ──
+async function sbPush(table, data) {
+  if (!_sbUser) return;
+  const { error } = await _sb.from(table).upsert({
+    user_id: _sbUser.id,
+    data: data,
+    updated_at: new Date().toISOString()
+  }, { onConflict: 'user_id' });
+  if (error) console.warn('Supabase push error:', error.message);
+}
+
+// ── Pull : récupérer les données depuis Supabase ──
+async function sbPull(table) {
+  if (!_sbUser) return null;
+  const { data, error } = await _sb.from(table).select('data').eq('user_id', _sbUser.id).single();
+  if (error && error.code !== 'PGRST116') console.warn('Supabase pull error:', error.message);
+  return data?.data || null;
+}
+
+// ── Pull complet au login ──
+async function sbPullAll() {
+  const [prof, hist, planif, sett] = await Promise.all([
+    sbPull('profiles_data'),
+    sbPull('history_data'),
+    sbPull('planif_data'),
+    sbPull('settings_data'),
+  ]);
+  if (prof  !== null) { localStorage.setItem('sc_profiles', JSON.stringify(prof));  profiles    = prof; }
+  if (hist  !== null) { localStorage.setItem('sc_history',  JSON.stringify(hist));  historyData = hist; }
+  if (planif !== null){ localStorage.setItem('sc_planifs',  JSON.stringify(planif)); planifData  = planif; }
+  if (sett  !== null) {
+    if (sett.theme) { localStorage.setItem('sc_theme', sett.theme); lightTheme = sett.theme === 'light'; }
+  }
+  // Rafraîchir l'UI
+  renderProfiles();
+  renderHome();
+  if (document.getElementById('page-planif')?.classList.contains('active')) renderPlanifListe();
+}
+
+// ── Sync auto avec debounce (1.5s après la dernière modif) ──
+function sbScheduleSync() {
+  if (!_sbUser) return;
+  clearTimeout(_sbSyncTimeout);
+  _sbSyncTimeout = setTimeout(sbSyncAll, 1500);
+}
+
+async function sbSyncAll() {
+  if (!_sbUser) return;
+  await Promise.all([
+    sbPush('profiles_data', profiles),
+    sbPush('history_data',  historyData),
+    sbPush('planif_data',   planifData),
+    sbPush('settings_data', { theme: lightTheme ? 'light' : 'dark' }),
+  ]);
+  // Badge sync
+  const badge = document.getElementById('sbSyncBadge');
+  if (badge) {
+    badge.textContent = '✓ Sync';
+    badge.style.color = '#22c55e';
+    setTimeout(() => { if (badge) { badge.textContent = '☁'; badge.style.color = 'var(--muted)'; } }, 2000);
+  }
+}
+
+// ── Auth : connexion / inscription ──
+async function sbSignIn(email, password) {
+  const { error } = await _sb.auth.signInWithPassword({ email, password });
+  if (error) return error.message;
+  return null;
+}
+
+async function sbSignUp(email, password) {
+  const { error } = await _sb.auth.signUp({ email, password });
+  if (error) return error.message;
+  return null;
+}
+
+async function sbSignOut() {
+  await _sb.auth.signOut();
+  _sbUser = null;
+  sbRenderUser();
+}
+
+async function sbResetPassword(email) {
+  const { error } = await _sb.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname
+  });
+  return error ? error.message : null;
+}
+
+// ── Modal Auth ──
+function sbShowAuthModal(tab) {
+  let modal = document.getElementById('sbAuthModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'sbAuthModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+    modal.innerHTML = `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;width:100%;max-width:380px;overflow:hidden;">
+        <!-- Header -->
+        <div style="padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--text);line-height:1;">TRACKSPEED</div>
+            <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:2px;margin-top:2px;">CONNEXION AU COMPTE</div>
+          </div>
+          <button onclick="sbHideAuthModal()" style="background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer;">✕</button>
+        </div>
+        <!-- Onglets -->
+        <div style="display:flex;border-bottom:1px solid var(--border);">
+          <button id="sbTabLogin" onclick="sbSwitchTab('login')"
+            style="flex:1;padding:12px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;background:none;border:none;border-bottom:2px solid var(--accent);color:var(--accent);cursor:pointer;">
+            CONNEXION
+          </button>
+          <button id="sbTabSignup" onclick="sbSwitchTab('signup')"
+            style="flex:1;padding:12px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);cursor:pointer;">
+            CRÉER UN COMPTE
+          </button>
+        </div>
+        <!-- Formulaire -->
+        <div style="padding:24px;">
+          <div style="margin-bottom:14px;">
+            <label style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:6px;">EMAIL</label>
+            <input id="sbEmail" type="email" placeholder="ton@email.com"
+              style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:10px 12px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;">
+          </div>
+          <div style="margin-bottom:20px;">
+            <label style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:6px;">MOT DE PASSE</label>
+            <input id="sbPassword" type="password" placeholder="••••••••"
+              style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:10px 12px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;">
+          </div>
+          <div id="sbError" style="font-family:'DM Mono',monospace;font-size:9px;color:#ef4444;margin-bottom:12px;display:none;"></div>
+          <button id="sbSubmitBtn" onclick="sbSubmit()"
+            style="width:100%;background:var(--accent);border:none;border-radius:4px;padding:12px;font-family:'Bebas Neue',sans-serif;font-size:18px;color:#000;cursor:pointer;letter-spacing:1px;">
+            SE CONNECTER
+          </button>
+          <div id="sbForgot" style="text-align:center;margin-top:12px;">
+            <button onclick="sbForgotPassword()" style="background:none;border:none;font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);cursor:pointer;text-decoration:underline;">
+              Mot de passe oublié ?
+            </button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'flex';
+  document.getElementById('sbEmail')?.focus();
+  if (tab) sbSwitchTab(tab);
+}
+
+function sbHideAuthModal() {
+  const modal = document.getElementById('sbAuthModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function sbSwitchTab(tab) {
+  const isLogin = tab === 'login';
+  const tl = document.getElementById('sbTabLogin');
+  const ts = document.getElementById('sbTabSignup');
+  const btn = document.getElementById('sbSubmitBtn');
+  const forgot = document.getElementById('sbForgot');
+  if (tl) { tl.style.borderBottomColor = isLogin ? 'var(--accent)' : 'transparent'; tl.style.color = isLogin ? 'var(--accent)' : 'var(--muted)'; }
+  if (ts) { ts.style.borderBottomColor = !isLogin ? 'var(--accent)' : 'transparent'; ts.style.color = !isLogin ? 'var(--accent)' : 'var(--muted)'; }
+  if (btn) btn.textContent = isLogin ? 'SE CONNECTER' : 'CRÉER MON COMPTE';
+  if (forgot) forgot.style.display = isLogin ? 'block' : 'none';
+  window._sbCurrentTab = tab;
+}
+
+async function sbSubmit() {
+  const email = document.getElementById('sbEmail')?.value?.trim();
+  const pass  = document.getElementById('sbPassword')?.value;
+  const errEl = document.getElementById('sbError');
+  const btn   = document.getElementById('sbSubmitBtn');
+  if (!email || !pass) { if (errEl) { errEl.textContent = 'Email et mot de passe requis.'; errEl.style.display = 'block'; } return; }
+  if (btn) { btn.textContent = '...'; btn.disabled = true; }
+  const err = window._sbCurrentTab === 'signup' ? await sbSignUp(email, pass) : await sbSignIn(email, pass);
+  if (btn) { btn.disabled = false; btn.textContent = window._sbCurrentTab === 'signup' ? 'CRÉER MON COMPTE' : 'SE CONNECTER'; }
+  if (err) {
+    if (errEl) { errEl.textContent = err; errEl.style.display = 'block'; }
+  } else if (window._sbCurrentTab === 'signup') {
+    if (errEl) { errEl.style.color = '#22c55e'; errEl.textContent = 'Compte créé ! Vérifie ton email pour confirmer.'; errEl.style.display = 'block'; }
+  }
+}
+
+async function sbForgotPassword() {
+  const email = document.getElementById('sbEmail')?.value?.trim();
+  if (!email) { const e = document.getElementById('sbError'); if (e) { e.textContent = 'Entre ton email d'abord.'; e.style.display = 'block'; } return; }
+  const err = await sbResetPassword(email);
+  const errEl = document.getElementById('sbError');
+  if (errEl) {
+    errEl.style.color = err ? '#ef4444' : '#22c55e';
+    errEl.textContent = err || 'Email de réinitialisation envoyé !';
+    errEl.style.display = 'block';
+  }
+}
+
+// ── Afficher l'état utilisateur dans la nav ──
+function sbRenderUser() {
+  let btn = document.getElementById('sbUserBtn');
+  if (!btn) return;
+  if (_sbUser) {
+    const email = _sbUser.email;
+    const short = email.split('@')[0].substring(0, 10);
+    btn.innerHTML = '<span style="font-size:10px;">☁</span> ' + short;
+    btn.title = email + ' — Cliquer pour se déconnecter';
+    btn.onclick = () => { if (confirm('Se déconnecter ?')) sbSignOut(); };
+    btn.style.color = 'var(--accent)';
+    btn.style.borderColor = 'var(--accent)';
+  } else {
+    btn.innerHTML = '<span style="font-size:10px;">☁</span> Connexion';
+    btn.title = 'Se connecter pour synchroniser ses données';
+    btn.onclick = () => sbShowAuthModal('login');
+    btn.style.color = 'var(--muted)';
+    btn.style.borderColor = 'var(--border)';
+  }
+}
+
+
 // ── STATE ──
 let appMode = '100', pct = 100, calcMethod = 'interp';
 // ── PLANIFICATION ──
@@ -1524,6 +1785,7 @@ var PLANIF_IMPORTANCE = [
 
 function savePlanifData() {
   localStorage.setItem('sc_planifs', JSON.stringify(planifData));
+  sbScheduleSync();
 }
 
 // ── Helpers semaines ISO ──
@@ -1697,6 +1959,13 @@ function renderPlanifIA() {
     + '<div>'
     + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:var(--text);line-height:1;">GÉNÉRATION IA DE PLANIFICATION</div>'
     + '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);margin-top:3px;">L\'IA crée une périodisation optimale basée sur la science du sprint</div>'
+    + '</div></div>'
+    + '<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:6px;padding:10px 14px;margin-bottom:4px;display:flex;gap:8px;align-items:flex-start;">'
+    + '<span style="font-size:14px;flex-shrink:0;">&#9888;&#65039;</span>'
+    + '<div style="font-family:DM Mono,monospace;font-size:8px;color:rgba(245,158,11,0.85);line-height:1.7;">'
+    + '<strong>Version B&eacute;ta &mdash; &agrave; utiliser avec recul.</strong> '
+    + "L'IA peut faire des erreurs dans la structure des phases, les charges ou la p&eacute;riodisation. "
+    + "V&eacute;rifie toujours le r&eacute;sultat et ajuste selon ton expertise."
     + '</div></div>'
 
     // ── Formulaire ──
@@ -4707,6 +4976,7 @@ function saveProfiles() { localStorage.setItem('sc_profiles', JSON.stringify(pro
 function getPRVal(id) {
   const v = parseFloat(document.getElementById(id).value);
   return isNaN(v) ? null : v;
+  sbScheduleSync();
 }
 
 
@@ -4956,6 +5226,7 @@ function saveToHistory() {
   if (historyData[pid].length > 50) historyData[pid] = historyData[pid].slice(0,50);
   saveHistoryData();
   alert('✅ Session sauvegardée !');
+  sbScheduleSync();
 }
 
 function clearHistory() {
@@ -8010,23 +8281,16 @@ function inlineChronoSet(seconds, autoStart) {
   }
 }
 
-function inlineChronoSetCustom() {
-  var raw = (document.getElementById('inlineChronoCustom')?.value || '').trim();
-  var secs = 0;
-  if (raw.includes(':')) {
-    var parts = raw.split(':');
-    var m = parseInt(parts[0]) || 0;
-    var s = parseInt(parts[1]) || 0;
-    secs = m * 60 + s;
-  } else {
-    // Juste un nombre → minutes
-    secs = (parseInt(raw) || 0) * 60;
-  }
-  if (secs <= 0) return;
-  inlineChronoSet(secs);
-  // Vider le champ après validation
-  var inp = document.getElementById('inlineChronoCustom');
-  if (inp) inp.value = '';
+function _iChronoSliderUpdate() {
+  var slider = document.getElementById('inlineChronoSlider');
+  var val    = document.getElementById('inlineChronoSliderVal');
+  if (!slider || !val) return;
+  var secs = parseInt(slider.value);
+  var m = Math.floor(secs / 60);
+  var s = secs % 60;
+  val.textContent = m + "'" + String(s).padStart(2, "0");
+  // Configurer sans démarrer (l'utilisateur clique sur la valeur pour démarrer)
+  inlineChronoSet(secs, false);
 }
 
 function inlineChronoToggle() {
@@ -9536,6 +9800,8 @@ function deleteCompetResult(pid, saison, idxInFiltered) {
 // ── INIT ──
 renderProfiles();
 renderHome();
+sbInit();
+sbRenderUser();
 // Vérifier si une séance force est en attente au chargement
 setTimeout(() => {
   if (localStorage.getItem('sc_force_session_pending') && document.getElementById('page-session')?.classList.contains('active')) {
