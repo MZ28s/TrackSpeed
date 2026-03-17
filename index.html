@@ -10762,24 +10762,46 @@ function renderDailyRpe() {
     var rpeLeft = rpeVal !== null ? ((rpeVal - 1) / 9 * 100) + '%' : '44.4%';
     var rpeColor = rpeVal !== null ? getRpeColor(rpeVal) : 'var(--muted)';
 
-    html += '<div class="fb-day-row" id="rpe-row-' + d + '" style="' + (isRepos ? 'opacity:.45;' : '') + '">' +
-      '<div class="fb-day-label">' +
-        '<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;color:var(--text);">' + ATH_DAYS_LABELS[i].substring(0,3).toUpperCase() + '</div>' +
-        '<div style="display:flex;gap:4px;margin-top:4px;">' +
-          '<button class="fb-tag-btn ' + (isRepos ? 'active-repos' : '') + '" onclick="toggleDayOption(\'' + d + '\',\'repos\')" title="Repos / Absent">😴</button>' +
-          '<button class="fb-tag-btn ' + (isCompet ? 'active-compet' : '') + '" onclick="toggleDayOption(\'' + d + '\',\'compet\')" title="Compétition">🏆</button>' +
-        '</div>' +
-      '</div>' +
-      '<div class="fb-day-rpe ' + (isRepos ? 'disabled' : '') + '">' +
-        '<div style="display:flex;align-items:center;gap:8px;">' +
-          '<div class="rpe-gradient-bar" id="rpeBar_' + d + '" ' + (isRepos ? '' : 'onclick="rpeBarClick(event,\'' + d + '\')"') + ' style="' + (isRepos ? 'cursor:default;opacity:.4;' : 'cursor:pointer;') + '">' +
-            '<div class="rpe-handle" id="rpeHandle_' + d + '" style="left:' + rpeLeft + ';background:var(--bg);border-color:' + rpeColor + ';' + (rpeVal === null ? 'display:none;' : '') + '"></div>' +
+    // Graduations 1-10
+    var ticks = '';
+    for (var t = 1; t <= 10; t++) {
+      var tickLeft = ((t-1)/9*100).toFixed(1) + '%';
+      var tickColor = rpeVal !== null && t <= rpeVal ? getRpeColor(t) : 'rgba(255,255,255,0.15)';
+      ticks += '<div style="position:absolute;top:50%;left:' + tickLeft + ';transform:translate(-50%,-50%);' +
+        'width:4px;height:14px;border-radius:2px;background:' + tickColor + ';pointer-events:none;transition:background .15s;"></div>';
+    }
+    var rpeDisabled = isRepos;
+
+    html +=
+      '<div class="fb-day-row" id="rpe-row-' + d + '">' +
+        '<div class="fb-day-label">' +
+          '<div style="font-family:DM Mono,monospace;font-size:9px;font-weight:600;color:var(--text);">' + ATH_DAYS_LABELS[i].substring(0,3).toUpperCase() + '</div>' +
+          '<div style="display:flex;gap:4px;margin-top:4px;">' +
+            '<button class="fb-tag-btn ' + (isRepos ? 'active-repos' : '') + '" onclick="toggleDayOption(\'' + d + '\',\'repos\')" title="Repos / Absent">😴</button>' +
+            '<button class="fb-tag-btn ' + (isCompet ? 'active-compet' : '') + '" onclick="toggleDayOption(\'' + d + '\',\'compet\')" title="Compétition">🏆</button>' +
           '</div>' +
-          '<div id="rpeVal_' + d + '" style="font-family:\'Bebas Neue\',sans-serif;font-size:26px;min-width:24px;color:' + rpeColor + ';line-height:1;">' + (rpeVal !== null ? rpeVal : '—') + '</div>' +
         '</div>' +
-        (isCompet ? '<div style="font-family:\'DM Mono\',monospace;font-size:7px;color:var(--accent);margin-top:3px;letter-spacing:1px;">🏆 COMPÉTITION</div>' : '') +
-      '</div>' +
-    '</div>';
+        '<div class="fb-day-rpe">' +
+          '<div style="display:flex;align-items:center;gap:10px;">' +
+            '<div style="flex:1;position:relative;">' +
+              '<div class="rpe-gradient-bar" id="rpeBar_' + d + '"' +
+                (rpeDisabled ? '' : ' onclick="rpeBarClick(event,\'' + d + '\')"') +
+                ' style="cursor:' + (rpeDisabled ? 'default' : 'pointer') + ';opacity:' + (rpeDisabled ? '.35' : '1') + ';height:12px;border-radius:6px;">' +
+                ticks +
+                '<div class="rpe-handle" id="rpeHandle_' + d + '" style="left:' + rpeLeft + ';background:var(--bg);border-color:' + rpeColor + ';width:22px;height:22px;' + (rpeVal === null || rpeDisabled ? 'display:none;' : '') + '"></div>' +
+              '</div>' +
+              '<div style="display:flex;justify-content:space-between;margin-top:3px;padding:0 1px;">' +
+                [1,2,3,4,5,6,7,8,9,10].map(function(n) {
+                  return '<span style="font-family:DM Mono,monospace;font-size:7px;color:' + (rpeVal !== null && n <= rpeVal ? getRpeColor(n) : 'rgba(255,255,255,0.2)') + ';">' + n + '</span>';
+                }).join('') +
+              '</div>' +
+            '</div>' +
+            '<div id="rpeVal_' + d + '" style="font-family:Bebas Neue,sans-serif;font-size:28px;min-width:26px;text-align:center;color:' + rpeColor + ';line-height:1;">' + (rpeVal !== null && !rpeDisabled ? rpeVal : '—') + '</div>' +
+          '</div>' +
+          (isCompet && !rpeDisabled ? '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--accent);margin-top:3px;letter-spacing:1px;">🏆 COMPÉTITION</div>' : '') +
+          (isRepos ? '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);margin-top:3px;">😴 Repos — RPE non applicable</div>' : '') +
+        '</div>' +
+      '</div>';
   });
   el.innerHTML = html;
   updateRpeAvg();
@@ -10811,8 +10833,8 @@ function rpeBarClick(e, day) {
 
 function toggleDayOption(day, opt) {
   _feedbackData.days[day][opt] = !_feedbackData.days[day][opt];
+  // Repos désactive uniquement la RPE, pas la forme ni le sommeil
   if (opt === 'repos' && _feedbackData.days[day].repos) {
-    // Si repos activé, réinitialiser RPE du jour
     _feedbackData.days[day].rpe = null;
   }
   renderDailyRpe();
@@ -10855,8 +10877,12 @@ function renderDailyForm() {
     var physVal   = day.phys;
     var mentalVal = day.mental;
 
-    html += '<div style="display:grid;grid-template-columns:52px 1fr 1fr;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);' + (isRepos ? 'opacity:.4;pointer-events:none;' : '') + '">' +
-      '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);letter-spacing:.5px;">' + ATH_DAYS_LABELS[i].substring(0,3).toUpperCase() + '</div>' +
+    // Forme toujours accessible (repos n'affecte pas physique/mental)
+    html += '<div style="display:grid;grid-template-columns:52px 1fr 1fr;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">' +
+      '<div style="font-family:DM Mono,monospace;font-size:8px;color:' + (isRepos ? 'var(--muted)' : 'var(--text)') + ';letter-spacing:.5px;">' +
+        ATH_DAYS_LABELS[i].substring(0,3).toUpperCase() +
+        (isRepos ? '<div style="font-size:9px;margin-top:1px;">😴</div>' : '') +
+      '</div>' +
       '<div style="display:flex;gap:3px;justify-content:center;" id="form-phys-' + d + '">' + makeSmileyBtns(d, 'phys', PHYS_SMILEYS, physVal) + '</div>' +
       '<div style="display:flex;gap:3px;justify-content:center;" id="form-mental-' + d + '">' + makeSmileyBtns(d, 'mental', MENTAL_SMILEYS, mentalVal) + '</div>' +
     '</div>';
@@ -10904,8 +10930,12 @@ function renderSleepRows() {
     var day = _feedbackData.days[d];
     var isRepos = day.repos;
     var dur = calcSleepDuration(day.coucher, day.lever);
-    html += '<div style="display:grid;grid-template-columns:52px 1fr 1fr 48px;gap:6px;align-items:center;padding:4px 0;' + (isRepos ? 'opacity:.4;pointer-events:none;' : '') + '">' +
-      '<div style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted);">' + ATH_DAYS_LABELS[i].substring(0,3).toUpperCase() + '</div>' +
+    // Sommeil toujours accessible
+    html += '<div style="display:grid;grid-template-columns:52px 1fr 1fr 48px;gap:6px;align-items:center;padding:5px 0;">' +
+      '<div style="font-family:DM Mono,monospace;font-size:8px;color:' + (isRepos ? 'var(--muted)' : 'var(--text)') + ';">' +
+        ATH_DAYS_LABELS[i].substring(0,3).toUpperCase() +
+        (isRepos ? '<div style="font-size:9px;">😴</div>' : '') +
+      '</div>' +
       '<input class="sleep-time-input" type="time" id="coucher_' + d + '" value="' + (day.coucher || '') + '" onchange="feedbackSleepChange(\'' + d + '\',\'coucher\',this.value)">' +
       '<input class="sleep-time-input" type="time" id="lever_' + d + '" value="' + (day.lever || '') + '" onchange="feedbackSleepChange(\'' + d + '\',\'lever\',this.value)">' +
       '<div id="sleep-dur-' + d + '" style="font-family:\'DM Mono\',monospace;font-size:8px;color:' + (dur ? 'var(--accent)' : 'var(--muted)') + ';text-align:center;">' + (dur || '—') + '</div>' +
