@@ -6983,6 +6983,23 @@ function addBlock() {
   renderSession();
 }
 
+function toggleEditBlock(i) {
+  var el = document.getElementById('editBlock_' + i);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function saveEditBlock(i) {
+  var reps = parseInt(document.getElementById('editReps_' + i).value);
+  var dist = parseInt(document.getElementById('editDist_' + i).value);
+  var pct  = parseInt(document.getElementById('editPct_' + i).value);
+  var rest = parseFloat(document.getElementById('editRest_' + i).value);
+  if (!reps || !dist || !pct || reps < 1 || dist < 5 || pct < 50) { alert('Valeurs invalides.'); return; }
+  sessionBlocks[i] = { reps: reps, dist: dist, pct: pct, rest: isNaN(rest) ? 0 : rest };
+  renderSession();
+  _updateMultiTable();
+}
+
 function removeBlock(i) {
   sessionBlocks.splice(i, 1);
   renderSession();
@@ -7017,34 +7034,60 @@ function renderSession() {
 
   // Bloc chips
   let chipsHtml = '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:4px;">';
-  sessionBlocks.forEach((b, i) => {
-    let infoStr = '—';
+  sessionBlocks.forEach(function(b, i) {
+    var infoStr = '—';
     if (currentRefs.length) {
-      const tTarget = computeTarget(b.dist, currentRefs);
-      const tAtPct  = tTarget / (b.pct/100);
-      const spd     = b.dist / tAtPct;
-      infoStr = fmt(tAtPct)+' · '+fmtS(spd)+' · '+(spd*3.6).toFixed(1)+' km/h';
+      var tTarget = computeTarget(b.dist, currentRefs);
+      var tAtPct  = tTarget / (b.pct / 100);
+      var spd     = b.dist / tAtPct;
+      infoStr = fmt(tAtPct) + ' · ' + fmtS(spd) + ' · ' + (spd * 3.6).toFixed(1) + ' km/h';
     }
-    chipsHtml += `
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:2px;padding:14px 18px;display:flex;align-items:center;gap:12px;">
-        <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--accent);min-width:32px;">${b.reps}×</div>
-        <div style="flex:1;">
-          <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;">${b.dist}m <span style="color:var(--accent);font-size:18px;">@ ${b.pct}%</span></div>
-          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:2px;">
-            ${infoStr}${b.rest > 0 ? ' · récup '+b.rest+'min' : ' · pas de récup'}
-          </div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:4px;">
-          <button class="icon-btn" onclick="moveBlock(${i},-1)" ${i===0?'disabled style="opacity:.3"':''}>↑</button>
-          <button class="icon-btn" onclick="moveBlock(${i},1)"  ${i===sessionBlocks.length-1?'disabled style="opacity:.3"':''}>↓</button>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:4px;">
-          <button class="icon-btn" onclick="openChronoFromSession(${i});event.stopPropagation()"
-            title="Lancer le chrono avec la pause de ce bloc"
-            style="font-size:13px;background:transparent;border:1px solid var(--accent);color:var(--accent);">⏱</button>
-          <button class="icon-btn del" onclick="removeBlock(${i})">✕</button>
-        </div>
-      </div>`;
+    var disabledUp   = i === 0 ? 'disabled style="opacity:.3"' : '';
+    var disabledDown = i === sessionBlocks.length - 1 ? 'disabled style="opacity:.3"' : '';
+    var recupStr     = b.rest > 0 ? ' · récup ' + b.rest + 'min' : ' · pas de récup';
+
+    chipsHtml +=
+      '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:2px;padding:14px 18px;display:flex;align-items:center;gap:12px;">' +
+        '<div style="font-family:Bebas Neue,sans-serif;font-size:28px;color:var(--accent);min-width:32px;">' + b.reps + '×</div>' +
+        '<div style="flex:1;">' +
+          '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;letter-spacing:1px;">' + b.dist + 'm <span style="color:var(--accent);font-size:18px;">@ ' + b.pct + '%</span></div>' +
+          '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:2px;">' + infoStr + recupStr + '</div>' +
+        '</div>' +
+        '<div style="display:flex;flex-direction:column;gap:4px;">' +
+          '<button class="icon-btn" onclick="moveBlock(' + i + ',-1)" ' + disabledUp + '>↑</button>' +
+          '<button class="icon-btn" onclick="moveBlock(' + i + ',1)" ' + disabledDown + '>↓</button>' +
+        '</div>' +
+        '<div style="display:flex;flex-direction:column;gap:4px;">' +
+          '<button class="icon-btn" onclick="toggleEditBlock(' + i + ')" title="Modifier ce bloc" style="font-size:13px;background:transparent;border:1px solid var(--border);color:var(--muted);">✏️</button>' +
+          '<button class="icon-btn" onclick="openChronoFromSession(' + i + ');event.stopPropagation()" title="Lancer le chrono" style="font-size:13px;background:transparent;border:1px solid var(--accent);color:var(--accent);">⏱</button>' +
+          '<button class="icon-btn del" onclick="removeBlock(' + i + ')">✕</button>' +
+        '</div>' +
+      '</div>' +
+      '<div id="editBlock_' + i + '" style="display:none;border-top:1px solid var(--border);padding:14px 18px;background:var(--surface);">' +
+        '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:12px;">// MODIFIER LE BLOC</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;align-items:end;">' +
+          '<div>' +
+            '<label style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);display:block;margin-bottom:4px;">RÉPÉTITIONS</label>' +
+            '<input type="number" id="editReps_' + i + '" value="' + b.reps + '" min="1" max="50" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px;color:var(--text);font-family:DM Mono,monospace;font-size:13px;">' +
+          '</div>' +
+          '<div>' +
+            '<label style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);display:block;margin-bottom:4px;">DISTANCE (m)</label>' +
+            '<input type="number" id="editDist_' + i + '" value="' + b.dist + '" min="5" max="1000" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px;color:var(--text);font-family:DM Mono,monospace;font-size:13px;">' +
+          '</div>' +
+          '<div>' +
+            '<label style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);display:block;margin-bottom:4px;">INTENSITÉ %</label>' +
+            '<input type="number" id="editPct_' + i + '" value="' + b.pct + '" min="50" max="110" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px;color:var(--text);font-family:DM Mono,monospace;font-size:13px;">' +
+          '</div>' +
+          '<div>' +
+            '<label style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);display:block;margin-bottom:4px;">RÉCUP (min)</label>' +
+            '<input type="number" id="editRest_' + i + '" value="' + b.rest + '" min="0" max="30" step="0.5" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px;color:var(--text);font-family:DM Mono,monospace;font-size:13px;">' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;margin-top:12px;">' +
+          '<button onclick="saveEditBlock(' + i + ')" style="flex:1;background:var(--accent);border:none;border-radius:3px;padding:10px;font-family:DM Mono,monospace;font-size:10px;letter-spacing:1px;color:#000;cursor:pointer;">✓ VALIDER</button>' +
+          '<button onclick="toggleEditBlock(' + i + ')" style="background:transparent;border:1px solid var(--border);border-radius:3px;padding:10px 16px;font-family:DM Mono,monospace;font-size:10px;color:var(--muted);cursor:pointer;">ANNULER</button>' +
+        '</div>' +
+      '</div>';
   });
   chipsHtml += '</div>';
   bc.innerHTML = chipsHtml;
