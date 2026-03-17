@@ -10739,20 +10739,74 @@ function athGoPage(name) {
 }
 
 // ── Init form feedback ────────────────────────────────────
+function feedbackDraftKey() {
+  return 'ath_feedback_draft_' + getISOWeekId() + '_' + (_athProfile ? _athProfile.user_id : 'unknown');
+}
+
+function saveFeedbackDraft() {
+  // Lire les textareas avant de sauvegarder
+  var obj = document.getElementById('athObjective');
+  var com = document.getElementById('athComment');
+  if (obj) _feedbackData.objective = obj.value;
+  if (com) _feedbackData.comment   = com.value;
+
+  localStorage.setItem(feedbackDraftKey(), JSON.stringify(_feedbackData));
+
+  var btn = document.getElementById('athDraftBtn');
+  var msg = document.getElementById('athDraftMsg');
+  if (btn) { btn.style.borderColor = '#22c55e'; btn.style.color = '#22c55e'; }
+  if (msg) { msg.textContent = '✓ Sauvegardé — ' + new Date().toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}); msg.style.color = '#22c55e'; }
+  setTimeout(function() {
+    if (btn) { btn.style.borderColor = ''; btn.style.color = ''; }
+  }, 2000);
+}
+
+function loadFeedbackDraft() {
+  var raw = localStorage.getItem(feedbackDraftKey());
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch(e) { return null; }
+}
+
 function initFeedbackForm() {
-  // Reset data structure — chaque jour a rpe, phys, mental, coucher, lever, repos, compet
   var emptyDay = function() { return { rpe: null, phys: null, mental: null, coucher: '', lever: '', repos: false, compet: false }; };
-  _feedbackData = {
-    days: {
-      lun: emptyDay(), mar: emptyDay(), mer: emptyDay(), jeu: emptyDay(),
-      ven: emptyDay(), sam: emptyDay(), dim: emptyDay()
-    },
-    objective: '', comment: ''
-  };
+
+  // Essayer de charger le brouillon de la semaine en cours
+  var draft = loadFeedbackDraft();
+  if (draft && draft.days) {
+    _feedbackData = draft;
+    // S'assurer que tous les jours existent
+    ATH_DAYS.forEach(function(d) {
+      if (!_feedbackData.days[d]) _feedbackData.days[d] = emptyDay();
+    });
+  } else {
+    _feedbackData = {
+      days: {
+        lun: emptyDay(), mar: emptyDay(), mer: emptyDay(), jeu: emptyDay(),
+        ven: emptyDay(), sam: emptyDay(), dim: emptyDay()
+      },
+      objective: '', comment: ''
+    };
+  }
 
   renderDailyRpe();
   renderDailyForm();
   renderSleepRows();
+
+  // Remplir les textareas avec les valeurs sauvegardées
+  setTimeout(function() {
+    var obj = document.getElementById('athObjective');
+    var com = document.getElementById('athComment');
+    if (obj && _feedbackData.objective) obj.value = _feedbackData.objective;
+    if (com && _feedbackData.comment)   com.value = _feedbackData.comment;
+
+    // Indicateur brouillon existant
+    var draft = loadFeedbackDraft();
+    var draftMsg = document.getElementById('athDraftMsg');
+    if (draft && draftMsg) {
+      draftMsg.textContent = '📝 Brouillon chargé — continue ta saisie';
+      draftMsg.style.color = 'var(--muted)';
+    }
+  }, 60);
 }
 
 // ── RPE par jour ─────────────────────────────────────────
@@ -10828,13 +10882,13 @@ function rpeBarClick(e, day) {
   var pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
   var val = Math.max(1, Math.min(10, Math.round(pct * 9) + 1));
   _feedbackData.days[day].rpe = val;
-  // Update handle
   var handle = document.getElementById('rpeHandle_' + day);
   var valEl  = document.getElementById('rpeVal_' + day);
   var color  = getRpeColor(val);
   if (handle) { handle.style.left = ((val-1)/9*100)+'%'; handle.style.borderColor = color; handle.style.display = ''; }
   if (valEl)  { valEl.textContent = val; valEl.style.color = color; }
   updateRpeAvg();
+  autoSaveDraft();
 }
 
 function toggleDayOption(day, opt) {
@@ -10919,6 +10973,7 @@ function setDayScore(day, type, val) {
   var row = document.getElementById(rowId);
   if (!row) return;
   row.innerHTML = makeSmileyBtns(day, type, smileys, val);
+  autoSaveDraft();
 }
 
 // ── Sommeil par jour ──────────────────────────────────────
@@ -10967,12 +11022,12 @@ function calcSleepDuration(coucher, lever) {
 function feedbackSleepChange(day, field, val) {
   if (!_feedbackData.days[day]) return;
   _feedbackData.days[day][field] = val;
-  // Update duration display
   var d = _feedbackData.days[day];
   var dur = calcSleepDuration(d.coucher, d.lever);
   var durEl = document.getElementById('sleep-dur-' + day);
   if (durEl) { durEl.textContent = dur || '—'; durEl.style.color = dur ? 'var(--accent)' : 'var(--muted)'; }
   updateSleepAvg();
+  autoSaveDraft();
 }
 
 function updateSleepAvg() {
@@ -11012,6 +11067,15 @@ function loadCurrentWeekFeedback() {
     });
 }
 
+function autoSaveDraft() {
+  // Sauvegarde silencieuse — sans feedback visuel
+  var obj = document.getElementById('athObjective');
+  var com = document.getElementById('athComment');
+  if (obj) _feedbackData.objective = obj.value;
+  if (com) _feedbackData.comment   = com.value;
+  try { localStorage.setItem(feedbackDraftKey(), JSON.stringify(_feedbackData)); } catch(e) {}
+}
+
 function submitFeedback() {
   if (!_sb || !_athProfile) return;
   var btn = document.getElementById('athSubmitBtn');
@@ -11042,8 +11106,12 @@ function submitFeedback() {
       if (btn) { btn.textContent = '📤 ENVOYER AU COACH'; btn.disabled = false; }
       return;
     }
-    if (btn) { btn.textContent = '✅ Envoyé !'; btn.classList.add('sent'); }
+    if (btn) { btn.textContent = '✅ Envoyé !'; btn.classList.add('sent'); btn.disabled = true; }
     if (msg) msg.textContent = 'Ton coach a été notifié.';
+    // Supprimer le brouillon après envoi réussi
+    localStorage.removeItem(feedbackDraftKey());
+    var draftBtn = document.getElementById('athDraftBtn');
+    if (draftBtn) draftBtn.disabled = true;
     notifyCoachFeedback(data);
   });
 }
@@ -11497,6 +11565,23 @@ setTimeout(() => {
       <textarea class="ath-textarea" id="athComment" placeholder="Ressenti général, douleurs, remarques pour ton coach..."></textarea>
     </div>
 
+    <!-- Sauvegarder en brouillon -->
+    <button onclick="saveFeedbackDraft()" id="athDraftBtn"
+      style="width:100%;background:none;border:1px solid var(--border);border-radius:8px;
+             padding:14px;font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--muted);
+             cursor:pointer;letter-spacing:2px;margin-bottom:10px;transition:all .2s;">
+      💾 SAUVEGARDER MON AVANCEMENT
+    </button>
+    <div id="athDraftMsg" style="text-align:center;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);min-height:14px;margin-bottom:12px;"></div>
+
+    <!-- Séparateur -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+      <div style="flex:1;height:1px;background:var(--border);"></div>
+      <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);">ou</span>
+      <div style="flex:1;height:1px;background:var(--border);"></div>
+    </div>
+
+    <!-- Envoyer définitivement -->
     <button class="ath-submit-btn" id="athSubmitBtn" onclick="submitFeedback()">📤 ENVOYER AU COACH</button>
     <div id="athSubmitMsg" style="text-align:center;font-family:'DM Mono',monospace;font-size:9px;color:#22c55e;min-height:14px;margin-bottom:16px;"></div>
 
