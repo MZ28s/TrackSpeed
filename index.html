@@ -10409,11 +10409,14 @@ function enterAthleteMode(profile) {
   if (titleEl) titleEl.textContent = 'SEMAINE ' + getISOWeekLabel();
   requestPushPermission();
   loadCurrentWeekFeedback();
-  renderAthCalc();
-  renderAthForce();
-  renderAthFeedbackHistory();
   renderAthProfileInfo();
-  initFeedbackForm();
+  // Defer renders to after DOM is visible
+  setTimeout(function() {
+    initFeedbackForm();
+    renderAthCalc();
+    renderAthForce();
+    renderAthFeedbackHistory();
+  }, 50);
 }
 
 function athleteLogout() {
@@ -10722,8 +10725,11 @@ function athGoPage(name) {
   var btn  = document.getElementById('ath-nav-' + name);
   if (page) page.classList.add('active');
   if (btn)  btn.classList.add('active');
-  if (name === 'history') renderAthHistory();
-  if (name === 'profile') renderAthProfileInfo();
+  if (name === 'history')  renderAthHistory();
+  if (name === 'profile')  renderAthProfileInfo();
+  if (name === 'feedback') { renderDailyRpe(); renderDailyForm(); renderSleepRows(); }
+  if (name === 'calc')     renderAthCalc();
+  if (name === 'force')    renderAthForce();
 }
 
 // ── Init form feedback ────────────────────────────────────
