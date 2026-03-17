@@ -10602,6 +10602,87 @@ function renderAthProfileInfo() {
     : '<span style="color:var(--muted);">⏳ En attente — donne ton ID ' + (p.ath_id||'') + ' à ton coach</span>';
 }
 
+function athToggleEditInfo() {
+  var form = document.getElementById('athInfoForm');
+  var grid = document.getElementById('athInfoGrid');
+  var btn  = document.getElementById('athEditInfoBtn');
+  if (!form || !grid || !btn) return;
+  var editing = form.style.display !== 'none';
+  if (editing) {
+    athCancelEditInfo();
+  } else {
+    // Pré-remplir les champs
+    var p = _athProfile || {};
+    var fn = document.getElementById('athEditFirstName');
+    var ln = document.getElementById('athEditLastName');
+    var db = document.getElementById('athEditDob');
+    var gn = document.getElementById('athEditGenre');
+    var ct = document.getElementById('athEditCategorie');
+    if (fn) fn.value = p.first_name || (p.name || '').split(' ')[0] || '';
+    if (ln) ln.value = p.last_name  || (p.name || '').split(' ').slice(1).join(' ') || '';
+    if (db) db.value = p.dob || '';
+    if (gn) gn.value = p.genre || 'F';
+    if (ct) ct.value = p.categorie || 'U18';
+    form.style.display = 'block';
+    grid.style.display = 'none';
+    btn.textContent = '✕ Annuler';
+    btn.style.borderColor = 'var(--accent)';
+    btn.style.color = 'var(--accent)';
+  }
+}
+
+function athCancelEditInfo() {
+  var form = document.getElementById('athInfoForm');
+  var grid = document.getElementById('athInfoGrid');
+  var btn  = document.getElementById('athEditInfoBtn');
+  if (form) form.style.display = 'none';
+  if (grid) grid.style.display = 'grid';
+  if (btn)  { btn.textContent = '✏️ Modifier'; btn.style.borderColor = ''; btn.style.color = ''; }
+  var msg = document.getElementById('athEditInfoMsg');
+  if (msg) msg.textContent = '';
+}
+
+function athSaveInfo() {
+  if (!_athProfile || !_sb) return;
+  var firstName = (document.getElementById('athEditFirstName').value || '').trim();
+  var lastName  = (document.getElementById('athEditLastName').value  || '').trim();
+  var dob       = document.getElementById('athEditDob').value || '';
+  var genre     = document.getElementById('athEditGenre').value;
+  var categorie = document.getElementById('athEditCategorie').value;
+  var msg       = document.getElementById('athEditInfoMsg');
+
+  if (!firstName) { if (msg) { msg.textContent = '⚠ Entre ton prénom.'; msg.style.color = '#ef4444'; } return; }
+  if (!lastName)  { if (msg) { msg.textContent = '⚠ Entre ton nom.'; msg.style.color = '#ef4444'; } return; }
+
+  var fullName = firstName + ' ' + lastName;
+  var updates = {
+    name:       fullName,
+    first_name: firstName,
+    last_name:  lastName,
+    dob:        dob || null,
+    genre:      genre,
+    categorie:  categorie
+  };
+
+  if (msg) { msg.textContent = 'Enregistrement...'; msg.style.color = 'var(--muted)'; }
+
+  _sb.from('athlete_profiles').update(updates).eq('user_id', _athProfile.user_id)
+    .then(function(r) {
+      if (r.error) {
+        if (msg) { msg.textContent = '⚠ Erreur : ' + r.error.message; msg.style.color = '#ef4444'; }
+        return;
+      }
+      // Mettre à jour le profil local
+      Object.assign(_athProfile, updates);
+      // Mettre à jour le header
+      var nameEl = document.getElementById('athHeaderName');
+      if (nameEl) nameEl.textContent = fullName.toUpperCase();
+      // Fermer le formulaire et rafraîchir l'affichage
+      athCancelEditInfo();
+      renderAthProfileInfo();
+    });
+}
+
 function athCopyId() {
   var id = _athProfile && _athProfile.ath_id;
   if (!id) return;
@@ -11817,8 +11898,70 @@ setTimeout(() => {
       <button onclick="athCopyId()" style="background:none;border:1px solid var(--border);border-radius:4px;padding:6px 16px;font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);cursor:pointer;margin-top:4px;" id="athCopyBtn">Copier</button>
     </div>
     <div class="ath-card">
-      <div class="ath-card-title">Informations personnelles</div>
-      <div id="athInfoGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div class="ath-card-title" style="margin-bottom:0;">Informations personnelles</div>
+        <button onclick="athToggleEditInfo()" id="athEditInfoBtn"
+          style="background:none;border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);cursor:pointer;letter-spacing:1px;transition:all .15s;">
+          ✏️ Modifier
+        </button>
+      </div>
+      <!-- Vue lecture -->
+      <div id="athInfoGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"></div>
+      <!-- Formulaire édition (masqué par défaut) -->
+      <div id="athInfoForm" style="display:none;">
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div>
+              <label style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:5px;">PRÉNOM</label>
+              <input type="text" id="athEditFirstName" autocomplete="given-name"
+                style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;">
+            </div>
+            <div>
+              <label style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:5px;">NOM</label>
+              <input type="text" id="athEditLastName" autocomplete="family-name"
+                style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;">
+            </div>
+          </div>
+          <div>
+            <label style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:5px;">DATE DE NAISSANCE</label>
+            <input type="date" id="athEditDob" autocomplete="bday"
+              style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;color-scheme:dark;">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div>
+              <label style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:5px;">GENRE</label>
+              <select id="athEditGenre"
+                style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;cursor:pointer;">
+                <option value="F">Femme</option>
+                <option value="M">Homme</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:5px;">CATÉGORIE</label>
+              <select id="athEditCategorie"
+                style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;cursor:pointer;">
+                <option value="U16">U16</option>
+                <option value="U18">U18</option>
+                <option value="U20">U20</option>
+                <option value="U23">U23</option>
+                <option value="Senior">Senior</option>
+                <option value="Master">Master</option>
+              </select>
+            </div>
+          </div>
+          <div id="athEditInfoMsg" style="font-family:'DM Mono',monospace;font-size:9px;min-height:14px;text-align:center;"></div>
+          <div style="display:flex;gap:8px;">
+            <button onclick="athSaveInfo()"
+              style="flex:1;background:var(--accent);border:none;border-radius:8px;padding:14px;font-family:'Bebas Neue',sans-serif;font-size:18px;color:#000;cursor:pointer;letter-spacing:1px;min-height:50px;">
+              ✓ ENREGISTRER
+            </button>
+            <button onclick="athCancelEditInfo()"
+              style="background:none;border:1px solid var(--border);border-radius:8px;padding:14px 20px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer;min-height:50px;">
+              Annuler
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="ath-card">
       <div class="ath-card-title">Records personnels — Sprint</div>
