@@ -1192,6 +1192,7 @@ function sbInit() {
     _sbUser = session ? session.user : null;
     if (event === 'SIGNED_IN') { sbPullAll().then(function() { loginHide(); sbUpdateNavBar(); }); }
     if (event === 'SIGNED_OUT') { sbUpdateNavBar(); }
+    if (event === 'PASSWORD_RECOVERY') { showPasswordResetForm(); }
   });
 }
 
@@ -1369,8 +1370,34 @@ function loginForgot() {
   if (!_sb) return;
   var email = (document.getElementById('loginEmail').value || '').trim();
   if (!email) { loginSetMsg('Entre ton email.', true); return; }
-  _sb.auth.resetPasswordForEmail(email).then(function(r) {
-    loginSetMsg(r.error ? r.error.message : 'Email envoye !', !!r.error);
+  _sb.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname
+  }).then(function(r) {
+    loginSetMsg(r.error ? r.error.message : 'Email envoyé ! Vérifie ta boîte mail.', !!r.error);
+  });
+}
+
+function showPasswordResetForm() {
+  loginHide();
+  var modal = document.getElementById('resetPasswordModal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function submitPasswordReset() {
+  if (!_sb) return;
+  var pass = (document.getElementById('resetNewPassword').value || '').trim();
+  var msg  = document.getElementById('resetPasswordMsg');
+  if (pass.length < 6) { msg.textContent = 'Mot de passe trop court (6 min).'; msg.style.color = '#ef4444'; return; }
+  _sb.auth.updateUser({ password: pass }).then(function(r) {
+    if (r.error) {
+      msg.textContent = r.error.message; msg.style.color = '#ef4444';
+    } else {
+      msg.textContent = 'Mot de passe mis à jour !'; msg.style.color = '#22c55e';
+      setTimeout(function() {
+        document.getElementById('resetPasswordModal').style.display = 'none';
+        sbUpdateNavBar();
+      }, 1500);
+    }
   });
 }
 
@@ -9511,6 +9538,19 @@ setTimeout(() => {
   <div style="margin-top:20px;font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;text-align:center;line-height:1.8;">Avec un compte, tes données sont sauvegardées en ligne<br>et accessibles depuis n'importe quel appareil.</div>
 </div>
 
+
+<!-- ══ MODALE RÉINITIALISATION MOT DE PASSE ══ -->
+<div id="resetPasswordModal" style="display:none;position:fixed;inset:0;z-index:99999;background:#0a0a0b;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#111114;border:1px solid #1e1e24;border-radius:12px;width:100%;max-width:360px;padding:32px 28px;">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:#F5C800;letter-spacing:2px;margin-bottom:4px;">NOUVEAU MOT DE PASSE</div>
+    <div style="font-family:'DM Mono',monospace;font-size:9px;color:#6b6b7a;margin-bottom:24px;">Choisis un nouveau mot de passe pour ton compte.</div>
+    <label style="font-family:'DM Mono',monospace;font-size:7px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:6px;">MOT DE PASSE</label>
+    <input id="resetNewPassword" type="password" placeholder="••••••••" minlength="6"
+      style="width:100%;box-sizing:border-box;background:#16161a;border:1px solid #1e1e24;border-radius:6px;padding:12px 14px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:13px;outline:none;margin-bottom:12px;">
+    <div id="resetPasswordMsg" style="font-family:'DM Mono',monospace;font-size:9px;min-height:18px;margin-bottom:16px;"></div>
+    <button onclick="submitPasswordReset()" style="width:100%;background:#F5C800;border:none;border-radius:6px;padding:14px;font-family:'Bebas Neue',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;">VALIDER</button>
+  </div>
+</div>
 
 <!-- Panel profil utilisateur -->
 <div id="sbPanel" style="display:none;position:fixed;top:48px;right:12px;z-index:10000;background:#111114;border:1px solid #1e1e24;border-radius:10px;width:300px;box-shadow:0 8px 32px rgba(0,0,0,0.6);overflow:hidden;">
