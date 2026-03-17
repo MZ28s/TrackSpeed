@@ -290,6 +290,44 @@ body.light-theme canvas { filter:invert(0); }
 .fb-athlete-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px; }
 .fb-rpe-bar { height: 6px; border-radius: 3px; background: linear-gradient(to right,#22c55e,#86efac 30%,#f59e0b 60%,#ef4444 80%,#991b1b); position: relative; }
 .fb-rpe-marker { position: absolute; top: 50%; transform: translate(-50%,-50%); width: 12px; height: 12px; border-radius: 50%; background: var(--text); border: 2px solid var(--bg); }
+
+/* ══ CHRONO MULTI INLINE ══ */
+#multiChronoBar {
+  position: sticky; top: 0; z-index: 10;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  display: none;
+  align-items: center;
+  gap: 12px;
+}
+#multiChronoBar.visible { display: flex; }
+#multiChronoDisplay {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 40px;
+  color: var(--accent);
+  line-height: 1;
+  min-width: 96px;
+  text-align: center;
+  letter-spacing: 2px;
+}
+#multiChronoDisplay.running { color: var(--text); }
+#multiChronoDisplay.done    { color: #22c55e; animation: pulse 1s infinite; }
+#multiChronoProgressWrap { flex: 1; }
+#multiChronoProgressBar {
+  height: 6px; border-radius: 3px;
+  background: linear-gradient(to right, var(--accent), #f59e0b);
+  transition: width .5s linear;
+}
+.multi-chrono-ctrl {
+  background: none; border: 1px solid var(--border); border-radius: 6px;
+  width: 36px; height: 36px; font-size: 16px; cursor: pointer; color: var(--text);
+  display: flex; align-items: center; justify-content: center; transition: all .15s; flex-shrink: 0;
+}
+.multi-chrono-ctrl:hover { border-color: var(--accent); color: var(--accent); }
+#multiChronoContext { font-family: 'DM Mono', monospace; font-size: 8px; color: var(--muted); letter-spacing: 1px; line-height: 1.5; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -884,6 +922,33 @@ body.light-theme canvas { filter:invert(0); }
       <div style="margin-bottom:14px;">
         <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;">ATHLÈTES DANS LA SÉANCE</div>
         <div id="athleteCheckboxes" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+      </div>
+
+      <!-- ══ CHRONO INLINE ══ -->
+      <div id="multiChronoBar">
+        <div>
+          <div id="multiChronoContext">— APPUIE SUR ⏱ D'UN BLOC</div>
+          <div id="multiChronoDisplay">00:00</div>
+        </div>
+        <div class="multi-chrono-progress-wrap" style="flex:1;">
+          <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:6px;">
+            <div id="multiChronoProgressBar" style="height:100%;background:linear-gradient(to right,var(--accent),#f59e0b);width:100%;border-radius:3px;transition:width .5s linear;"></div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <input type="number" id="multiChronoPauseMins" min="0" max="59" placeholder="2" value=""
+              style="width:44px;padding:4px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center;-moz-appearance:textfield;"
+              onclick="event.stopPropagation()" onchange="multiChronoSetDuration()">
+            <label style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);align-self:center;">min</label>
+            <input type="number" id="multiChronoPauseSecs" min="0" max="59" placeholder="00" value=""
+              style="width:44px;padding:4px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:center;-moz-appearance:textfield;"
+              onclick="event.stopPropagation()" onchange="multiChronoSetDuration()">
+            <label style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);align-self:center;">sec</label>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <button class="multi-chrono-ctrl" id="multiChronoPlayBtn" onclick="multiChronoToggle()" title="Lancer / Pause">▶</button>
+          <button class="multi-chrono-ctrl" onclick="multiChronoReset()" title="Réinitialiser">↺</button>
+        </div>
       </div>
 
       <!-- Tableau des temps — toujours visible si athlètes sélectionnés -->
@@ -9302,11 +9367,13 @@ function _updateMultiTable() {
     lastBi = c.bi;
     var tgt = targets[ci];
     var borderLeft = isFirst && ci > 0 ? 'border-left:2px solid var(--border);' : '';
+    var restMins = sessionBlocks[c.bi] ? (function(){var inp=document.getElementById('rest_'+c.bi);return inp?parseFloat(inp.value):sessionBlocks[c.bi].rest;})() : null;
     html += '<th style="padding:6px 4px;font-size:8px;letter-spacing:1px;color:var(--muted);'
       + 'border-bottom:2px solid var(--accent);text-align:center;min-width:72px;' + borderLeft + '">'
       + '<div style="color:var(--text);font-size:10px;font-weight:bold;">' + c.label + '</div>'
       + '<div style="color:var(--muted);font-size:8px;">' + c.dist + 'm@' + c.pct + '%</div>'
       + (tgt ? '<div style="color:var(--accent);font-size:9px;margin-top:1px;">↳ ' + tgt + 's</div>' : '')
+      + '<button onclick="multiChronoOpenForBlock(' + c.bi + ');event.stopPropagation()" style="background:none;border:1px solid var(--accent);border-radius:3px;color:var(--accent);font-size:9px;cursor:pointer;padding:1px 6px;margin-top:4px;font-family:DM Mono,monospace;letter-spacing:.5px;">⏱</button>'
       + '</th>';
   });
   html += '</tr></thead><tbody>';
@@ -11101,6 +11168,127 @@ function _renderHomeFeedbacks() {
       });
       el.innerHTML = ''; el.appendChild(frag);
     });
+}
+
+
+// ══ CHRONO MULTI-ATHLÈTES INLINE ═════════════════════════
+var _multiChronoTimer    = null;
+var _multiChronoTotal    = 0;   // durée totale en secondes
+var _multiChronoRemain   = 0;   // secondes restantes
+var _multiChronoRunning  = false;
+
+function multiChronoOpenForBlock(blocIndex) {
+  var bar = document.getElementById('multiChronoBar');
+  if (!bar) return;
+  bar.classList.add('visible');
+
+  // Lire la pause configurée pour ce bloc
+  var restMins = 0;
+  var contextTxt = '';
+  if (typeof blocIndex !== 'undefined' && sessionBlocks[blocIndex]) {
+    var inp = document.getElementById('rest_' + blocIndex);
+    restMins = inp ? parseFloat(inp.value) : (sessionBlocks[blocIndex].rest || 0);
+    var b = sessionBlocks[blocIndex];
+    contextTxt = 'BLOC ' + (blocIndex+1) + ' — ' + b.reps + '× ' + b.dist + 'm  ·  ' + (restMins||0) + ' min pause';
+  }
+
+  var ctx = document.getElementById('multiChronoContext');
+  if (ctx) ctx.textContent = contextTxt || 'PAUSE';
+
+  // Pré-remplir les inputs
+  var totalSec = Math.round((isNaN(restMins) ? 0 : restMins) * 60);
+  var mins = Math.floor(totalSec / 60);
+  var secs = totalSec % 60;
+  var mInp = document.getElementById('multiChronoPauseMins');
+  var sInp = document.getElementById('multiChronoPauseSecs');
+  if (mInp) mInp.value = mins || '';
+  if (sInp) sInp.value = secs ? String(secs).padStart(2,'0') : '';
+
+  multiChronoStop();
+  _multiChronoTotal  = totalSec;
+  _multiChronoRemain = totalSec;
+  multiChronoUpdateDisplay();
+
+  // Démarrer automatiquement si une durée est définie
+  if (totalSec > 0) multiChronoStart();
+}
+
+function multiChronoSetDuration() {
+  var m = parseInt(document.getElementById('multiChronoPauseMins').value) || 0;
+  var s = parseInt(document.getElementById('multiChronoPauseSecs').value) || 0;
+  multiChronoStop();
+  _multiChronoTotal  = m * 60 + s;
+  _multiChronoRemain = _multiChronoTotal;
+  multiChronoUpdateDisplay();
+}
+
+function multiChronoToggle() {
+  if (_multiChronoRunning) multiChronoPause();
+  else multiChronoStart();
+}
+
+function multiChronoStart() {
+  if (_multiChronoRunning) return;
+  if (_multiChronoRemain <= 0) { multiChronoReset(); return; }
+  _multiChronoRunning = true;
+  var btn = document.getElementById('multiChronoPlayBtn');
+  if (btn) btn.textContent = '⏸';
+  var display = document.getElementById('multiChronoDisplay');
+  if (display) display.className = 'running';
+  _multiChronoTimer = setInterval(function() {
+    _multiChronoRemain--;
+    multiChronoUpdateDisplay();
+    if (_multiChronoRemain <= 0) {
+      multiChronoStop();
+      var d = document.getElementById('multiChronoDisplay');
+      if (d) d.className = 'done';
+      var pb = document.getElementById('multiChronoProgressBar');
+      if (pb) pb.style.width = '0%';
+      // Vibration si supportée
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    }
+  }, 1000);
+}
+
+function multiChronoPause() {
+  if (!_multiChronoRunning) return;
+  clearInterval(_multiChronoTimer);
+  _multiChronoRunning = false;
+  var btn = document.getElementById('multiChronoPlayBtn');
+  if (btn) btn.textContent = '▶';
+}
+
+function multiChronoStop() {
+  clearInterval(_multiChronoTimer);
+  _multiChronoRunning = false;
+  var btn = document.getElementById('multiChronoPlayBtn');
+  if (btn) btn.textContent = '▶';
+  var display = document.getElementById('multiChronoDisplay');
+  if (display && display.className === 'running') display.className = '';
+}
+
+function multiChronoReset() {
+  multiChronoStop();
+  _multiChronoRemain = _multiChronoTotal;
+  var display = document.getElementById('multiChronoDisplay');
+  if (display) display.className = '';
+  multiChronoUpdateDisplay();
+}
+
+function multiChronoUpdateDisplay() {
+  var m = Math.floor(_multiChronoRemain / 60);
+  var s = _multiChronoRemain % 60;
+  var txt = String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  var el = document.getElementById('multiChronoDisplay');
+  if (el) el.textContent = txt;
+  // Progress bar
+  var pct = _multiChronoTotal > 0 ? (_multiChronoRemain / _multiChronoTotal * 100) : 100;
+  var pb = document.getElementById('multiChronoProgressBar');
+  if (pb) pb.style.width = pct + '%';
+  // Couleur selon urgence
+  if (el && _multiChronoRunning) {
+    el.style.color = pct > 40 ? 'var(--accent)' : pct > 15 ? '#f59e0b' : '#ef4444';
+  }
 }
 
 
