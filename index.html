@@ -1245,6 +1245,10 @@ async function sbInit() {
       sbUpdateNavBar();
     }
   });
+  } catch(e) {
+    console.warn('Supabase init error:', e.message);
+    loginShow();
+  }
 }
 
 // ── Push / Pull ──
@@ -1371,6 +1375,10 @@ function loginClearMsg() {
 }
 
 async function loginSubmit() {
+  if (typeof supabase === 'undefined' || !_sb) {
+    loginSetMsg('Erreur de connexion au service. Réessaie dans un instant.', true);
+    return;
+  }
   const email = (document.getElementById('loginEmail')?.value || '').trim();
   const pass  = document.getElementById('loginPassword')?.value || '';
   const btn   = document.getElementById('loginBtn');
@@ -1405,6 +1413,9 @@ function loginSkip() {
   _sbSkipped = true;
   loginHide();
   sbUpdateNavBar();
+  // S'assurer que l'app est bien initialisée
+  renderProfiles();
+  renderHome();
 }
 
 function loginShowProfile() {
@@ -9760,7 +9771,6 @@ function deleteCompetResult(pid, saison, idxInFiltered) {
 renderProfiles();
 renderHome();
 sbInit();
-sbRenderUser();
 // Vérifier si une séance force est en attente au chargement
 setTimeout(() => {
   if (localStorage.getItem('sc_force_session_pending') && document.getElementById('page-session')?.classList.contains('active')) {
