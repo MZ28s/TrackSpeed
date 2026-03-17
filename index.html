@@ -5286,7 +5286,7 @@ function renderProfiles() {
         <button class="icon-btn" onclick="selectProfile('${p.id}')" title="Sélectionner">✓</button>
         <button class="icon-btn" onclick="editProfile('${p.id}')" title="Modifier">✏</button>
         <button class="icon-btn" onclick="printFiche('${p.id}')" title="Fiche PDF">📄</button>
-        <button class="icon-btn" onclick="generateAthleteCode('${p.id}')" title="Code athlète" style="color:#F5C800;border-color:rgba(245,200,0,0.4);">🏃</button>
+        <button class="icon-btn" onclick="showLinkAthleteModal('${p.id}')" title="Lier compte athlète" style="color:#F5C800;border-color:rgba(245,200,0,0.4);">🔗</button>
         <button class="icon-btn del" onclick="deleteProfile('${p.id}')" title="Supprimer">✕</button>
       </div>
     </div>`;
@@ -9860,13 +9860,20 @@ function deleteCompetResult(pid, saison, idxInFiltered) {
 
 
 // ════════════════════════════════════════════════════════
-// ══  MODE ATHLÈTE — SYSTÈME COMPLET                    ══
+// ══  MODE ATHLÈTE — AUTH SUPABASE                      ══
 // ════════════════════════════════════════════════════════
 
-var _athProfile   = null;   // profil athlète connecté
-var _athCoachUid  = null;   // user_id Supabase du coach
-var _athMode      = false;  // true quand un athlète est connecté
-var _feedbackData = {       // état du formulaire en cours
+var _athProfile   = null;
+var _athCoachUid  = null;
+var _athMode      = false;
+var _athUser      = null;   // Supabase user de l'athlète
+var _sbAth        = null;   // client Supabase séparé pour l'athlète
+
+var ATH_DAYS        = ['lun','mar','mer','jeu','ven','sam','dim'];
+var ATH_DAYS_LABELS = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
+var RPE_LABELS      = ['','Repos total','Très facile','Facile','Confortable','Modéré','Modéré+','Difficile','Très difficile','Dur','Maximum'];
+
+var _feedbackData = {
   rpe: 5,
   days: { lun:{phys:3,mental:3,coucher:'',lever:''}, mar:{phys:3,mental:3,coucher:'',lever:''},
           mer:{phys:3,mental:3,coucher:'',lever:''}, jeu:{phys:3,mental:3,coucher:'',lever:''},
@@ -9874,12 +9881,6 @@ var _feedbackData = {       // état du formulaire en cours
           dim:{phys:3,mental:3,coucher:'',lever:''} },
   objective: '', comment: ''
 };
-
-var ATH_DAYS = ['lun','mar','mer','jeu','ven','sam','dim'];
-var ATH_DAYS_LABELS = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
-
-var RPE_LABELS = ['','Repos total','Très facile','Facile','Confortable','Modéré',
-  'Modéré+','Difficile','Très difficile','Dur','Maximum'];
 
 // ── Semaine ISO ──────────────────────────────────────────
 function getISOWeekLabel() {
@@ -9891,7 +9892,6 @@ function getISOWeekLabel() {
   var week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
   return 'S' + week + ' — ' + d.getUTCFullYear();
 }
-
 function getISOWeekId() {
   var now = new Date();
   var d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
@@ -9902,138 +9902,238 @@ function getISOWeekId() {
   return d.getUTCFullYear() + '-W' + String(week).padStart(2, '0');
 }
 
-// ── Bouton "Mode Athlète" dans le header coach ───────────
-function showAthleteLoginScreen() {
-  loginShow();
-  loginSwitchTab('athlete');
+// ── Génère un ID unique athlète style ATH-XXXX ───────────
+function generateAthId() {
+  var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  var id = 'ATH-';
+  for (var i = 0; i < 4; i++) id += chars[Math.floor(Math.random() * chars.length)];
+  return id;
 }
 
-function athleteLoginBack() {
-  loginSwitchTab('login');
+// ── loginSwitchTab gère le 3ème panel ───────────────────
+function showAthleteLoginScreen() { loginShow(); loginSwitchTab('athlete'); }
+function athleteLoginBack()       { loginSwitchTab('login'); }
+
+// ── Panel login athlète ──────────────────────────────────
+function athSetMsg(elId, text, isErr) {
+  var el = document.getElementById(elId);
+  if (!el) return;
+  el.textContent = text; el.style.display = 'block';
+  el.style.background = isErr ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)';
+  el.style.color       = isErr ? '#ef4444' : '#22c55e';
+  el.style.border      = '1px solid ' + (isErr ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)');
 }
 
-// ── Saisie code 6 chiffres ───────────────────────────────
-function codeDigitInput(idx) {
-  var el = document.getElementById('cd' + idx);
-  var val = el.value.replace(/[^0-9]/g, '');
-  el.value = val ? val[val.length - 1] : '';
-  if (el.value && idx < 5) {
-    document.getElementById('cd' + (idx + 1)).focus();
-  }
-  // Auto-submit when all 6 filled
-  var code = '';
-  for (var k = 0; k < 6; k++) code += (document.getElementById('cd' + k).value || '');
-  if (code.length === 6) athleteCodeSubmit();
-}
+function athLoginSubmit() {
+  if (!_sb) return;
+  var email = (document.getElementById('athEmail').value || '').trim();
+  var pass  = document.getElementById('athPassword').value || '';
+  if (!email || !pass) { athSetMsg('athLoginMsg', 'Email et mot de passe requis.', true); return; }
+  var btn = document.getElementById('athLoginBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Connexion...'; }
 
-function codeDigitKey(e, idx) {
-  if (e.key === 'Backspace' && !document.getElementById('cd' + idx).value && idx > 0) {
-    document.getElementById('cd' + (idx - 1)).focus();
-  }
-}
-
-function athleteCodeSubmit() {
-  var code = '';
-  for (var k = 0; k < 6; k++) code += (document.getElementById('cd' + k).value || '');
-  if (code.length < 6) { document.getElementById('codeMsg').textContent = 'Saisis les 6 chiffres.'; return; }
-
-  document.getElementById('codeMsg').textContent = 'Vérification...';
-
-  // Chercher le code dans tous les profils de tous les coachs
-  if (!_sb) { document.getElementById('codeMsg').textContent = 'Connexion requise.'; return; }
-
-  _sb.from('athlete_codes').select('*').eq('code', code).maybeSingle()
+  // Utiliser le même client Supabase mais vérifier le rôle après connexion
+  _sb.auth.signInWithPassword({ email: email, password: pass })
     .then(function(r) {
       if (r.error) {
-        document.getElementById('codeMsg').textContent = 'Erreur réseau.';
-        console.error('athlete_codes error:', r.error);
+        athSetMsg('athLoginMsg', r.error.message, true);
+        if (btn) { btn.disabled = false; btn.textContent = 'SE CONNECTER'; }
         return;
       }
-      if (!r.data) {
-        document.getElementById('codeMsg').textContent = 'Code invalide ou expiré.';
+      var user = r.data.user;
+      // Vérifier que c'est bien un athlète (meta_data.role === 'athlete')
+      var role = user.user_metadata && user.user_metadata.role;
+      if (role !== 'athlete') {
+        athSetMsg('athLoginMsg', 'Ce compte n\'est pas un compte athlète.', true);
+        _sb.auth.signOut();
+        if (btn) { btn.disabled = false; btn.textContent = 'SE CONNECTER'; }
         return;
       }
-      var row = r.data;
-      _athCoachUid = row.coach_uid;
-
-      // Le profil est stocké directement dans athlete_codes — pas besoin de profiles_data
-      var profile = null;
-      if (row.profile_data) {
-        try { profile = JSON.parse(row.profile_data); } catch(e) {}
-      }
-      if (!profile) {
-        document.getElementById('codeMsg').textContent = 'Profil non trouvé. Demande à ton coach de régénérer le code.';
-        return;
-      }
-      _athProfile = profile;
-      localStorage.setItem('ath_session', JSON.stringify({
-        code:       code,
-        profile_id: row.profile_id,
-        coach_uid:  row.coach_uid,
-        name:       profile.name,
-        profile:    profile
-      }));
-      enterAthleteMode(profile);
+      _athUser = user;
+      loadAthleteProfile(user);
     }).catch(function(e) {
-      document.getElementById('codeMsg').textContent = 'Erreur réseau.';
-      console.error('athleteCodeSubmit error:', e);
+      athSetMsg('athLoginMsg', 'Erreur réseau.', true);
+      if (btn) { btn.disabled = false; btn.textContent = 'SE CONNECTER'; }
     });
 }
 
+function athForgotPassword() {
+  var email = (document.getElementById('athEmail').value || '').trim();
+  if (!email) { athSetMsg('athLoginMsg', 'Entre ton email d\'abord.', true); return; }
+  _sb.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname
+  }).then(function(r) {
+    athSetMsg('athLoginMsg', r.error ? r.error.message : 'Email envoyé !', !!r.error);
+  });
+}
+
+function athSignupSwitch() {
+  document.getElementById('loginAthletePanel').style.display = 'none';
+  document.getElementById('loginAthleteSignupPanel').style.display = 'block';
+}
+function athSignupBack() {
+  document.getElementById('loginAthleteSignupPanel').style.display = 'none';
+  document.getElementById('loginAthletePanel').style.display = 'block';
+}
+
+function athSignupSubmit() {
+  if (!_sb) return;
+  var name  = (document.getElementById('athSignupName').value || '').trim();
+  var email = (document.getElementById('athSignupEmail').value || '').trim();
+  var pass  = document.getElementById('athSignupPassword').value || '';
+  if (!name)  { athSetMsg('athSignupMsg', 'Entre ton prénom et nom.', true); return; }
+  if (!email) { athSetMsg('athSignupMsg', 'Entre ton email.', true); return; }
+  if (pass.length < 6) { athSetMsg('athSignupMsg', 'Mot de passe trop court (6 min).', true); return; }
+
+  var athId = generateAthId();
+  _sb.auth.signUp({
+    email: email,
+    password: pass,
+    options: { data: { role: 'athlete', name: name, ath_id: athId } }
+  }).then(function(r) {
+    if (r.error) { athSetMsg('athSignupMsg', r.error.message, true); return; }
+    athSetMsg('athSignupMsg', 'Compte créé ! Vérifie ton email puis connecte-toi.', false);
+    // Créer le profil athlète en base
+    if (r.data && r.data.user) {
+      _sb.from('athlete_profiles').insert({
+        user_id:  r.data.user.id,
+        ath_id:   athId,
+        name:     name,
+        email:    email,
+        coach_uid: null
+      }).then(function() {});
+    }
+  });
+}
+
+// ── Charger profil athlète depuis Supabase ───────────────
+function loadAthleteProfile(user) {
+  _sb.from('athlete_profiles').select('*').eq('user_id', user.id).maybeSingle()
+    .then(function(r) {
+      if (r.error || !r.data) {
+        // Créer profil si absent (première connexion)
+        var athId = (user.user_metadata && user.user_metadata.ath_id) || generateAthId();
+        var name  = (user.user_metadata && user.user_metadata.name)   || user.email;
+        var newProfile = { user_id: user.id, ath_id: athId, name: name, email: user.email, coach_uid: null };
+        _sb.from('athlete_profiles').insert(newProfile).then(function() {
+          enterAthleteMode(newProfile);
+        });
+        return;
+      }
+      enterAthleteMode(r.data);
+    });
+}
+
+// ── Entrer en mode athlète ───────────────────────────────
 function enterAthleteMode(profile) {
-  _athMode = true;
+  _athMode    = true;
   _athProfile = profile;
+  _athCoachUid = profile.coach_uid || null;
   loginHide();
   document.getElementById('athleteApp').style.display = 'flex';
-  document.getElementById('athHeaderName').textContent = profile.name.toUpperCase();
-  document.getElementById('athHeaderWeek').textContent = getISOWeekLabel();
+  document.getElementById('athHeaderName').textContent  = (profile.name || 'Athlète').toUpperCase();
+  document.getElementById('athHeaderWeek').textContent  = getISOWeekLabel();
   document.getElementById('athFeedbackTitle').textContent = 'SEMAINE ' + getISOWeekLabel();
-  // Demander permission push
   requestPushPermission();
-  // Charger feedback existant pour cette semaine si déjà envoyé
   loadCurrentWeekFeedback();
-  // Rendre les pages calc/force
   renderAthCalc();
   renderAthForce();
   renderAthFeedbackHistory();
-  // Initialiser le formulaire
+  renderAthProfileInfo();
   initFeedbackForm();
 }
 
 function athleteLogout() {
-  if (!confirm('Se déconnecter de l\'espace athlète ?')) return;
-  _athMode = false; _athProfile = null; _athCoachUid = null;
-  localStorage.removeItem('ath_session');
+  if (!confirm('Se déconnecter ?')) return;
+  _athMode = false; _athProfile = null; _athCoachUid = null; _athUser = null;
+  if (_sb) _sb.auth.signOut();
   document.getElementById('athleteApp').style.display = 'none';
+  loginShow(); loginSwitchTab('athlete');
 }
 
-// Reconnexion auto si session athlète sauvegardée
+// ── Vérification auto si athlète déjà connecté ───────────
 function tryAthleteAutoLogin() {
-  var raw = localStorage.getItem('ath_session');
-  if (!raw) return;
-  try {
-    var s = JSON.parse(raw);
-    // Profil stocké localement dans la session
-    var profile = s.profile || null;
-    if (!profile) return;
-    _athCoachUid = s.coach_uid;
-    // Rafraîchir le profil depuis Supabase en arrière-plan si possible
-    if (_sb && s.code) {
-      _sb.from('athlete_codes').select('profile_data').eq('code', s.code).maybeSingle()
-        .then(function(r) {
-          if (r.data && r.data.profile_data) {
-            try {
-              var fresh = JSON.parse(r.data.profile_data);
-              _athProfile = fresh;
-              // Mettre à jour la session locale
-              s.profile = fresh;
-              localStorage.setItem('ath_session', JSON.stringify(s));
-            } catch(e) {}
-          }
+  if (!_sb) return;
+  _sb.auth.getSession().then(function(res) {
+    var session = res.data && res.data.session;
+    if (!session) return;
+    var user = session.user;
+    var role = user.user_metadata && user.user_metadata.role;
+    if (role !== 'athlete') return; // c'est un coach, pas un athlète
+    _athUser = user;
+    loadAthleteProfile(user);
+  });
+}
+
+// ── Profil info athlète (ID + lien coach) ────────────────
+function renderAthProfileInfo() {
+  var el = document.getElementById('athProfileInfo');
+  if (!el || !_athProfile) return;
+  var athId   = _athProfile.ath_id   || '—';
+  var coachId = _athProfile.coach_uid ? 'Connecté' : 'Non lié à un coach';
+  el.innerHTML =
+    '<div class="card" style="margin-bottom:12px;">' +
+      '<div class="card-title">// MON IDENTIFIANT</div>' +
+      '<div style="font-family:Bebas Neue,sans-serif;font-size:40px;color:var(--accent);letter-spacing:4px;margin:12px 0;">' + athId + '</div>' +
+      '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);line-height:1.6;">Donne cet identifiant à ton coach<br>pour qu&#39;il t&#39;ajoute à son groupe.</div>' +
+    '</div>' +
+    '<div class="card">' +
+      '<div class="card-title">// STATUT COACH</div>' +
+      '<div style="font-family:DM Mono,monospace;font-size:10px;color:' + (_athProfile.coach_uid ? '#22c55e' : 'var(--muted)') + ';margin-top:10px;">' +
+        (_athProfile.coach_uid ? '✓ Lié à un coach' : '⏳ En attente — partage ton ID à ton coach') +
+      '</div>' +
+    '</div>';
+}
+
+// ── Coach : lier un athlète via son ID ───────────────────
+function linkAthleteById(athId, profileId) {
+  if (!_sb || !_sbUser) return;
+  athId = athId.toUpperCase().trim();
+  _sb.from('athlete_profiles').select('*').eq('ath_id', athId).maybeSingle()
+    .then(function(r) {
+      if (r.error || !r.data) { alert('ID athlète introuvable : ' + athId); return; }
+      // Lier l'athlète à ce coach
+      _sb.from('athlete_profiles')
+        .update({ coach_uid: _sbUser.id })
+        .eq('ath_id', athId)
+        .then(function(u) {
+          if (u.error) { alert('Erreur liaison : ' + u.error.message); return; }
+          alert('✅ ' + r.data.name + ' est maintenant lié à ton groupe !');
         });
-    }
-    enterAthleteMode(profile);
-  } catch(e) { console.warn('tryAthleteAutoLogin:', e); }
+    });
+}
+
+function showLinkAthleteModal(profileId) {
+  var existing = document.getElementById('linkAthModal');
+  if (existing) existing.remove();
+  var modal = document.createElement('div');
+  modal.id = 'linkAthModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99997;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;padding:20px;';
+  var inner = document.createElement('div');
+  inner.style.cssText = 'background:var(--surface);border:1px solid var(--accent);border-radius:12px;padding:32px;max-width:360px;width:100%;text-align:center;';
+  inner.innerHTML =
+    '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:2px;color:var(--muted);margin-bottom:16px;">LIER UN COMPTE ATHLÈTE</div>' +
+    '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-bottom:20px;line-height:1.6;">Entre l&#39;ID que l&#39;athlète t&#39;a communiqué<br>(ex : ATH-4X7K)</div>' +
+    '<input id="linkAthIdInput" type="text" placeholder="ATH-XXXX" maxlength="8" ' +
+    'style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:14px;color:var(--text);font-family:Bebas Neue,sans-serif;font-size:24px;letter-spacing:3px;text-align:center;outline:none;margin-bottom:20px;">';
+  var confirmBtn = document.createElement('button');
+  confirmBtn.textContent = 'LIER L\'ATHLÈTE';
+  confirmBtn.style.cssText = 'width:100%;background:var(--accent);border:none;border-radius:6px;padding:12px;font-family:Bebas Neue,sans-serif;font-size:18px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:10px;';
+  confirmBtn.onclick = function() {
+    var id = document.getElementById('linkAthIdInput').value;
+    if (!id) return;
+    linkAthleteById(id, profileId);
+    modal.remove();
+  };
+  var closeBtn = document.createElement('button');
+  closeBtn.textContent = 'Annuler';
+  closeBtn.style.cssText = 'width:100%;background:none;border:1px solid var(--border);border-radius:6px;padding:10px;font-family:DM Mono,monospace;font-size:9px;color:var(--muted);cursor:pointer;';
+  closeBtn.onclick = function() { modal.remove(); };
+  inner.appendChild(confirmBtn);
+  inner.appendChild(closeBtn);
+  modal.appendChild(inner);
+  document.body.appendChild(modal);
+  setTimeout(function() { var inp = document.getElementById('linkAthIdInput'); if (inp) inp.focus(); }, 100);
 }
 
 // ── Navigation athlète ───────────────────────────────────
@@ -10043,17 +10143,14 @@ function athGoPage(name) {
   var page = document.getElementById('ath-page-' + name);
   var btn  = document.getElementById('ath-nav-' + name);
   if (page) page.classList.add('active');
-  if (btn) btn.classList.add('active');
+  if (btn)  btn.classList.add('active');
   if (name === 'history') renderAthFeedbackHistory();
+  if (name === 'profile') renderAthProfileInfo();
 }
 
 // ── Init formulaire feedback ─────────────────────────────
 function initFeedbackForm() {
-  // RPE
-  _feedbackData.rpe = 5;
-  updateRpeDisplay(5);
-
-  // Lignes forme par jour
+  _feedbackData.rpe = 5; updateRpeDisplay(5);
   var dayRows = document.getElementById('dailyFormRows');
   if (!dayRows) return;
   var html = '';
@@ -10065,8 +10162,6 @@ function initFeedbackForm() {
       '</div>';
   });
   dayRows.innerHTML = html;
-
-  // Lignes sommeil
   var sleepRows = document.getElementById('sleepRows');
   if (!sleepRows) return;
   var sleepHtml = '';
@@ -10084,15 +10179,14 @@ function makeStarBtns(day, type) {
   var html = '';
   for (var n = 1; n <= 5; n++) {
     var cls = (n <= (_feedbackData.days[day] ? _feedbackData.days[day][type] : 3)) ? ('star-btn active-' + type) : 'star-btn';
-    html += '<button class="' + cls + '" onclick="setDayScore(\'' + day + '\',\'' + type + '\',' + n + ')" data-day="' + day + '" data-type="' + type + '" data-val="' + n + '">' + n + '</button>';
+    html += '<button class="' + cls + '" onclick="setDayScore(\'' + day + '\',\'' + type + '\'," + n + ")" data-day="' + day + '" data-type="' + type + '" data-val="' + n + '">' + n + '</button>';
   }
   return html;
 }
 
 function setDayScore(day, type, val) {
-  if (!_feedbackData.days[day]) _feedbackData.days[day] = { phys: 3, mental: 3, coucher: '', lever: '' };
+  if (!_feedbackData.days[day]) _feedbackData.days[day] = {phys:3,mental:3,coucher:'',lever:''};
   _feedbackData.days[day][type] = val;
-  // Mettre à jour visuellement
   var row = document.getElementById(type + '_' + day);
   if (!row) return;
   row.querySelectorAll('.star-btn').forEach(function(btn) {
@@ -10102,11 +10196,10 @@ function setDayScore(day, type, val) {
 }
 
 function feedbackSleepChange(day, field, val) {
-  if (!_feedbackData.days[day]) _feedbackData.days[day] = { phys: 3, mental: 3, coucher: '', lever: '' };
+  if (!_feedbackData.days[day]) _feedbackData.days[day] = {phys:3,mental:3,coucher:'',lever:''};
   _feedbackData.days[day][field] = val;
 }
 
-// RPE
 function rpeTrackClick(e) {
   var track = document.getElementById('rpeTrack');
   var rect = track.getBoundingClientRect();
@@ -10114,7 +10207,6 @@ function rpeTrackClick(e) {
   var val = Math.max(1, Math.min(10, Math.round(pct * 9) + 1));
   updateRpeDisplay(val);
 }
-
 function updateRpeDisplay(val) {
   _feedbackData.rpe = val;
   var thumb = document.getElementById('rpeThumb');
@@ -10125,90 +10217,63 @@ function updateRpeDisplay(val) {
   if (desc) desc.textContent = RPE_LABELS[val] || '';
 }
 
-// ── Vérifier si feedback déjà envoyé cette semaine ───────
 function loadCurrentWeekFeedback() {
-  if (!_sb || !_athProfile || !_athCoachUid) return;
-  var weekId = getISOWeekId();
+  if (!_sb || !_athProfile) return;
   _sb.from('athlete_feedback')
-    .select('*')
-    .eq('coach_uid', _athCoachUid)
-    .eq('profile_id', _athProfile.id)
-    .eq('week_id', weekId)
-    .maybeSingle()
+    .select('*').eq('athlete_uid', _athProfile.user_id).eq('week_id', getISOWeekId()).maybeSingle()
     .then(function(r) {
-      if (r.data) {
-        // Feedback déjà envoyé
-        var btn = document.getElementById('athSubmitBtn');
-        var msg = document.getElementById('athSubmitMsg');
-        if (btn) { btn.textContent = '✅ Feedback envoyé pour cette semaine'; btn.style.background = '#22c55e'; btn.disabled = true; }
-        if (msg) msg.textContent = 'Envoyé le ' + new Date(r.data.created_at).toLocaleDateString('fr-FR');
-      }
+      if (!r.data) return;
+      var btn = document.getElementById('athSubmitBtn');
+      var msg = document.getElementById('athSubmitMsg');
+      if (btn) { btn.textContent = '✅ Feedback envoyé pour cette semaine'; btn.style.background = '#22c55e'; btn.disabled = true; }
+      if (msg) { msg.textContent = 'Envoyé le ' + new Date(r.data.created_at).toLocaleDateString('fr-FR'); msg.style.color = '#22c55e'; }
     });
 }
 
-// ── Soumettre le feedback ─────────────────────────────────
 function submitFeedback() {
-  if (!_sb || !_athProfile || !_athCoachUid) return;
+  if (!_sb || !_athProfile) return;
   var btn = document.getElementById('athSubmitBtn');
   var msg = document.getElementById('athSubmitMsg');
   if (btn) { btn.textContent = 'Envoi...'; btn.disabled = true; }
-
-  var weekId = getISOWeekId();
   var data = {
-    coach_uid:  _athCoachUid,
-    profile_id: _athProfile.id,
+    athlete_uid:  _athProfile.user_id,
     athlete_name: _athProfile.name,
-    week_id:    weekId,
-    week_label: getISOWeekLabel(),
-    rpe:        _feedbackData.rpe,
-    days:       _feedbackData.days,
-    objective:  document.getElementById('athObjective').value,
-    comment:    document.getElementById('athComment').value,
-    created_at: new Date().toISOString()
+    coach_uid:    _athCoachUid,
+    week_id:      getISOWeekId(),
+    week_label:   getISOWeekLabel(),
+    rpe:          _feedbackData.rpe,
+    days:         _feedbackData.days,
+    objective:    document.getElementById('athObjective').value,
+    comment:      document.getElementById('athComment').value,
+    created_at:   new Date().toISOString()
   };
-
-  _sb.from('athlete_feedback').insert(data)
-    .then(function(r) {
-      if (r.error) {
-        if (msg) msg.textContent = 'Erreur : ' + r.error.message;
-        msg.style.color = '#ef4444';
-        if (btn) { btn.textContent = '📤 ENVOYER AU COACH'; btn.disabled = false; }
-        return;
-      }
-      if (btn) { btn.textContent = '✅ Feedback envoyé !'; btn.style.background = '#22c55e'; }
-      if (msg) { msg.textContent = 'Ton coach a été notifié.'; msg.style.color = '#22c55e'; }
-      // Notifier le coach via Edge Function
-      notifyCoachFeedback(data);
-    });
+  _sb.from('athlete_feedback').insert(data).then(function(r) {
+    if (r.error) {
+      if (msg) { msg.textContent = 'Erreur : ' + r.error.message; msg.style.color = '#ef4444'; }
+      if (btn) { btn.textContent = '📤 ENVOYER AU COACH'; btn.disabled = false; }
+      return;
+    }
+    if (btn) { btn.textContent = '✅ Feedback envoyé !'; btn.style.background = '#22c55e'; }
+    if (msg) { msg.textContent = 'Ton coach a été notifié.'; msg.style.color = '#22c55e'; }
+    notifyCoachFeedback(data);
+  });
 }
 
-// ── Notifier le coach ─────────────────────────────────────
 function notifyCoachFeedback(feedbackData) {
-  if (!_sb) return;
-  // Appel Edge Function Supabase
+  if (!feedbackData.coach_uid) return;
   fetch(_SB_URL + '/functions/v1/notify-coach', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _SB_KEY },
-    body: JSON.stringify({
-      coach_uid: feedbackData.coach_uid,
-      athlete_name: feedbackData.athlete_name,
-      week_label: feedbackData.week_label,
-      rpe: feedbackData.rpe
-    })
-  }).catch(function(e) { console.warn('Notify coach failed:', e); });
+    body: JSON.stringify({ coach_uid: feedbackData.coach_uid, athlete_name: feedbackData.athlete_name, week_label: feedbackData.week_label, rpe: feedbackData.rpe })
+  }).catch(function(e) { console.warn('Notify coach:', e); });
 }
 
-// ── Historique feedbacks athlète ──────────────────────────
 function renderAthFeedbackHistory() {
   var el = document.getElementById('athFeedbackHistory');
   if (!el || !_sb || !_athProfile) return;
   el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Chargement...</div>';
-  _sb.from('athlete_feedback')
-    .select('*')
-    .eq('profile_id', _athProfile.id)
-    .eq('coach_uid', _athCoachUid)
-    .order('created_at', { ascending: false })
-    .limit(20)
+  _sb.from('athlete_feedback').select('*').eq('athlete_uid', _athProfile.user_id)
+    .order('created_at', { ascending: false }).limit(20)
     .then(function(r) {
       if (r.error || !r.data || !r.data.length) {
         el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Aucun feedback envoyé.</div>';
@@ -10223,47 +10288,33 @@ function renderAthFeedbackHistory() {
             '<span style="font-family:DM Mono,monospace;font-size:8px;color:' + rpeColor + ';">RPE ' + fb.rpe + '/10</span>' +
           '</div>' +
           (fb.objective ? '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:4px;">🎯 ' + fb.objective + '</div>' : '') +
-          (fb.comment ? '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:4px;">💬 ' + fb.comment + '</div>' : '') +
+          (fb.comment   ? '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:4px;">💬 ' + fb.comment + '</div>' : '') +
         '</div>';
       });
       el.innerHTML = html;
     });
 }
 
-// ── Vue Calcul athlète ────────────────────────────────────
 function renderAthCalc() {
   var el = document.getElementById('athCalcContent');
   if (!el || !_athProfile) return;
-  var p = _athProfile;
-  var r = p.records || {};
+  var p = _athProfile; var r = p.records || {};
   var refs = [];
-  if (r.pr100) refs.push({ t: r.pr100, dRef: 100 });
-  if (r.pr200) refs.push({ t: r.pr200, dRef: 200 });
-  if (r.pr60)  refs.push({ t: r.pr60,  dRef: 60  });
-  if (r.pr400) refs.push({ t: r.pr400, dRef: 400 });
-  if (r.pr50)  refs.push({ t: r.pr50,  dRef: 50  });
-
-  if (!refs.length) {
-    el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Aucun record enregistré dans ton profil. Contacte ton coach.</div>';
-    return;
-  }
-
-  var pcts = [60, 70, 75, 80, 85, 90, 95, 100];
-  var dists = [30, 40, 50, 60, 80, 100, 120, 150, 200, 300, 400];
+  if (r.pr100) refs.push({t:r.pr100,dRef:100}); if (r.pr200) refs.push({t:r.pr200,dRef:200});
+  if (r.pr60)  refs.push({t:r.pr60, dRef:60});   if (r.pr400) refs.push({t:r.pr400,dRef:400});
+  if (r.pr50)  refs.push({t:r.pr50, dRef:50});
+  if (!refs.length) { el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Aucun record dans ton profil.</div>'; return; }
+  var pcts = [60,70,75,80,85,90,95,100]; var dists = [30,40,50,60,80,100,120,150,200,300,400];
   var html = '';
   pcts.forEach(function(pct) {
-    html += '<div class="card" style="margin-bottom:12px;">' +
-      '<div class="card-title">// @ ' + pct + '%</div>' +
-      '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">';
+    html += '<div class="card" style="margin-bottom:12px;"><div class="card-title">// @ ' + pct + '%</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">';
     dists.forEach(function(d) {
       try {
-        var t = computeTarget(d, refs) / (pct / 100);
-        var spd = d / t;
+        var t = computeTarget(d,refs)/(pct/100); var spd = d/t;
         html += '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 12px;min-width:80px;">' +
           '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);">' + d + 'm</div>' +
           '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:var(--accent);">' + t.toFixed(2) + 's</div>' +
-          '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);">' + spd.toFixed(1) + 'm/s</div>' +
-          '</div>';
+          '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);">' + spd.toFixed(1) + 'm/s</div></div>';
       } catch(e) {}
     });
     html += '</div></div>';
@@ -10271,171 +10322,33 @@ function renderAthCalc() {
   el.innerHTML = html;
 }
 
-// ── Vue Force athlète ─────────────────────────────────────
 function renderAthForce() {
   var el = document.getElementById('athForceContent');
   if (!el || !_athProfile) return;
   var rm1 = _athProfile.rm1 || {};
-  var exos = [
-    { id: 'squat', label: 'Back Squat', icon: '🏋' },
-    { id: 'hipthrust', label: 'Hip Thrust', icon: '🔁' },
-    { id: 'rdl', label: 'RDL', icon: '📐' },
-    { id: 'powerclean', label: 'Power Clean', icon: '⚡' },
-    { id: 'bench', label: 'Bench Press', icon: '💪' }
-  ];
-  var pcts = [50, 60, 70, 75, 80, 85, 90, 95, 100];
-  var html = '';
+  var exos = [{id:'squat',label:'Back Squat',icon:'🏋'},{id:'hipthrust',label:'Hip Thrust',icon:'🔁'},{id:'rdl',label:'RDL',icon:'📐'},{id:'powerclean',label:'Power Clean',icon:'⚡'},{id:'bench',label:'Bench Press',icon:'💪'}];
+  var pcts = [50,60,70,75,80,85,90,95,100]; var html = '';
   exos.forEach(function(exo) {
-    var rm = rm1[exo.id];
-    if (!rm) return;
-    html += '<div class="card" style="margin-bottom:12px;">' +
-      '<div class="card-title">' + exo.icon + ' ' + exo.label + ' — 1RM : <span style="color:var(--accent);">' + rm + 'kg</span></div>' +
-      '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">';
+    var rm = rm1[exo.id]; if (!rm) return;
+    html += '<div class="card" style="margin-bottom:12px;"><div class="card-title">' + exo.icon + ' ' + exo.label + ' — 1RM : <span style="color:var(--accent);">' + rm + 'kg</span></div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">';
     pcts.forEach(function(pct) {
-      var kg = (rm * pct / 100).toFixed(1);
+      var kg = (rm*pct/100).toFixed(1);
       html += '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 12px;min-width:72px;">' +
         '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);">' + pct + '%</div>' +
-        '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:var(--text);">' + kg + '</div>' +
-        '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);">kg</div>' +
-        '</div>';
+        '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;">' + kg + '</div>' +
+        '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);">kg</div></div>';
     });
     html += '</div></div>';
   });
-  if (!html) el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Aucun 1RM enregistré dans ton profil.</div>';
-  else el.innerHTML = html;
+  el.innerHTML = html || '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Aucun 1RM dans ton profil.</div>';
 }
-
-// ── Push notifications ────────────────────────────────────
-var _pushSubscription = null;
 
 function requestPushPermission() {
-  if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
-  if (Notification.permission === 'granted') { registerPushSW(); return; }
-  if (Notification.permission !== 'denied') {
-    Notification.requestPermission().then(function(p) {
-      if (p === 'granted') registerPushSW();
-    });
-  }
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') return;
+  if (Notification.permission !== 'denied') Notification.requestPermission();
 }
 
-function registerPushSW() {
-  // Injecter un service worker minimal inline via blob
-  var swCode = 'self.addEventListener("push",function(e){var d=e.data?e.data.json():{};e.waitUntil(self.registration.showNotification(d.title||"TrackSpeed",{body:d.body||"",icon:"/favicon.ico",badge:"/favicon.ico",data:d}));});self.addEventListener("notificationclick",function(e){e.notification.close();e.waitUntil(clients.openWindow("/"));});';
-  var blob = new Blob([swCode], { type: 'application/javascript' });
-  var swUrl = URL.createObjectURL(blob);
-  navigator.serviceWorker.register(swUrl, { scope: '/' }).then(function(reg) {
-    return reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: null  // VAPID key needed for real push — stored in Edge Function
-    });
-  }).then(function(sub) {
-    _pushSubscription = sub;
-    // Enregistrer la souscription dans Supabase
-    if (_sb && _athProfile) {
-      _sb.from('push_subscriptions').upsert({
-        profile_id: _athProfile.id,
-        coach_uid: _athCoachUid,
-        subscription: JSON.stringify(sub.toJSON()),
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'profile_id' }).then(function() {});
-    }
-  }).catch(function(e) {
-    // Push peut échouer si VAPID non configuré — non bloquant
-    console.warn('Push registration:', e.message);
-  });
-}
-
-// ── Génération de code par le coach — permanent par profil ──
-function generateAthleteCode(profileId) {
-  if (!_sb || !_sbUser) { alert('Connecte-toi d\'abord.'); return; }
-
-  // Récupérer le profil complet pour le stocker dans athlete_codes
-  var profile = profiles.find(function(p) { return p.id === profileId; });
-  if (!profile) { alert('Profil introuvable.'); return; }
-
-  // Vérifier si un code existe déjà pour ce profil
-  _sb.from('athlete_codes').select('*')
-    .eq('coach_uid', _sbUser.id)
-    .eq('profile_id', profileId)
-    .maybeSingle()
-    .then(function(r) {
-      if (r.data && r.data.code) {
-        // Code existant → mettre à jour le profil (au cas où il aurait changé) et afficher
-        _sb.from('athlete_codes')
-          .update({ profile_data: JSON.stringify(profile) })
-          .eq('coach_uid', _sbUser.id)
-          .eq('profile_id', profileId)
-          .then(function() {});
-        showAthleteCodeModal(profileId, r.data.code);
-        return;
-      }
-      // Créer un nouveau code permanent
-      var code = String(Math.floor(100000 + Math.random() * 900000));
-      _sb.from('athlete_codes').select('id').eq('code', code).maybeSingle()
-        .then(function(check) {
-          if (check.data) { generateAthleteCode(profileId); return; } // collision rare
-          _sb.from('athlete_codes').insert({
-            coach_uid:    _sbUser.id,
-            profile_id:   profileId,
-            code:         code,
-            athlete_name: profile.name,
-            profile_data: JSON.stringify(profile)
-          }).then(function(ins) {
-            if (ins.error) { alert('Erreur création code : ' + ins.error.message); return; }
-            showAthleteCodeModal(profileId, code);
-          });
-        });
-    });
-}
-
-// Code courant affiché dans la modale
-var _currentModalCode = '';
-
-function copyAthleteCode(btn, code) {
-  navigator.clipboard.writeText(code).then(function() {
-    btn.textContent = '✓ Copié !';
-    setTimeout(function() { btn.textContent = 'Copier le code'; }, 2000);
-  });
-}
-
-function showAthleteCodeModal(profileId, code) {
-  _currentModalCode = code;
-  var p = profiles.find(function(pr) { return pr.id === profileId; });
-  var name = p ? p.name : 'Athlète';
-  var existing = document.getElementById('athCodeModal');
-  if (existing) existing.remove();
-  var modal = document.createElement('div');
-  modal.id = 'athCodeModal';
-  modal.style.cssText = 'position:fixed;inset:0;z-index:99997;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;padding:20px;';
-  var inner = document.createElement('div');
-  inner.style.cssText = 'background:var(--surface);border:1px solid var(--accent);border-radius:12px;padding:32px;max-width:360px;width:100%;text-align:center;';
-  inner.innerHTML =
-    '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">CODE D&#x27;ACCÈS</div>' +
-    '<div style="font-family:Bebas Neue,sans-serif;font-size:24px;margin-bottom:16px;">' + name.toUpperCase() + '</div>' +
-    '<div style="font-family:Bebas Neue,sans-serif;font-size:48px;color:var(--accent);letter-spacing:8px;margin-bottom:8px;">' + code + '</div>' +
-    '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);margin-bottom:24px;">Partage ce code avec ton athlète.<br>Valide 1 an.</div>';
-  var copyBtn = document.createElement('button');
-  copyBtn.textContent = 'Copier le code';
-  copyBtn.style.cssText = 'width:100%;background:var(--accent);border:none;border-radius:6px;padding:12px;font-family:Bebas Neue,sans-serif;font-size:18px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:10px;';
-  copyBtn.onclick = function() { copyAthleteCode(copyBtn, code); };
-  var closeBtn = document.createElement('button');
-  closeBtn.textContent = 'Fermer';
-  closeBtn.style.cssText = 'width:100%;background:none;border:1px solid var(--border);border-radius:6px;padding:10px;font-family:DM Mono,monospace;font-size:9px;color:var(--muted);cursor:pointer;';
-  closeBtn.onclick = function() { modal.remove(); };
-  inner.appendChild(copyBtn);
-  inner.appendChild(closeBtn);
-  modal.appendChild(inner);
-  document.body.appendChild(modal);
-}
-
-// ── Bouton dans la fiche profil pour générer le code ─────
-function getExistingAthleteCode(profileId, callback) {
-  if (!_sb || !_sbUser) return;
-  _sb.from('athlete_codes').select('code').eq('coach_uid', _sbUser.id).eq('profile_id', profileId).maybeSingle()
-    .then(function(r) { callback(r.data ? r.data.code : null); });
-}
-
-// ── Feedbacks reçus par le coach ─────────────────────────
 function renderCoachFeedbacks() {
   var el = document.getElementById('coachFeedbackList');
   if (!el || !_sb || !_sbUser) return;
@@ -10444,41 +10357,41 @@ function renderCoachFeedbacks() {
     .order('created_at', { ascending: false }).limit(50)
     .then(function(r) {
       if (r.error || !r.data || !r.data.length) {
-        el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Aucun feedback reçu.</div>';
-        return;
+        el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Aucun feedback reçu.</div>'; return;
       }
       var html = '';
       r.data.forEach(function(fb) {
         var rpeColor = fb.rpe <= 4 ? '#22c55e' : fb.rpe <= 7 ? '#f59e0b' : '#ef4444';
-        var rpeW = ((fb.rpe - 1) / 9 * 100).toFixed(0);
+        var rpeW = ((fb.rpe-1)/9*100).toFixed(0);
         html += '<div class="fb-athlete-card">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
-            '<div>' +
-              '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;">' + (fb.athlete_name || '').toUpperCase() + '</div>' +
-              '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);">' + (fb.week_label || fb.week_id) + '</div>' +
-            '</div>' +
-            '<div style="font-family:Bebas Neue,sans-serif;font-size:28px;color:' + rpeColor + ';">' + fb.rpe + '<span style="font-size:14px;color:var(--muted);">/10</span></div>' +
-          '</div>' +
-          '<div style="margin-bottom:8px;">' +
-            '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);margin-bottom:4px;">RPE</div>' +
-            '<div class="fb-rpe-bar"><div class="fb-rpe-marker" style="left:' + rpeW + '%"></div></div>' +
-          '</div>' +
-          (fb.objective ? '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--text);margin-top:8px;">🎯 <span style="color:var(--muted);">Objectif :</span> ' + fb.objective + '</div>' : '') +
-          (fb.comment   ? '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--text);margin-top:6px;">💬 ' + fb.comment + '</div>' : '') +
-          '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);margin-top:8px;text-align:right;">' + new Date(fb.created_at).toLocaleDateString('fr-FR') + '</div>' +
-        '</div>';
+            '<div><div style="font-family:Bebas Neue,sans-serif;font-size:18px;">' + (fb.athlete_name||'').toUpperCase() + '</div>' +
+            '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);">' + (fb.week_label||fb.week_id) + '</div></div>' +
+            '<div style="font-family:Bebas Neue,sans-serif;font-size:28px;color:' + rpeColor + ';"> ' + fb.rpe + '<span style="font-size:14px;color:var(--muted);">/10</span></div></div>' +
+          '<div style="margin-bottom:8px;"><div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);margin-bottom:4px;">RPE</div>' +
+          '<div class="fb-rpe-bar"><div class="fb-rpe-marker" style="left:' + rpeW + '%"></div></div></div>' +
+          (fb.objective ? '<div style="font-family:DM Mono,monospace;font-size:9px;margin-top:8px;">🎯 <span style="color:var(--muted);">Objectif :</span> ' + fb.objective + '</div>' : '') +
+          (fb.comment   ? '<div style="font-family:DM Mono,monospace;font-size:9px;margin-top:6px;">💬 ' + fb.comment + '</div>' : '') +
+          '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);margin-top:8px;text-align:right;">' + new Date(fb.created_at).toLocaleDateString('fr-FR') + '</div></div>';
       });
       el.innerHTML = html;
     });
 }
 
-// ── Init : vérifier URL param pour mode athlète ───────────
-(function() {
-  var params = new URLSearchParams(window.location.search);
-  if (params.get('athlete') === '1') {
-    setTimeout(showAthleteLoginScreen, 500);
-  }
-})();
+// Anciennes fonctions code (conservées vides pour compatibilité)
+function athleteCodeSubmit()   {}
+function generateAthleteCode() {}
+function tryAthleteAutoLogin() {
+  if (!_sb) return;
+  _sb.auth.getSession().then(function(res) {
+    var session = res.data && res.data.session;
+    if (!session) return;
+    var user = session.user;
+    if (!user.user_metadata || user.user_metadata.role !== 'athlete') return;
+    _athUser = user;
+    loadAthleteProfile(user);
+  });
+}
 
 // ── INIT ──
 renderProfiles();
@@ -10555,18 +10468,45 @@ setTimeout(() => {
 
     <!-- Panel Athlète -->
     <div id="loginAthletePanel" style="display:none;padding:28px 24px;">
-      <div style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;margin-bottom:6px;">CODE D'ACCÈS FOURNI PAR TON COACH</div>
-      <div style="font-family:'DM Mono',monospace;font-size:10px;color:#f0f0f0;margin-bottom:24px;line-height:1.6;">Entre le code à 6 chiffres<br>que ton coach t'a communiqué.</div>
-      <div style="display:flex;gap:8px;justify-content:center;margin-bottom:20px;">
-        <input class="code-digit" id="cd0" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(0)" onkeydown="codeDigitKey(event,0)">
-        <input class="code-digit" id="cd1" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(1)" onkeydown="codeDigitKey(event,1)">
-        <input class="code-digit" id="cd2" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(2)" onkeydown="codeDigitKey(event,2)">
-        <input class="code-digit" id="cd3" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(3)" onkeydown="codeDigitKey(event,3)">
-        <input class="code-digit" id="cd4" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(4)" onkeydown="codeDigitKey(event,4)">
-        <input class="code-digit" id="cd5" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]" oninput="codeDigitInput(5)" onkeydown="codeDigitKey(event,5)">
+      <div style="margin-bottom:16px;">
+        <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:8px;">EMAIL</label>
+        <input id="athEmail" type="email" placeholder="ton@email.com" autocomplete="email"
+          style="width:100%;box-sizing:border-box;background:#16161a;border:1px solid #1e1e24;border-radius:6px;padding:12px 14px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:13px;outline:none;">
       </div>
-      <div id="codeMsg" style="font-family:'DM Mono',monospace;font-size:9px;color:#ef4444;min-height:16px;margin-bottom:16px;text-align:center;"></div>
-      <button onclick="athleteCodeSubmit()" style="width:100%;background:#F5C800;border:none;border-radius:6px;padding:14px;font-family:'Bebas Neue',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;">ACCÉDER</button>
+      <div style="margin-bottom:8px;">
+        <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:8px;">MOT DE PASSE</label>
+        <input id="athPassword" type="password" placeholder="••••••••" autocomplete="current-password"
+          style="width:100%;box-sizing:border-box;background:#16161a;border:1px solid #1e1e24;border-radius:6px;padding:12px 14px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:13px;outline:none;"
+          onkeydown="if(event.key==='Enter') athLoginSubmit()">
+      </div>
+      <div style="text-align:right;margin-bottom:20px;">
+        <button onclick="athForgotPassword()" style="background:none;border:none;font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;cursor:pointer;text-decoration:underline;">Mot de passe oublié ?</button>
+      </div>
+      <div id="athLoginMsg" style="font-family:'DM Mono',monospace;font-size:9px;line-height:1.5;margin-bottom:16px;display:none;padding:10px 12px;border-radius:6px;"></div>
+      <button id="athLoginBtn" onclick="athLoginSubmit()" style="width:100%;background:#F5C800;border:none;border-radius:6px;padding:14px;font-family:'Bebas Neue',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:12px;">SE CONNECTER</button>
+      <button onclick="athSignupSwitch()" id="athSignupBtn" style="width:100%;background:none;border:1px solid #1e1e24;border-radius:6px;padding:12px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;color:#6b6b7a;cursor:pointer;">Créer un compte athlète</button>
+    </div>
+    <!-- Panel Inscription Athlète -->
+    <div id="loginAthleteSignupPanel" style="display:none;padding:28px 24px;">
+      <div style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;margin-bottom:16px;">CRÉER UN COMPTE ATHLÈTE</div>
+      <div style="margin-bottom:14px;">
+        <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:8px;">PRÉNOM NOM</label>
+        <input id="athSignupName" type="text" placeholder="Malia Fonoti"
+          style="width:100%;box-sizing:border-box;background:#16161a;border:1px solid #1e1e24;border-radius:6px;padding:12px 14px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:13px;outline:none;">
+      </div>
+      <div style="margin-bottom:14px;">
+        <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:8px;">EMAIL</label>
+        <input id="athSignupEmail" type="email" placeholder="ton@email.com"
+          style="width:100%;box-sizing:border-box;background:#16161a;border:1px solid #1e1e24;border-radius:6px;padding:12px 14px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:13px;outline:none;">
+      </div>
+      <div style="margin-bottom:20px;">
+        <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:8px;">MOT DE PASSE</label>
+        <input id="athSignupPassword" type="password" placeholder="••••••••" minlength="6"
+          style="width:100%;box-sizing:border-box;background:#16161a;border:1px solid #1e1e24;border-radius:6px;padding:12px 14px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:13px;outline:none;">
+      </div>
+      <div id="athSignupMsg" style="font-family:'DM Mono',monospace;font-size:9px;line-height:1.5;margin-bottom:16px;display:none;padding:10px 12px;border-radius:6px;"></div>
+      <button onclick="athSignupSubmit()" style="width:100%;background:#F5C800;border:none;border-radius:6px;padding:14px;font-family:'Bebas Neue',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:12px;">CRÉER MON COMPTE</button>
+      <button onclick="athSignupBack()" style="width:100%;background:none;border:none;font-family:'DM Mono',monospace;font-size:9px;color:#6b6b7a;cursor:pointer;">← Retour connexion</button>
     </div>
   </div>
   <div id="loginScreenSub" style="margin-top:20px;font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;text-align:center;line-height:1.8;">Avec un compte, tes données sont sauvegardées en ligne<br>et accessibles depuis n'importe quel appareil.</div>
@@ -10725,11 +10665,19 @@ setTimeout(() => {
   </div>
 
   <!-- Nav athlète -->
+  <!-- Page Profil athlète -->
+  <div id="ath-page-profile" class="ath-page">
+    <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:4px;">// MON PROFIL</div>
+    <h2 style="font-family:'Bebas Neue',sans-serif;font-size:32px;margin-bottom:20px;">PROFIL</h2>
+    <div id="athProfileInfo"></div>
+  </div>
+
   <nav class="ath-nav">
     <button class="ath-nav-btn active" id="ath-nav-feedback" onclick="athGoPage('feedback')"><span class="icon">📋</span>Feedback</button>
     <button class="ath-nav-btn" id="ath-nav-calc"     onclick="athGoPage('calc')"    ><span class="icon">⏱</span>Calcul</button>
     <button class="ath-nav-btn" id="ath-nav-force"    onclick="athGoPage('force')"   ><span class="icon">🏋</span>Force</button>
     <button class="ath-nav-btn" id="ath-nav-history"  onclick="athGoPage('history')" ><span class="icon">📊</span>Historique</button>
+    <button class="ath-nav-btn" id="ath-nav-profile"  onclick="athGoPage('profile')" ><span class="icon">👤</span>Profil</button>
   </nav>
 </div>
 
