@@ -224,6 +224,83 @@ body.light-theme canvas { filter:invert(0); }
   transition:all .2s; flex-shrink:0;
 }
 #themeToggle:hover { border-color:var(--accent); color:var(--accent); }
+
+/* ═══════════════════════════════════════════════
+   MODE ATHLÈTE - ISOLATION COMPLÈTE
+   ═══════════════════════════════════════════════ */
+
+/* athleteApp couvre tout l'écran, par-dessus le coach */
+#athleteApp {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: var(--bg);
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* display géré par JS : none / flex */
+}
+
+/* Header sticky athlète */
+.ath-header {
+  position: sticky;
+  top: 0;
+  z-index: 9001;
+  background: var(--surface);
+  border-bottom: 2px solid var(--accent);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+/* Pages athlète */
+.ath-page {
+  display: none;
+  padding: 24px 20px 100px;
+  max-width: 680px;
+  margin: 0 auto;
+  width: 100%;
+}
+.ath-page.active {
+  display: block;
+  animation: fadeUp .3s ease both;
+}
+
+/* Nav athlète */
+.ath-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(10,10,11,.96);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border);
+  display: flex;
+  z-index: 9001;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.ath-nav-btn {
+  flex: 1;
+  padding: 12px 4px 10px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  transition: color .2s;
+}
+.ath-nav-btn .icon { font-size: 18px; line-height: 1; }
+.ath-nav-btn.active { color: var(--accent); }
+.ath-nav-btn:hover:not(.active) { color: var(--text); }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -8661,11 +8738,7 @@ function printFiche(pid) {
     #fiche-print .accent { color:#c8181e; }
     #fiche-print .logo { font-family:'Bebas Neue',sans-serif; font-size:11px; letter-spacing:3px; color:#6b6b7a; }
   
-/* ═══ MODE ATHLÈTE ═══ */
-.athlete-mode .nav { display: none !important; }
-.athlete-mode .page { display: none !important; }
-.athlete-mode #athleteApp { display: flex !important; }
-#athleteApp { display: none; flex-direction: column; min-height: 100vh; padding-bottom: 20px; }
+/* athleteApp CSS moved to bottom */
 
 /* Header athlète */
 .ath-header {
@@ -9998,7 +10071,15 @@ function enterAthleteMode(profile) {
   _athProfile  = profile;
   _athCoachUid = profile.coach_uid || null;
   loginHide();
-  document.getElementById('athleteApp').style.display = 'flex';
+  // Cacher entièrement la vue coach
+  document.querySelectorAll('.page').forEach(function(p) { p.style.display = 'none'; });
+  var coachNav = document.querySelector('nav.nav');
+  if (coachNav) coachNav.style.display = 'none';
+  var headerBar = document.querySelector('[id="sbSyncBadge"]');
+  if (headerBar && headerBar.parentElement) headerBar.parentElement.style.display = 'none';
+  // Afficher l'app athlète
+  var app = document.getElementById('athleteApp');
+  app.style.display = 'flex';
   var nameEl = document.getElementById('athHeaderName');
   var weekEl = document.getElementById('athHeaderWeek');
   var titleEl = document.getElementById('athFeedbackTitle');
@@ -10018,11 +10099,18 @@ function athleteLogout() {
   if (!confirm('Se déconnecter ?')) return;
   _athMode = false; _athProfile = null; _athCoachUid = null; _athUser = null;
   if (_sb) _sb.auth.signOut();
-  document.getElementById('athleteApp').style.display = 'none';
-  loginShow(); loginSwitchTab('login');
+  // Cacher l'app athlète
+  var app = document.getElementById('athleteApp');
+  app.style.display = 'none';
+  // Restaurer la vue coach
+  document.querySelectorAll('.page').forEach(function(p) { p.style.display = ''; });
+  var coachNav = document.querySelector('nav.nav');
+  if (coachNav) coachNav.style.display = '';
+  var headerBar = document.querySelector('[id="sbSyncBadge"]');
+  if (headerBar && headerBar.parentElement) headerBar.parentElement.style.display = '';
+  loginShow();
 }
 
-// ── Profil info athlète — ID + statut coach ───────────────
 function renderAthProfileInfo() {
   var el = document.getElementById('athProfileInfo');
   if (!el || !_athProfile) return;
