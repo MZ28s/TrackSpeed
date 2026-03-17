@@ -10845,7 +10845,7 @@ function submitFeedback() {
   var btn=document.getElementById('athSubmitBtn'); var msg=document.getElementById('athSubmitMsg');
   if(btn){btn.textContent='Envoi...';btn.disabled=true;}
   var rpeVals = ATH_DAYS.map(function(d){return _feedbackData.days[d].rpe;}).filter(function(v){return v!==null;});
-  var rpeAvg = rpeVals.length ? Math.round(rpeVals.reduce(function(a,b){return a+b;},0)/rpeVals.length*10)/10 : null;
+  var rpeAvg = rpeVals.length ? Math.round(rpeVals.reduce(function(a,b){return a+b;},0)/rpeVals.length) : null;
   var data = {
     athlete_uid: _athProfile.user_id, athlete_name: _athProfile.name,
     week_id: getISOWeekId(), week_label: getISOWeekLabel(),
