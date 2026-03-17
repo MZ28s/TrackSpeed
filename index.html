@@ -1190,9 +1190,10 @@ function sbInit() {
   }).catch(function() { loginShow(); });
   _sb.auth.onAuthStateChange(function(event, session) {
     _sbUser = session ? session.user : null;
-    if (event === 'SIGNED_IN') { sbPullAll().then(function() { loginHide(); sbUpdateNavBar(); }); }
-    if (event === 'SIGNED_OUT') { sbUpdateNavBar(); }
-    if (event === 'PASSWORD_RECOVERY') { showPasswordResetForm(); }
+    if (event === 'SIGNED_IN')       { sbPullAll().then(function() { loginHide(); sbUpdateNavBar(); }); }
+    if (event === 'SIGNED_OUT')       { sbUpdateNavBar(); }
+    if (event === 'PASSWORD_RECOVERY'){ showPasswordResetForm(); }
+    if (event === 'TOKEN_REFRESHED')  { sbScheduleSync(); }
   });
 }
 
@@ -1205,16 +1206,24 @@ function sbSyncBadgeSet(text, color, autoReset) {
 
 function sbPush(table, data) {
   if (!_sbUser || !_sb) return Promise.resolve({ ok: false, reason: 'not_logged_in' });
-  return _sb.from(table).upsert(
-    { user_id: _sbUser.id, data: data, updated_at: new Date().toISOString() },
-    { onConflict: 'user_id' }
-  ).then(function(r) {
-    if (r.error) { console.error('sbPush [' + table + ']:', r.error.message, r.error); return { ok: false, reason: r.error.message }; }
-    return { ok: true };
-  }).catch(function(e) {
-    console.error('sbPush exception [' + table + ']:', e);
-    return { ok: false, reason: e.message };
-  });
+  var payload = { data: data, updated_at: new Date().toISOString() };
+  // Try UPDATE first; if no row matched, INSERT
+  return _sb.from(table).update(payload).eq('user_id', _sbUser.id).select()
+    .then(function(r) {
+      if (r.error) { console.error('sbPush update [' + table + ']:', r.error.message); return { ok: false, reason: r.error.message }; }
+      // .select() returns updated rows; empty array means no row existed yet
+      var updated = r.data && r.data.length > 0;
+      if (updated) return { ok: true };
+      // No row existed yet — INSERT
+      return _sb.from(table).insert({ user_id: _sbUser.id, data: data, updated_at: new Date().toISOString() })
+        .then(function(r2) {
+          if (r2.error) { console.error('sbPush insert [' + table + ']:', r2.error.message); return { ok: false, reason: r2.error.message }; }
+          return { ok: true };
+        });
+    }).catch(function(e) {
+      console.error('sbPush exception [' + table + ']:', e);
+      return { ok: false, reason: e.message };
+    });
 }
 
 function sbPull(table) {
@@ -1320,18 +1329,13 @@ function sbSyncAll() {
 }
 
 function sbForcePull() {
-  if (!_sbUser || !_sb) { alert('Non connecté.'); return; }
-  sbPullAll().then(function() {
-    renderProfiles(); renderHome();
-    alert('✅ Données rechargées depuis le cloud.');
-  });
+  if (!_sbUser || !_sb) { sbSyncBadgeSet('non connecté', '#ef4444', true); return; }
+  sbPullAll().then(function() { renderProfiles(); renderHome(); });
 }
 
 function sbForcePush() {
-  if (!_sbUser || !_sb) { alert('Non connecté.'); return; }
-  sbSyncAll().then(function() {
-    alert('✅ Données envoyées vers le cloud.');
-  });
+  if (!_sbUser || !_sb) { sbSyncBadgeSet('non connecté', '#ef4444', true); return; }
+  sbSyncAll();
 }
 
 function sbUpdateNavBar() {
@@ -9583,6 +9587,25 @@ function deleteCompetResult(pid, saison, idxInFiltered) {
 renderProfiles();
 renderHome();
 sbInit();
+
+// ── AUTO-SYNC : reprend le sync quand l'app redevient visible ou en ligne ──
+var _lastVisibleSync = 0;
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'visible' && _sbUser) {
+    var now = Date.now();
+    // Re-pull si on revient après plus de 30 secondes d'absence
+    if (now - _lastVisibleSync > 30000) {
+      _lastVisibleSync = now;
+      sbPullAll();
+    }
+  }
+});
+window.addEventListener('online', function() {
+  if (_sbUser) {
+    // Réseau retrouvé : push les données locales puis pull le cloud
+    sbSyncAll().then(function() { sbPullAll(); });
+  }
+});
 // Vérifier si une séance force est en attente au chargement
 setTimeout(() => {
   if (localStorage.getItem('sc_force_session_pending') && document.getElementById('page-session')?.classList.contains('active')) {
