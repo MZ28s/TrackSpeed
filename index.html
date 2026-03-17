@@ -1433,39 +1433,59 @@ function loginHide() { var e = document.getElementById('loginScreen'); if (e) e.
 
 function loginSwitchTab(tab) {
   _loginTab = tab;
-  var isL  = tab === 'login';
-  var isS  = tab === 'signup';
-  var isA  = tab === 'athlete';
-
-  var tl  = document.getElementById('loginTab');
-  var ts  = document.getElementById('signupTab');
-  var ta  = document.getElementById('athleteTab');
+  var isLogin = tab === 'login';
+  var tl = document.getElementById('loginTab');
+  var ts = document.getElementById('signupTab');
   var btn = document.getElementById('loginBtn');
   var fw  = document.getElementById('loginForgotWrap');
-  var coachPanel   = document.getElementById('loginCoachPanel');
-  var athletePanel = document.getElementById('loginAthletePanel');
-  var sub = document.getElementById('loginScreenSub');
-
-  // Onglets
-  if (tl) { tl.style.borderBottomColor = isL ? '#F5C800' : 'transparent'; tl.style.color = isL ? '#F5C800' : '#6b6b7a'; }
-  if (ts) { ts.style.borderBottomColor = isS ? '#F5C800' : 'transparent'; ts.style.color = isS ? '#F5C800' : '#6b6b7a'; }
-  if (ta) { ta.style.borderBottomColor = isA ? '#F5C800' : 'transparent'; ta.style.color = isA ? '#F5C800' : '#6b6b7a'; }
-
-  // Panels
-  if (coachPanel)   coachPanel.style.display   = isA ? 'none' : 'block';
-  if (athletePanel) athletePanel.style.display  = isA ? 'block' : 'none';
-
-  // Sous-titre
-  if (sub) sub.style.display = isA ? 'none' : 'block';
-
-  // Bouton coach
-  if (btn) btn.textContent = isS ? 'CRÉER MON COMPTE' : 'SE CONNECTER';
-  if (fw) fw.style.display = isL ? 'block' : 'none';
-
-  // Focus premier champ code si onglet athlète
-  if (isA) setTimeout(function() { var cd0 = document.getElementById('cd0'); if (cd0) cd0.focus(); }, 100);
-
+  if (tl) { tl.style.borderBottomColor = isLogin ? '#F5C800' : 'transparent'; tl.style.color = isLogin ? '#F5C800' : '#6b6b7a'; }
+  if (ts) { ts.style.borderBottomColor = !isLogin ? '#F5C800' : 'transparent'; ts.style.color = !isLogin ? '#F5C800' : '#6b6b7a'; }
+  if (btn) btn.textContent = isLogin ? 'SE CONNECTER' : 'CRÉER MON COMPTE';
+  if (fw) fw.style.display = isLogin ? 'block' : 'none';
+  // Champ nom visible seulement à l'inscription athlète
+  var role = document.getElementById('roleAthleteBtn') && document.getElementById('roleAthleteBtn').dataset.active === '1' ? 'athlete' : 'coach';
+  var sf = document.getElementById('signupFields');
+  if (sf) sf.style.display = !isLogin ? 'block' : 'none';
+  var fc = document.getElementById('fieldCategorie');
+  if (fc) fc.style.display = (!isLogin && role === 'athlete') ? 'block' : 'none';
   loginClearMsg();
+}
+
+var _loginRole = 'coach'; // 'coach' ou 'athlete'
+
+function loginSetRole(role) {
+  _loginRole = role;
+  var coachBtn   = document.getElementById('roleCoachBtn');
+  var athleteBtn = document.getElementById('roleAthleteBtn');
+  if (coachBtn) {
+    coachBtn.style.border     = role === 'coach' ? '2px solid #F5C800' : '2px solid #1e1e24';
+    coachBtn.style.background = role === 'coach' ? '#1a1a20' : 'transparent';
+    coachBtn.querySelector('div:last-child').style.color = role === 'coach' ? '#F5C800' : '#6b6b7a';
+    coachBtn.dataset.active = role === 'coach' ? '1' : '0';
+  }
+  if (athleteBtn) {
+    athleteBtn.style.border     = role === 'athlete' ? '2px solid #F5C800' : '2px solid #1e1e24';
+    athleteBtn.style.background = role === 'athlete' ? '#1a1a20' : 'transparent';
+    athleteBtn.querySelector('div:last-child').style.color = role === 'athlete' ? '#F5C800' : '#6b6b7a';
+    athleteBtn.dataset.active = role === 'athlete' ? '1' : '0';
+  }
+  // Champ nom visible seulement inscription athlète
+  var sf = document.getElementById('signupFields');
+  if (sf) sf.style.display = _loginTab === 'signup' ? 'block' : 'none';
+  var fc = document.getElementById('fieldCategorie');
+  if (fc) fc.style.display = (role === 'athlete' && _loginTab === 'signup') ? 'block' : 'none';
+  loginClearMsg();
+}
+
+function loginForgot() {
+  var email = (document.getElementById('loginEmail').value || '').trim();
+  if (!email) { loginSetMsg('Entre ton email d\'abord.', true); return; }
+  if (!_sb) return;
+  _sb.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname
+  }).then(function(r) {
+    loginSetMsg(r.error ? r.error.message : 'Email envoyé ! Vérifie ta boîte mail.', !!r.error);
+  });
 }
 
 function loginSetMsg(text, isErr) {
@@ -1484,55 +1504,71 @@ function loginSubmit() {
   var pass  = document.getElementById('loginPassword').value || '';
   var btn   = document.getElementById('loginBtn');
   if (!email || !pass) { loginSetMsg('Email et mot de passe requis.', true); return; }
-  if (pass.length < 6) { loginSetMsg('Mot de passe trop court (6 caractères minimum).', true); return; }
-  if (btn) { btn.textContent = '...'; btn.disabled = true; }
-  var p = _loginTab === 'signup' ? _sb.auth.signUp({ email: email, password: pass }) : _sb.auth.signInWithPassword({ email: email, password: pass });
-  p.then(function(r) {
-    if (btn) { btn.disabled = false; btn.textContent = _loginTab === 'signup' ? 'CRÉER MON COMPTE' : 'SE CONNECTER'; }
-    if (r.error) { loginSetMsg(r.error.message, true); }
-    else if (_loginTab === 'signup') { loginSetMsg('Compte cree ! Verifie ton email puis connecte-toi.', false); }
-  }).catch(function(e) {
-    if (btn) { btn.disabled = false; btn.textContent = 'SE CONNECTER'; }
-    loginSetMsg('Erreur: ' + e.message, true);
-  });
-}
+  if (btn) { btn.disabled = true; btn.textContent = _loginTab === 'signup' ? 'Création...' : 'Connexion...'; }
 
-function loginForgot() {
-  if (!_sb) return;
-  var email = (document.getElementById('loginEmail').value || '').trim();
-  if (!email) { loginSetMsg('Entre ton email.', true); return; }
-  _sb.auth.resetPasswordForEmail(email, {
-    redirectTo: window.location.origin + window.location.pathname
-  }).then(function(r) {
-    loginSetMsg(r.error ? r.error.message : 'Email envoyé ! Vérifie ta boîte mail.', !!r.error);
-  });
-}
-
-function showPasswordResetForm() {
-  loginHide();
-  var modal = document.getElementById('resetPasswordModal');
-  if (modal) modal.style.display = 'flex';
-}
-
-function submitPasswordReset() {
-  if (!_sb) return;
-  var pass = (document.getElementById('resetNewPassword').value || '').trim();
-  var msg  = document.getElementById('resetPasswordMsg');
-  if (pass.length < 6) { msg.textContent = 'Mot de passe trop court (6 min).'; msg.style.color = '#ef4444'; return; }
-  _sb.auth.updateUser({ password: pass }).then(function(r) {
-    if (r.error) {
-      msg.textContent = r.error.message; msg.style.color = '#ef4444';
-    } else {
-      msg.textContent = 'Mot de passe mis à jour !'; msg.style.color = '#22c55e';
-      setTimeout(function() {
-        document.getElementById('resetPasswordModal').style.display = 'none';
-        sbUpdateNavBar();
-      }, 1500);
+  if (_loginTab === 'signup') {
+    // INSCRIPTION
+    var opts = { data: { role: _loginRole } };
+    // Champs communs coach + athlète
+    var firstName = (document.getElementById('loginFirstName').value || '').trim();
+    var lastName  = (document.getElementById('loginLastName').value  || '').trim();
+    var dob       = (document.getElementById('loginDob').value       || '').trim();
+    var genre     = document.getElementById('loginGenre').value;
+    if (!firstName) { loginSetMsg('Entre ton prénom.', true); if (btn) { btn.disabled = false; btn.textContent = 'CRÉER MON COMPTE'; } return; }
+    if (!lastName)  { loginSetMsg('Entre ton nom.', true);    if (btn) { btn.disabled = false; btn.textContent = 'CRÉER MON COMPTE'; } return; }
+    if (!dob)       { loginSetMsg('Entre ta date de naissance.', true); if (btn) { btn.disabled = false; btn.textContent = 'CRÉER MON COMPTE'; } return; }
+    var fullName = firstName + ' ' + lastName;
+    opts.data.name      = fullName;
+    opts.data.firstName = firstName;
+    opts.data.lastName  = lastName;
+    opts.data.dob       = dob;
+    opts.data.genre     = genre;
+    if (_loginRole === 'athlete') {
+      var categorie = document.getElementById('loginCategorie').value;
+      var athId     = generateAthId();
+      opts.data.categorie = categorie;
+      opts.data.ath_id    = athId;
     }
-  });
+    _sb.auth.signUp({ email: email, password: pass, options: opts })
+      .then(function(r) {
+        if (btn) { btn.disabled = false; btn.textContent = 'CRÉER MON COMPTE'; }
+        if (r.error) { loginSetMsg(r.error.message, true); return; }
+        if (_loginRole === 'athlete' && r.data && r.data.user) {
+          _sb.from('athlete_profiles').insert({
+            user_id:    r.data.user.id,
+            ath_id:     opts.data.ath_id,
+            name:       fullName,
+            first_name: firstName,
+            last_name:  lastName,
+            dob:        dob,
+            genre:      genre,
+            categorie:  opts.data.categorie,
+            email:      email,
+            coach_uid:  null
+          }).then(function() {});
+        }
+        loginSetMsg('Compte créé ! Vérifie ton email puis connecte-toi.', false);
+      });
+  } else {
+    // CONNEXION
+    _sb.auth.signInWithPassword({ email: email, password: pass })
+      .then(function(r) {
+        if (btn) { btn.disabled = false; btn.textContent = 'SE CONNECTER'; }
+        if (r.error) { loginSetMsg(r.error.message, true); return; }
+        var user = r.data.user;
+        var role = user.user_metadata && user.user_metadata.role;
+        if (role === 'athlete') {
+          // Athlète qui se connecte → mode athlète
+          _athUser = user;
+          loadAthleteProfile(user);
+        }
+        // Si coach ou pas de rôle → flux normal géré par onAuthStateChange
+      });
+  }
 }
 
 function loginSkip() { /* disabled — account required */ }
+
 
 function loginShowProfile() {
   if (_sbUser) {
@@ -9924,39 +9960,6 @@ function athSetMsg(elId, text, isErr) {
   el.style.border      = '1px solid ' + (isErr ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)');
 }
 
-function athLoginSubmit() {
-  if (!_sb) return;
-  var email = (document.getElementById('athEmail').value || '').trim();
-  var pass  = document.getElementById('athPassword').value || '';
-  if (!email || !pass) { athSetMsg('athLoginMsg', 'Email et mot de passe requis.', true); return; }
-  var btn = document.getElementById('athLoginBtn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Connexion...'; }
-
-  // Utiliser le même client Supabase mais vérifier le rôle après connexion
-  _sb.auth.signInWithPassword({ email: email, password: pass })
-    .then(function(r) {
-      if (r.error) {
-        athSetMsg('athLoginMsg', r.error.message, true);
-        if (btn) { btn.disabled = false; btn.textContent = 'SE CONNECTER'; }
-        return;
-      }
-      var user = r.data.user;
-      // Vérifier que c'est bien un athlète (meta_data.role === 'athlete')
-      var role = user.user_metadata && user.user_metadata.role;
-      if (role !== 'athlete') {
-        athSetMsg('athLoginMsg', 'Ce compte n\'est pas un compte athlète.', true);
-        _sb.auth.signOut();
-        if (btn) { btn.disabled = false; btn.textContent = 'SE CONNECTER'; }
-        return;
-      }
-      _athUser = user;
-      loadAthleteProfile(user);
-    }).catch(function(e) {
-      athSetMsg('athLoginMsg', 'Erreur réseau.', true);
-      if (btn) { btn.disabled = false; btn.textContent = 'SE CONNECTER'; }
-    });
-}
-
 function athForgotPassword() {
   var email = (document.getElementById('athEmail').value || '').trim();
   if (!email) { athSetMsg('athLoginMsg', 'Entre ton email d\'abord.', true); return; }
@@ -9965,142 +9968,6 @@ function athForgotPassword() {
   }).then(function(r) {
     athSetMsg('athLoginMsg', r.error ? r.error.message : 'Email envoyé !', !!r.error);
   });
-}
-
-function athSignupSwitch() {
-  document.getElementById('loginAthletePanel').style.display = 'none';
-  document.getElementById('loginAthleteSignupPanel').style.display = 'block';
-}
-function athSignupBack() {
-  document.getElementById('loginAthleteSignupPanel').style.display = 'none';
-  document.getElementById('loginAthletePanel').style.display = 'block';
-}
-
-function athSignupSubmit() {
-  if (!_sb) return;
-  var name  = (document.getElementById('athSignupName').value || '').trim();
-  var email = (document.getElementById('athSignupEmail').value || '').trim();
-  var pass  = document.getElementById('athSignupPassword').value || '';
-  if (!name)  { athSetMsg('athSignupMsg', 'Entre ton prénom et nom.', true); return; }
-  if (!email) { athSetMsg('athSignupMsg', 'Entre ton email.', true); return; }
-  if (pass.length < 6) { athSetMsg('athSignupMsg', 'Mot de passe trop court (6 min).', true); return; }
-
-  var athId = generateAthId();
-  _sb.auth.signUp({
-    email: email,
-    password: pass,
-    options: { data: { role: 'athlete', name: name, ath_id: athId } }
-  }).then(function(r) {
-    if (r.error) { athSetMsg('athSignupMsg', r.error.message, true); return; }
-    athSetMsg('athSignupMsg', 'Compte créé ! Vérifie ton email puis connecte-toi.', false);
-    // Créer le profil athlète en base
-    if (r.data && r.data.user) {
-      _sb.from('athlete_profiles').insert({
-        user_id:  r.data.user.id,
-        ath_id:   athId,
-        name:     name,
-        email:    email,
-        coach_uid: null
-      }).then(function() {});
-    }
-  });
-}
-
-// ── Charger profil athlète depuis Supabase ───────────────
-function loadAthleteProfile(user) {
-  _sb.from('athlete_profiles').select('*').eq('user_id', user.id).maybeSingle()
-    .then(function(r) {
-      if (r.error || !r.data) {
-        // Créer profil si absent (première connexion)
-        var athId = (user.user_metadata && user.user_metadata.ath_id) || generateAthId();
-        var name  = (user.user_metadata && user.user_metadata.name)   || user.email;
-        var newProfile = { user_id: user.id, ath_id: athId, name: name, email: user.email, coach_uid: null };
-        _sb.from('athlete_profiles').insert(newProfile).then(function() {
-          enterAthleteMode(newProfile);
-        });
-        return;
-      }
-      enterAthleteMode(r.data);
-    });
-}
-
-// ── Entrer en mode athlète ───────────────────────────────
-function enterAthleteMode(profile) {
-  _athMode    = true;
-  _athProfile = profile;
-  _athCoachUid = profile.coach_uid || null;
-  loginHide();
-  document.getElementById('athleteApp').style.display = 'flex';
-  document.getElementById('athHeaderName').textContent  = (profile.name || 'Athlète').toUpperCase();
-  document.getElementById('athHeaderWeek').textContent  = getISOWeekLabel();
-  document.getElementById('athFeedbackTitle').textContent = 'SEMAINE ' + getISOWeekLabel();
-  requestPushPermission();
-  loadCurrentWeekFeedback();
-  renderAthCalc();
-  renderAthForce();
-  renderAthFeedbackHistory();
-  renderAthProfileInfo();
-  initFeedbackForm();
-}
-
-function athleteLogout() {
-  if (!confirm('Se déconnecter ?')) return;
-  _athMode = false; _athProfile = null; _athCoachUid = null; _athUser = null;
-  if (_sb) _sb.auth.signOut();
-  document.getElementById('athleteApp').style.display = 'none';
-  loginShow(); loginSwitchTab('athlete');
-}
-
-// ── Vérification auto si athlète déjà connecté ───────────
-function tryAthleteAutoLogin() {
-  if (!_sb) return;
-  _sb.auth.getSession().then(function(res) {
-    var session = res.data && res.data.session;
-    if (!session) return;
-    var user = session.user;
-    var role = user.user_metadata && user.user_metadata.role;
-    if (role !== 'athlete') return; // c'est un coach, pas un athlète
-    _athUser = user;
-    loadAthleteProfile(user);
-  });
-}
-
-// ── Profil info athlète (ID + lien coach) ────────────────
-function renderAthProfileInfo() {
-  var el = document.getElementById('athProfileInfo');
-  if (!el || !_athProfile) return;
-  var athId   = _athProfile.ath_id   || '—';
-  var coachId = _athProfile.coach_uid ? 'Connecté' : 'Non lié à un coach';
-  el.innerHTML =
-    '<div class="card" style="margin-bottom:12px;">' +
-      '<div class="card-title">// MON IDENTIFIANT</div>' +
-      '<div style="font-family:Bebas Neue,sans-serif;font-size:40px;color:var(--accent);letter-spacing:4px;margin:12px 0;">' + athId + '</div>' +
-      '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);line-height:1.6;">Donne cet identifiant à ton coach<br>pour qu&#39;il t&#39;ajoute à son groupe.</div>' +
-    '</div>' +
-    '<div class="card">' +
-      '<div class="card-title">// STATUT COACH</div>' +
-      '<div style="font-family:DM Mono,monospace;font-size:10px;color:' + (_athProfile.coach_uid ? '#22c55e' : 'var(--muted)') + ';margin-top:10px;">' +
-        (_athProfile.coach_uid ? '✓ Lié à un coach' : '⏳ En attente — partage ton ID à ton coach') +
-      '</div>' +
-    '</div>';
-}
-
-// ── Coach : lier un athlète via son ID ───────────────────
-function linkAthleteById(athId, profileId) {
-  if (!_sb || !_sbUser) return;
-  athId = athId.toUpperCase().trim();
-  _sb.from('athlete_profiles').select('*').eq('ath_id', athId).maybeSingle()
-    .then(function(r) {
-      if (r.error || !r.data) { alert('ID athlète introuvable : ' + athId); return; }
-      // Lier l'athlète à ce coach
-      _sb.from('athlete_profiles')
-        .update({ coach_uid: _sbUser.id })
-        .eq('ath_id', athId)
-        .then(function(u) {
-          if (u.error) { alert('Erreur liaison : ' + u.error.message); return; }
-          alert('✅ ' + r.data.name + ' est maintenant lié à ton groupe !');
-        });
-    });
 }
 
 function showLinkAthleteModal(profileId) {
@@ -10429,87 +10296,127 @@ setTimeout(() => {
 
 
 <!-- ══ PAGE DE CONNEXION ══ -->
-<div id="loginScreen" style="position:fixed;inset:0;z-index:99999;background:#0a0a0b;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;">
-  <div style="text-align:center;margin-bottom:36px;">
+<div id="loginScreen" style="position:fixed;inset:0;z-index:99999;background:#0a0a0b;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;overflow-y:auto;">
+
+  <!-- Logo -->
+  <div style="text-align:center;margin-bottom:32px;">
     <div style="font-family:'Bebas Neue',sans-serif;font-size:52px;color:#F5C800;letter-spacing:4px;line-height:1;">TRACKSPEED</div>
     <div style="font-family:'DM Mono',monospace;font-size:9px;color:#6b6b7a;letter-spacing:3px;margin-top:4px;">OUTIL DE COACHING SPRINT</div>
   </div>
-  <div style="background:#111114;border:1px solid #1e1e24;border-radius:12px;width:100%;max-width:380px;overflow:hidden;">
-    <!-- Onglets -->
+
+  <div style="background:#111114;border:1px solid #1e1e24;border-radius:12px;width:100%;max-width:400px;overflow:hidden;">
+
+    <!-- Onglets CONNEXION / INSCRIPTION -->
     <div style="display:flex;border-bottom:1px solid #1e1e24;">
       <button id="loginTab" onclick="loginSwitchTab('login')"
-        style="flex:1;padding:12px 4px;font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;background:none;border:none;border-bottom:2px solid #F5C800;color:#F5C800;cursor:pointer;">CONNEXION</button>
+        style="flex:1;padding:16px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;background:none;border:none;border-bottom:2px solid #F5C800;color:#F5C800;cursor:pointer;">
+        CONNEXION
+      </button>
       <button id="signupTab" onclick="loginSwitchTab('signup')"
-        style="flex:1;padding:12px 4px;font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;background:none;border:none;border-bottom:2px solid transparent;color:#6b6b7a;cursor:pointer;">INSCRIPTION</button>
-      <button id="athleteTab" onclick="loginSwitchTab('athlete')"
-        style="flex:1;padding:12px 4px;font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1px;background:none;border:none;border-bottom:2px solid transparent;color:#6b6b7a;cursor:pointer;">🏃 ATHLÈTE</button>
+        style="flex:1;padding:16px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;background:none;border:none;border-bottom:2px solid transparent;color:#6b6b7a;cursor:pointer;">
+        INSCRIPTION
+      </button>
     </div>
 
-    <!-- Panel Coach (connexion / inscription) -->
-    <div id="loginCoachPanel" style="padding:28px 24px;">
+    <div style="padding:28px 24px;">
+
+      <!-- Sélecteur COACH / ATHLÈTE (commun aux deux onglets) -->
+      <div style="display:flex;gap:10px;margin-bottom:24px;">
+        <button id="roleCoachBtn" onclick="loginSetRole('coach')"
+          style="flex:1;padding:12px 8px;background:#1a1a20;border:2px solid #F5C800;border-radius:8px;cursor:pointer;transition:all .2s;">
+          <div style="font-size:20px;margin-bottom:4px;">🎯</div>
+          <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;color:#F5C800;">COACH</div>
+        </button>
+        <button id="roleAthleteBtn" onclick="loginSetRole('athlete')"
+          style="flex:1;padding:12px 8px;background:transparent;border:2px solid #1e1e24;border-radius:8px;cursor:pointer;transition:all .2s;">
+          <div style="font-size:20px;margin-bottom:4px;">🏃</div>
+          <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;color:#6b6b7a;">ATHLÈTE</div>
+        </button>
+      </div>
+
+      <!-- Champs communs inscription (coach + athlète) -->
+      <div id="signupFields" style="display:none;">
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+          <div>
+            <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:8px;">PRÉNOM</label>
+            <input id="loginFirstName" type="text" placeholder="Malia" autocomplete="given-name"
+              style="width:100%;box-sizing:border-box;background:#16161a;border:1px solid #1e1e24;border-radius:6px;padding:12px 10px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:13px;outline:none;">
+          </div>
+          <div>
+            <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:8px;">NOM</label>
+            <input id="loginLastName" type="text" placeholder="Fonoti" autocomplete="family-name"
+              style="width:100%;box-sizing:border-box;background:#16161a;border:1px solid #1e1e24;border-radius:6px;padding:12px 10px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:13px;outline:none;">
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+          <div>
+            <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:8px;">DATE DE NAISSANCE</label>
+            <input id="loginDob" type="date"
+              style="width:100%;box-sizing:border-box;background:#16161a;border:1px solid #1e1e24;border-radius:6px;padding:11px 10px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:12px;outline:none;color-scheme:dark;">
+          </div>
+          <div>
+            <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:8px;">GENRE</label>
+            <select id="loginGenre"
+              style="width:100%;box-sizing:border-box;background:#16161a;border:1px solid #1e1e24;border-radius:6px;padding:11px 10px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:12px;outline:none;cursor:pointer;">
+              <option value="F">Femme</option>
+              <option value="M">Homme</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Catégorie : athlètes uniquement -->
+        <div id="fieldCategorie" style="display:none;margin-bottom:16px;">
+          <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:8px;">CATÉGORIE</label>
+          <select id="loginCategorie"
+            style="width:100%;box-sizing:border-box;background:#16161a;border:1px solid #1e1e24;border-radius:6px;padding:12px 14px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:12px;outline:none;cursor:pointer;">
+            <option value="U16">U16</option>
+            <option value="U18" selected>U18</option>
+            <option value="U20">U20</option>
+            <option value="U23">U23</option>
+            <option value="Senior">Senior</option>
+            <option value="Master">Master</option>
+          </select>
+        </div>
+
+      </div>
+
+      <!-- Email -->
       <div style="margin-bottom:16px;">
         <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:8px;">EMAIL</label>
         <input id="loginEmail" type="email" placeholder="ton@email.com" autocomplete="email"
           style="width:100%;box-sizing:border-box;background:#16161a;border:1px solid #1e1e24;border-radius:6px;padding:12px 14px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:13px;outline:none;">
       </div>
+
+      <!-- Mot de passe -->
       <div style="margin-bottom:8px;">
         <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:8px;">MOT DE PASSE</label>
         <input id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password"
           style="width:100%;box-sizing:border-box;background:#16161a;border:1px solid #1e1e24;border-radius:6px;padding:12px 14px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:13px;outline:none;"
-          onkeydown="if(event.key==='Enter')loginSubmit()">
+          onkeydown="if(event.key==='Enter') loginSubmit()">
       </div>
+
+      <!-- Mot de passe oublié (connexion seulement) -->
       <div id="loginForgotWrap" style="text-align:right;margin-bottom:20px;">
         <button onclick="loginForgot()" style="background:none;border:none;font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;cursor:pointer;text-decoration:underline;">Mot de passe oublié ?</button>
       </div>
+
+      <!-- Message feedback -->
       <div id="loginMsg" style="font-family:'DM Mono',monospace;font-size:9px;line-height:1.5;margin-bottom:16px;display:none;padding:10px 12px;border-radius:6px;"></div>
-      <button id="loginBtn" onclick="loginSubmit()" style="width:100%;background:#F5C800;border:none;border-radius:6px;padding:14px;font-family:'Bebas Neue',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:16px;">SE CONNECTER</button>
 
-    </div>
+      <!-- Bouton principal -->
+      <button id="loginBtn" onclick="loginSubmit()"
+        style="width:100%;background:#F5C800;border:none;border-radius:6px;padding:14px;font-family:'Bebas Neue',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;">
+        SE CONNECTER
+      </button>
 
-    <!-- Panel Athlète -->
-    <div id="loginAthletePanel" style="display:none;padding:28px 24px;">
-      <div style="margin-bottom:16px;">
-        <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:8px;">EMAIL</label>
-        <input id="athEmail" type="email" placeholder="ton@email.com" autocomplete="email"
-          style="width:100%;box-sizing:border-box;background:#16161a;border:1px solid #1e1e24;border-radius:6px;padding:12px 14px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:13px;outline:none;">
-      </div>
-      <div style="margin-bottom:8px;">
-        <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:8px;">MOT DE PASSE</label>
-        <input id="athPassword" type="password" placeholder="••••••••" autocomplete="current-password"
-          style="width:100%;box-sizing:border-box;background:#16161a;border:1px solid #1e1e24;border-radius:6px;padding:12px 14px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:13px;outline:none;"
-          onkeydown="if(event.key==='Enter') athLoginSubmit()">
-      </div>
-      <div style="text-align:right;margin-bottom:20px;">
-        <button onclick="athForgotPassword()" style="background:none;border:none;font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;cursor:pointer;text-decoration:underline;">Mot de passe oublié ?</button>
-      </div>
-      <div id="athLoginMsg" style="font-family:'DM Mono',monospace;font-size:9px;line-height:1.5;margin-bottom:16px;display:none;padding:10px 12px;border-radius:6px;"></div>
-      <button id="athLoginBtn" onclick="athLoginSubmit()" style="width:100%;background:#F5C800;border:none;border-radius:6px;padding:14px;font-family:'Bebas Neue',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:12px;">SE CONNECTER</button>
-      <button onclick="athSignupSwitch()" id="athSignupBtn" style="width:100%;background:none;border:1px solid #1e1e24;border-radius:6px;padding:12px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;color:#6b6b7a;cursor:pointer;">Créer un compte athlète</button>
-    </div>
-    <!-- Panel Inscription Athlète -->
-    <div id="loginAthleteSignupPanel" style="display:none;padding:28px 24px;">
-      <div style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;margin-bottom:16px;">CRÉER UN COMPTE ATHLÈTE</div>
-      <div style="margin-bottom:14px;">
-        <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:8px;">PRÉNOM NOM</label>
-        <input id="athSignupName" type="text" placeholder="Malia Fonoti"
-          style="width:100%;box-sizing:border-box;background:#16161a;border:1px solid #1e1e24;border-radius:6px;padding:12px 14px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:13px;outline:none;">
-      </div>
-      <div style="margin-bottom:14px;">
-        <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:8px;">EMAIL</label>
-        <input id="athSignupEmail" type="email" placeholder="ton@email.com"
-          style="width:100%;box-sizing:border-box;background:#16161a;border:1px solid #1e1e24;border-radius:6px;padding:12px 14px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:13px;outline:none;">
-      </div>
-      <div style="margin-bottom:20px;">
-        <label style="font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;letter-spacing:2px;display:block;margin-bottom:8px;">MOT DE PASSE</label>
-        <input id="athSignupPassword" type="password" placeholder="••••••••" minlength="6"
-          style="width:100%;box-sizing:border-box;background:#16161a;border:1px solid #1e1e24;border-radius:6px;padding:12px 14px;color:#f0f0f0;font-family:'DM Mono',monospace;font-size:13px;outline:none;">
-      </div>
-      <div id="athSignupMsg" style="font-family:'DM Mono',monospace;font-size:9px;line-height:1.5;margin-bottom:16px;display:none;padding:10px 12px;border-radius:6px;"></div>
-      <button onclick="athSignupSubmit()" style="width:100%;background:#F5C800;border:none;border-radius:6px;padding:14px;font-family:'Bebas Neue',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:12px;">CRÉER MON COMPTE</button>
-      <button onclick="athSignupBack()" style="width:100%;background:none;border:none;font-family:'DM Mono',monospace;font-size:9px;color:#6b6b7a;cursor:pointer;">← Retour connexion</button>
     </div>
   </div>
-  <div id="loginScreenSub" style="margin-top:20px;font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;text-align:center;line-height:1.8;">Avec un compte, tes données sont sauvegardées en ligne<br>et accessibles depuis n'importe quel appareil.</div>
+
+  <div style="margin-top:16px;font-family:'DM Mono',monospace;font-size:8px;color:#6b6b7a;text-align:center;line-height:1.8;">
+    Tes données sont sauvegardées et accessibles<br>depuis n'importe quel appareil.
+  </div>
 </div>
 
 
