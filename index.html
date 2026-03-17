@@ -10531,91 +10531,244 @@ function athSaveRm1() {
 }
 
 // ── Calcul vitesse ────────────────────────────────────────
-function athCalcCompute() {
-  var refs = [];
-  var dists = [50, 60, 100, 200, 400];
-  dists.forEach(function(d) {
-    var el = document.getElementById('calcRef' + d);
-    var v = el ? parseFloat(el.value) : NaN;
-    if (!isNaN(v) && v > 0) refs.push({ t: v, dRef: d });
-  });
+// ══════════════════════════════════════════════════════════
+// ══  CALCUL ATHLÈTE — Miroir exact de l'interface coach   ══
+// ══════════════════════════════════════════════════════════
 
-  var el = document.getElementById('athCalcResults');
-  if (!el) return;
+var _athCalcMode   = '100';
+var _athCalcMethod = 'interp';
+var _athCalcPct    = 100;
+var _athCalcRefs   = [];
+var _athCalcRows   = [];
+var _athCurrentExo = 'squat';
+
+function athSetMode(m) {
+  _athCalcMode = m;
+  document.querySelectorAll('#ath-mode-toggle .toggle-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.amode === m);
+  });
+  var show = function(id, vis) {
+    var el = document.getElementById(id);
+    if (el) el.classList.toggle('hidden', !vis);
+  };
+  show('ath-wrap-50',  ['50'].includes(m));
+  show('ath-wrap-60',  ['60'].includes(m));
+  show('ath-wrap-100', ['100','100+200'].includes(m));
+  show('ath-wrap-200', ['200','100+200','200+400'].includes(m));
+  show('ath-wrap-400', ['400','200+400'].includes(m));
+  var mt = document.getElementById('ath-methodToggle');
+  if (mt) mt.classList.toggle('visible', ['100+200','200+400'].includes(m));
+  athCalculate();
+}
+
+function athSetMethod(m) {
+  _athCalcMethod = m;
+  document.querySelectorAll('#ath-methodToggle .method-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.method === m);
+  });
+  athCalculate();
+}
+
+function athUpdatePct(val) {
+  _athCalcPct = parseInt(val);
+  var el = document.getElementById('ath-pctDisplay');
+  if (el) el.textContent = _athCalcPct + '%';
+  athCalculate();
+}
+
+function athSetPct(val) {
+  _athCalcPct = val;
+  var sl = document.getElementById('ath-pctSlider');
+  if (sl) sl.value = val;
+  athUpdatePct(val);
+}
+
+function athGetInput(id, min, max) {
+  var el = document.getElementById(id);
+  if (!el || el.closest('.hidden')) return null;
+  var v = parseFloat(el.value);
+  return (!isNaN(v) && v >= min && v <= max) ? v : null;
+}
+
+function athCalculate() {
+  var refs = [];
+  var m = _athCalcMode;
+  if (m==='50')  { var t=athGetInput('ath-time50',5,15);      if(t) refs=[{t:t,dRef:50}]; }
+  else if (m==='60')  { var t=athGetInput('ath-time60',6,18);      if(t) refs=[{t:t,dRef:60}]; }
+  else if (m==='100') { var t=athGetInput('ath-time100',9.5,25);   if(t) refs=[{t:t,dRef:100}]; }
+  else if (m==='200') { var t=athGetInput('ath-time200',19,50);    if(t) refs=[{t:t,dRef:200}]; }
+  else if (m==='400') { var t=athGetInput('ath-time400',43,120);   if(t) refs=[{t:t,dRef:400}]; }
+  else if (m==='100+200') {
+    var t1=athGetInput('ath-time100',9.5,25), t2=athGetInput('ath-time200',19,50);
+    if(t1&&t2) refs=[{t:t1,dRef:100},{t:t2,dRef:200}];
+    else if(t1) refs=[{t:t1,dRef:100}]; else if(t2) refs=[{t:t2,dRef:200}];
+  } else if (m==='200+400') {
+    var t2=athGetInput('ath-time200',19,50), t4=athGetInput('ath-time400',43,120);
+    if(t2&&t4) refs=[{t:t2,dRef:200},{t:t4,dRef:400}];
+    else if(t2) refs=[{t:t2,dRef:200}]; else if(t4) refs=[{t:t4,dRef:400}];
+  }
+
+  var bodyEl = document.getElementById('ath-resultsBody');
+  var metaEl = document.getElementById('ath-resultsMeta');
+  if (!bodyEl) return;
 
   if (!refs.length) {
-    el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Entre au moins un temps de référence.</div>';
+    bodyEl.innerHTML = '<div class="empty-state"><span class="empty-icon">⏱</span>Entrez un temps de référence</div>';
+    if (metaEl) metaEl.innerHTML = '';
     return;
   }
 
-  var pcts = [60, 70, 75, 80, 85, 90, 95, 100];
-  var targetDists = [30, 40, 50, 60, 80, 100, 120, 150, 200, 300, 400];
-  var html = '';
+  _athCalcRefs = refs;
+  var pct = _athCalcPct;
 
-  pcts.forEach(function(pct) {
-    var cells = '';
-    var hasAny = false;
-    targetDists.forEach(function(d) {
-      try {
-        var t = computeTarget(d, refs) / (pct / 100);
-        var spd = d / t;
-        cells += '<div class="calc-cell">' +
-          '<div class="calc-cell-dist">' + d + 'm</div>' +
-          '<div class="calc-cell-time">' + t.toFixed(2) + 's</div>' +
-          '<div class="calc-cell-spd">' + spd.toFixed(1) + 'm/s</div>' +
-          '</div>';
-        hasAny = true;
-      } catch(e) {}
+  // Utiliser BASE_DIST du coach
+  var distances = (typeof BASE_DIST !== 'undefined') ? BASE_DIST.slice() : [50,60,80,100,120,150,200,300,400];
+
+  // Calculer avec la même fonction computeTarget du coach
+  // Mais on doit répliquer car calcMethod est global coach
+  var savedMethod = (typeof calcMethod !== 'undefined') ? calcMethod : 'interp';
+  if (typeof calcMethod !== 'undefined') calcMethod = _athCalcMethod;
+
+  var rows = distances.map(function(d) {
+    var tTarget = computeTarget(d, refs);
+    var tAtPct  = tTarget / (pct / 100);
+    var spd     = d / tAtPct;
+    var spdTgt  = d / tTarget;
+    return { d: d, tTarget: tTarget, tAtPct: tAtPct, speed: spd, speedKmh: spd*3.6, speedTgt: spdTgt, speedTgtKmh: spdTgt*3.6 };
+  });
+
+  if (typeof calcMethod !== 'undefined') calcMethod = savedMethod;
+
+  // Afficher — même format que le coach
+  var refStr = refs.map(function(r) { return '<strong>' + r.t.toFixed(2) + 's</strong> @ ' + r.dRef + 'm'; }).join(' · ');
+  if (metaEl) metaEl.innerHTML = refStr + ' · <strong>' + pct + '%</strong>';
+
+  var refDists = {};
+  refs.forEach(function(r) { refDists[r.dRef] = true; });
+
+  var html = '<table><thead><tr><th>Dist.</th><th>100%</th><th>' + pct + '%</th></tr></thead><tbody>';
+  rows.forEach(function(row, i) {
+    var cls = refDists[row.d] ? 'is-ref' : '';
+    html += '<tr class="' + cls + ' row-anim" style="animation-delay:' + (i*.025) + 's">' +
+      '<td><span class="dist-cell">' + row.d + 'm</span></td>' +
+      '<td><span class="time-target">' + row.tTarget.toFixed(2) + 's</span>' +
+          '<span class="speed-inline">' + row.speedTgt.toFixed(2) + ' m/s · ' + row.speedTgtKmh.toFixed(1) + ' km/h</span></td>' +
+      '<td><span class="time-percent">' + row.tAtPct.toFixed(2) + 's</span>' +
+          '<span class="speed-inline">' + row.speed.toFixed(2) + ' m/s · ' + row.speedKmh.toFixed(1) + ' km/h</span></td>' +
+    '</tr>';
+  });
+  html += '</tbody></table>';
+  bodyEl.innerHTML = html;
+}
+
+// ── FORCE ATHLÈTE ─────────────────────────────────────────
+
+function athRenderExoSelector() {
+  var el = document.getElementById('ath-exoSelector');
+  if (!el || typeof EXERCISES === 'undefined') return;
+  el.innerHTML = EXERCISES.map(function(exo) {
+    var isActive = exo.id === _athCurrentExo;
+    return '<button onclick="athSelectExo(\'' + exo.id + '\')" ' +
+      'style="padding:7px 12px;border-radius:4px;border:1px solid ' + (isActive ? 'var(--accent)' : 'var(--border)') + ';' +
+      'background:' + (isActive ? 'var(--accent)' : 'var(--surface2)') + ';' +
+      'color:' + (isActive ? '#000' : 'var(--muted)') + ';' +
+      'font-family:DM Mono,monospace;font-size:9px;cursor:pointer;letter-spacing:.5px;">' +
+      exo.icon + ' ' + exo.label + '</button>';
+  }).join('');
+}
+
+function athSelectExo(id) {
+  _athCurrentExo = id;
+  athRenderExoSelector();
+  // Charger le 1RM depuis le profil si dispo
+  if (_athProfile && _athProfile.rm1 && _athProfile.rm1[id]) {
+    var inp = document.getElementById('ath-rm_direct');
+    if (inp) inp.value = _athProfile.rm1[id];
+  } else {
+    var inp = document.getElementById('ath-rm_direct');
+    if (inp) inp.value = '';
+  }
+  athUpdateForceTable();
+}
+
+function athEstimateRM() {
+  var w = parseFloat(document.getElementById('ath-rm_weight').value);
+  var r = parseInt(document.getElementById('ath-rm_reps').value);
+  var res = document.getElementById('ath-rmEstimateResult');
+  if (!w || !r || r < 1) { if (res) res.textContent = ''; return; }
+  var estimated = r === 1 ? w : Math.round(w * (1 + r / 30) * 10) / 10;
+  if (res) res.innerHTML = '<span style="color:var(--accent);font-size:14px;font-family:Bebas Neue,sans-serif;">' + estimated + ' kg estimé</span>' +
+    '<span style="color:var(--muted);font-size:9px;margin-left:6px;">formule Epley : poids × (1 + reps/30)</span>';
+  var inp = document.getElementById('ath-rm_direct');
+  if (inp) inp.value = estimated;
+  athUpdateForceTable();
+}
+
+function athUpdateForceTable() {
+  var rmVal = parseFloat(document.getElementById('ath-rm_direct').value);
+  if (typeof EXERCISES === 'undefined' || typeof RM_ZONES === 'undefined') return;
+  var exo = EXERCISES.find(function(e) { return e.id === _athCurrentExo; }) || EXERCISES[0];
+  var title  = document.getElementById('ath-forceTableTitle');
+  var zones  = document.getElementById('ath-forceTableZones');
+  var rows   = document.getElementById('ath-forceTableRows');
+  if (!title || !zones || !rows) return;
+
+  title.textContent = '// ' + exo.icon + ' ' + exo.label + (rmVal ? ' — 1RM : ' + rmVal + ' kg' : '');
+
+  zones.innerHTML = '<div style="background:var(--surface2);border-radius:3px;padding:8px 10px;margin-bottom:10px;font-family:DM Mono,monospace;font-size:9px;color:var(--muted);line-height:1.6;">' +
+    '<span style="color:var(--accent);">MUSCLES :</span> ' + exo.muscles + '<br>' +
+    '<span style="color:var(--accent);">TECHNIQUE :</span> ' + exo.tip + '</div>';
+
+  if (!rmVal || rmVal <= 0) {
+    rows.innerHTML = '<div class="empty-state"><span class="empty-icon">📊</span>Entre ton 1RM ou estime-le ci-dessus</div>';
+    return;
+  }
+
+  rows.innerHTML = '<div style="display:grid;grid-template-columns:auto 1fr auto auto;gap:0;border:1px solid var(--border);border-radius:4px;overflow:hidden;">' +
+    '<div style="padding:6px 8px;background:var(--surface2);font-family:DM Mono,monospace;font-size:8px;color:var(--muted);letter-spacing:.5px;">ZONE</div>' +
+    '<div style="padding:6px 8px;background:var(--surface2);font-family:DM Mono,monospace;font-size:8px;color:var(--muted);">OBJECTIF</div>' +
+    '<div style="padding:6px 8px;background:var(--surface2);font-family:DM Mono,monospace;font-size:8px;color:var(--muted);text-align:right;">CHARGE</div>' +
+    '<div style="padding:6px 8px;background:var(--surface2);font-family:DM Mono,monospace;font-size:8px;color:var(--muted);">S×R</div>' +
+    RM_ZONES.map(function(z, i) {
+      var kg = Math.round(rmVal * z.pct / 100 * 2) / 2;
+      var bg = i % 2 === 0 ? 'var(--surface)' : 'var(--surface2)';
+      return '<div style="padding:7px 8px;background:' + bg + ';border-top:1px solid var(--border);">' +
+        '<span style="font-family:DM Mono,monospace;font-size:11px;color:' + z.color + ';font-weight:700;">' + z.pct + '%</span></div>' +
+        '<div style="padding:7px 8px;background:' + bg + ';border-top:1px solid var(--border);">' +
+        '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--text);">' + z.label.split(' — ')[1] + '</div>' +
+        '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);">' + z.but + '</div></div>' +
+        '<div style="padding:7px 8px;background:' + bg + ';border-top:1px solid var(--border);text-align:right;">' +
+        '<span style="font-family:Bebas Neue,sans-serif;font-size:18px;color:' + z.color + ';">' + kg + '</span>' +
+        '<span style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);"> kg</span></div>' +
+        '<div style="padding:7px 8px;background:' + bg + ';border-top:1px solid var(--border);">' +
+        '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--text);">' + z.series + '×' + z.reps + '</div>' +
+        '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);">R:' + z.recup + '</div></div>';
+    }).join('') +
+  '</div>';
+}
+
+function athSaveRMToProfile() {
+  if (!_athProfile || !_sb) { alert('Profil non chargé.'); return; }
+  var val = parseFloat(document.getElementById('ath-rm_direct').value);
+  if (!val || val <= 0) { alert('Entre un 1RM valide.'); return; }
+  if (!_athProfile.rm1) _athProfile.rm1 = {};
+  _athProfile.rm1[_athCurrentExo] = val;
+  _sb.from('athlete_profiles').update({ rm1: _athProfile.rm1 }).eq('user_id', _athProfile.user_id)
+    .then(function() {
+      var exo = (typeof EXERCISES !== 'undefined') ? EXERCISES.find(function(e) { return e.id === _athCurrentExo; }) : null;
+      alert('✅ 1RM ' + (exo ? exo.label : _athCurrentExo) + ' : ' + val + ' kg enregistré');
+      // Mettre à jour aussi les inputs du profil
+      var profInp = document.getElementById('profRm1_' + _athCurrentExo);
+      if (profInp) profInp.value = val;
     });
-    if (hasAny) {
-      html += '<div class="ath-card" style="margin-bottom:10px;">' +
-        '<div class="ath-card-title">@ ' + pct + '%</div>' +
-        '<div class="calc-result-grid">' + cells + '</div>' +
-        '</div>';
-    }
-  });
-
-  el.innerHTML = html || '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Impossible de calculer avec ces valeurs.</div>';
 }
 
-// ── Calcul force ──────────────────────────────────────────
-function athForceCompute() {
-  var exos = [
-    { id: 'squat',      label: 'Back Squat',   icon: '🏋' },
-    { id: 'hipthrust',  label: 'Hip Thrust',   icon: '🔁' },
-    { id: 'rdl',        label: 'RDL',          icon: '📐' },
-    { id: 'powerclean', label: 'Power Clean',  icon: '⚡' },
-    { id: 'bench',      label: 'Bench Press',  icon: '💪' }
-  ];
-  var pcts = [50, 60, 70, 75, 80, 85, 90, 95, 100];
-  var el = document.getElementById('athForceResults');
-  if (!el) return;
+// Compat — garder les anciens noms vides
+function athCalcCompute() { athCalculate(); }
+function athForceCompute() {}
+function renderAthCalc() { athCalculate(); }
+function renderAthForce() { athRenderExoSelector(); athUpdateForceTable(); }
 
-  var html = '';
-  exos.forEach(function(exo) {
-    var inp = document.getElementById('forceRef_' + exo.id);
-    var rm = inp ? parseFloat(inp.value) : NaN;
-    if (isNaN(rm) || rm <= 0) return;
-
-    var cells = pcts.map(function(pct) {
-      var kg = (rm * pct / 100).toFixed(1);
-      return '<div class="calc-cell">' +
-        '<div class="calc-cell-dist">' + pct + '%</div>' +
-        '<div class="calc-cell-time" style="color:var(--text);">' + kg + '</div>' +
-        '<div class="calc-cell-spd">kg</div>' +
-        '</div>';
-    }).join('');
-
-    html += '<div class="ath-card" style="margin-bottom:10px;">' +
-      '<div class="ath-card-title">' + exo.icon + ' ' + exo.label + ' — 1RM : <span style="color:var(--accent);">' + rm + ' kg</span></div>' +
-      '<div class="calc-result-grid">' + cells + '</div>' +
-      '</div>';
-  });
-
-  el.innerHTML = html || '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Entre au moins une valeur de 1RM.</div>';
-}
-
-// ── Historique séances (données du coach) ─────────────────
 function renderAthHistory() {
   var el = document.getElementById('athHistoryContent');
   if (!el || !_sb || !_athProfile) return;
@@ -10735,7 +10888,10 @@ function athGoPage(name) {
   }
   if (name === 'feedback') { renderDailyRpe(); renderDailyForm(); renderSleepRows(); }
   if (name === 'calc')     renderAthCalc();
-  if (name === 'force')    renderAthForce();
+  if (name === 'force') {
+    athRenderExoSelector();
+    athUpdateForceTable();
+  }
 }
 
 // ── Init form feedback ────────────────────────────────────
@@ -11851,85 +12007,119 @@ setTimeout(() => {
   <!-- ══════════════════════════════════════
        PAGE CALCUL
   ══════════════════════════════════════════ -->
+  <!-- ══ PAGE CALCUL ATHLÈTE (= interface coach) ══ -->
   <div id="ath-page-calc" class="ath-page">
 
-    <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:4px;">// CALCUL</div>
-    <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;margin-bottom:20px;line-height:1;">TEMPS CIBLES</div>
+    <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:4px;">// Temps &amp; vitesses</div>
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;margin-bottom:16px;line-height:1;">CALCUL</div>
 
-    <!-- Saisie temps -->
-    <div class="ath-card">
-      <div class="ath-card-title">Entre un ou plusieurs temps de référence</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
-        <div class="record-item">
-          <span class="record-label">50m (s)</span>
-          <input class="record-input" type="number" id="calcRef50" placeholder="—" step="0.01" min="5" max="15">
+    <div class="card">
+      <div class="card-title">// 01 — Mode de référence</div>
+      <div class="toggle-row" id="ath-mode-toggle" style="flex-wrap:wrap;">
+        <button class="toggle-btn" data-amode="50"      onclick="athSetMode('50')">50m</button>
+        <button class="toggle-btn" data-amode="60"      onclick="athSetMode('60')">60m</button>
+        <button class="toggle-btn active" data-amode="100" onclick="athSetMode('100')">100m</button>
+        <button class="toggle-btn" data-amode="200"     onclick="athSetMode('200')">200m</button>
+        <button class="toggle-btn" data-amode="400"     onclick="athSetMode('400')">400m</button>
+        <button class="toggle-btn" data-amode="100+200" onclick="athSetMode('100+200')">100+200</button>
+        <button class="toggle-btn" data-amode="200+400" onclick="athSetMode('200+400')">200+400</button>
+      </div>
+
+      <div class="input-grid">
+        <div class="input-wrap hidden" id="ath-wrap-50">
+          <label>50m (s)</label>
+          <input type="number" id="ath-time50" placeholder="6.20" step="0.01" min="5" max="15" oninput="athCalculate()">
         </div>
-        <div class="record-item">
-          <span class="record-label">60m (s)</span>
-          <input class="record-input" type="number" id="calcRef60" placeholder="—" step="0.01" min="6" max="18">
+        <div class="input-wrap hidden" id="ath-wrap-60">
+          <label>60m (s)</label>
+          <input type="number" id="ath-time60" placeholder="7.50" step="0.01" min="6" max="18" oninput="athCalculate()">
         </div>
-        <div class="record-item">
-          <span class="record-label">100m (s)</span>
-          <input class="record-input" type="number" id="calcRef100" placeholder="—" step="0.01" min="9" max="25">
+        <div class="input-wrap" id="ath-wrap-100">
+          <label>100m (s)</label>
+          <input type="number" id="ath-time100" placeholder="11.60" step="0.01" min="9.5" max="25" oninput="athCalculate()">
         </div>
-        <div class="record-item">
-          <span class="record-label">200m (s)</span>
-          <input class="record-input" type="number" id="calcRef200" placeholder="—" step="0.01" min="18" max="50">
+        <div class="input-wrap hidden" id="ath-wrap-200">
+          <label>200m (s)</label>
+          <input type="number" id="ath-time200" placeholder="23.50" step="0.01" min="19" max="50" oninput="athCalculate()">
         </div>
-        <div class="record-item">
-          <span class="record-label">400m (s)</span>
-          <input class="record-input" type="number" id="calcRef400" placeholder="—" step="0.01" min="40" max="120">
+        <div class="input-wrap hidden" id="ath-wrap-400">
+          <label>400m (s)</label>
+          <input type="number" id="ath-time400" placeholder="52.00" step="0.01" min="43" max="120" oninput="athCalculate()">
         </div>
-        <div style="display:flex;align-items:flex-end;">
-          <button class="ath-btn-calc" style="width:100%;" onclick="athCalcCompute()">CALCULER</button>
-        </div>
+      </div>
+
+      <div class="method-toggle" id="ath-methodToggle">
+        <button class="method-btn active" data-method="interp" onclick="athSetMethod('interp')">Zones distinctes<br><span style="font-size:8px;opacity:.7">Chaque ref sur sa zone</span></button>
+        <button class="method-btn" data-method="avg" onclick="athSetMethod('avg')">Moyenne des deux<br><span style="font-size:8px;opacity:.7">Moyenne des refs</span></button>
+      </div>
+
+      <div class="divider"></div>
+      <div class="card-title">// 02 — Intensité</div>
+      <div class="slider-header">
+        <label>Pourcentage d'effort</label>
+        <div class="slider-value" id="ath-pctDisplay">100%</div>
+      </div>
+      <input type="range" id="ath-pctSlider" min="50" max="100" value="100" step="1" oninput="athUpdatePct(this.value)">
+      <div class="slider-labels"><span>50% Récup.</span><span>75% Dev.</span><span>100% Max</span></div>
+      <div class="presets">
+        <button class="preset-chip" onclick="athSetPct(60)">60%</button>
+        <button class="preset-chip" onclick="athSetPct(70)">70%</button>
+        <button class="preset-chip" onclick="athSetPct(75)">75%</button>
+        <button class="preset-chip" onclick="athSetPct(80)">80%</button>
+        <button class="preset-chip" onclick="athSetPct(85)">85%</button>
+        <button class="preset-chip" onclick="athSetPct(90)">90%</button>
+        <button class="preset-chip" onclick="athSetPct(95)">95%</button>
       </div>
     </div>
 
-    <!-- Résultats -->
-    <div id="athCalcResults"></div>
+    <div class="card" style="margin-top:10px;">
+      <div id="ath-resultsMeta" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:8px;min-height:14px;"></div>
+      <div id="ath-resultsBody"><div class="empty-state"><span class="empty-icon">⏱</span>Entrez un temps de référence</div></div>
+    </div>
 
   </div>
 
-  <!-- ══════════════════════════════════════
-       PAGE FORCE
-  ══════════════════════════════════════════ -->
+  <!-- ══ PAGE FORCE ATHLÈTE (= interface coach) ══ -->
   <div id="ath-page-force" class="ath-page">
 
-    <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:4px;">// FORCE</div>
-    <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;margin-bottom:20px;line-height:1;">CALCUL 1RM</div>
+    <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:4px;">// Musculation sprint</div>
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;margin-bottom:16px;line-height:1;">FORCE</div>
 
-    <!-- Saisie 1RM -->
-    <div class="ath-card">
-      <div class="ath-card-title">Entre ta charge maximale par exercice</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-        <div class="record-item">
-          <span class="record-label">🏋 Back Squat (kg)</span>
-          <input class="record-input" type="number" id="forceRef_squat" placeholder="—" step="0.5" min="0" max="500">
+    <!-- Sélecteur exercice -->
+    <div class="card" style="margin-bottom:10px;">
+      <div class="card-title">// Exercice</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;" id="ath-exoSelector"></div>
+
+      <div style="background:var(--surface2);border-radius:4px;padding:12px;margin-bottom:10px;">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;">CALCULER / METTRE À JOUR LE 1RM</div>
+        <div class="input-grid" style="margin-bottom:8px;">
+          <div class="input-wrap">
+            <label>1RM direct (kg)</label>
+            <input type="number" id="ath-rm_direct" placeholder="100" step="0.5" min="1" max="600"
+              oninput="athUpdateForceTable()" style="font-size:18px;">
+          </div>
+          <div class="input-wrap">
+            <label style="color:var(--muted);">— ou estimation —</label>
+            <div style="display:flex;gap:6px;">
+              <input type="number" id="ath-rm_weight" placeholder="80 kg" step="0.5" min="1" max="600"
+                oninput="athEstimateRM()" style="font-size:16px;flex:1;">
+              <input type="number" id="ath-rm_reps" placeholder="5 reps" step="1" min="1" max="30"
+                oninput="athEstimateRM()" style="font-size:16px;flex:1;">
+            </div>
+          </div>
         </div>
-        <div class="record-item">
-          <span class="record-label">🔁 Hip Thrust (kg)</span>
-          <input class="record-input" type="number" id="forceRef_hipthrust" placeholder="—" step="0.5" min="0" max="500">
-        </div>
-        <div class="record-item">
-          <span class="record-label">📐 RDL (kg)</span>
-          <input class="record-input" type="number" id="forceRef_rdl" placeholder="—" step="0.5" min="0" max="500">
-        </div>
-        <div class="record-item">
-          <span class="record-label">⚡ Power Clean (kg)</span>
-          <input class="record-input" type="number" id="forceRef_powerclean" placeholder="—" step="0.5" min="0" max="300">
-        </div>
-        <div class="record-item">
-          <span class="record-label">💪 Bench Press (kg)</span>
-          <input class="record-input" type="number" id="forceRef_bench" placeholder="—" step="0.5" min="0" max="400">
-        </div>
-        <div style="display:flex;align-items:flex-end;">
-          <button class="ath-btn-calc" style="width:100%;" onclick="athForceCompute()">CALCULER</button>
-        </div>
+        <div id="ath-rmEstimateResult" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);"></div>
+        <button class="btn primary" style="width:100%;margin-top:8px;font-size:11px;" onclick="athSaveRMToProfile()">
+          💾 Enregistrer dans mon profil
+        </button>
       </div>
     </div>
 
-    <div id="athForceResults"></div>
+    <div class="card" id="ath-forceTableCard">
+      <div class="card-title" id="ath-forceTableTitle">// Tableau des charges</div>
+      <div id="ath-forceTableZones" style="margin-bottom:8px;"></div>
+      <div id="ath-forceTableRows"><div class="empty-state"><span class="empty-icon">📊</span>Sélectionne un exercice</div></div>
+    </div>
 
   </div>
 
