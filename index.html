@@ -1220,6 +1220,14 @@ function sbPullAll() {
         if (lightTheme) document.body.classList.add('light-theme');
         else document.body.classList.remove('light-theme');
       }
+      if (rs[3] !== null && rs[3].activeStandards) {
+        activeStandards = rs[3].activeStandards;
+        localStorage.setItem('sc_active_standards', JSON.stringify(activeStandards));
+      }
+      if (rs[3] !== null && rs[3].saison_genre) {
+        saison_genre = rs[3].saison_genre;
+        localStorage.setItem('sc_saison_genre', saison_genre);
+      }
       renderProfiles(); renderHome();
       loginHide();
       sbUpdateNavBar();
@@ -1238,7 +1246,7 @@ function sbSyncAll() {
     sbPush('profiles_data', profiles),
     sbPush('history_data',  historyData),
     sbPush('planif_data',   planifData),
-    sbPush('settings_data', { theme: lightTheme ? 'light' : 'dark' })
+    sbPush('settings_data', { theme: lightTheme ? 'light' : 'dark', activeStandards: activeStandards, saison_genre: saison_genre })
   ]).then(function() {
     var b = document.getElementById('sbSyncBadge');
     if (b) { b.textContent = 'Sync OK'; b.style.color = '#22c55e'; setTimeout(function() { if (b) { b.textContent = 'cloud'; b.style.color = '#6b6b7a'; } }, 2000); }
@@ -1647,6 +1655,7 @@ function onStandardChange() {
   var sel = document.getElementById('standardSelect');
   activeStandards = (sel && sel.value) ? [sel.value] : [];
   localStorage.setItem('sc_active_standards', JSON.stringify(activeStandards));
+  sbScheduleSync();
   renderSaison();
 }
 
@@ -1654,6 +1663,7 @@ function setSaisonGenre(g) {
   saison_genre = g;
   saison_genre_override = true;
   localStorage.setItem('sc_saison_genre', g);
+  sbScheduleSync();
   renderSaison();
 }
 
@@ -4516,6 +4526,7 @@ function _waDoImport(pid, r) {
     source: 'worldathletics',
   });
   localStorage.setItem('sc_profiles', JSON.stringify(profiles));
+  sbScheduleSync();
 
   // Toast
   var toast = document.createElement('div');
@@ -5158,7 +5169,7 @@ function renderProfiles() {
 }
 
 // ── HISTORY ──
-function saveHistoryData() { localStorage.setItem('sc_history', JSON.stringify(historyData)); }
+function saveHistoryData() { localStorage.setItem('sc_history', JSON.stringify(historyData)); sbScheduleSync(); }
 
 function saveToHistory() {
   if (!currentRefs.length) { alert('Aucun calcul à sauvegarder.'); return; }
@@ -8987,6 +8998,7 @@ function saveMultiTimes() {
   });
 
   localStorage.setItem('sc_history', JSON.stringify(historyData));
+  sbScheduleSync();
   renderHistoryInline();
 
   // Feedback visuel (pas d'alert bloquant)
@@ -9052,6 +9064,7 @@ function importData(event) {
       historyData = data.history || {};
       localStorage.setItem('sc_profiles', JSON.stringify(profiles));
       localStorage.setItem('sc_history', JSON.stringify(historyData));
+      sbScheduleSync();
       // Reset profil actif
       activeProfile = null;
       updateActiveProfileUI();
