@@ -1416,7 +1416,7 @@ function sbPull(table) {
 function sbApplySettings(s) {
   if (!s) return;
   if (s.theme) {
-    localStorage.setItem('sc_theme', s.theme);
+    // theme → Supabase via sbSyncAll
     lightTheme = s.theme === 'light';
     document.body.classList.toggle('light-theme', lightTheme);
     var btn = document.getElementById('themeToggle');
@@ -1424,12 +1424,12 @@ function sbApplySettings(s) {
   }
   if (s.activeStandards) {
     activeStandards = s.activeStandards;
-    localStorage.setItem('sc_active_standards', JSON.stringify(activeStandards));
+    // standards → Supabase via sbSyncAll
   }
   if (s.saison_genre) {
     saison_genre = s.saison_genre;
     saison_genre_override = true;
-    localStorage.setItem('sc_saison_genre', saison_genre);
+    // saison_genre → Supabase via sbSyncAll
   }
 }
 
@@ -1452,17 +1452,17 @@ function sbPullAll() {
     var changed = false;
     if (rs[0] !== null) {
       profiles = rs[0];
-      localStorage.setItem('sc_profiles', JSON.stringify(profiles));
+      // profiles → Supabase via sbSyncAll
       changed = true;
     }
     if (rs[1] !== null) {
       historyData = rs[1];
-      localStorage.setItem('sc_history', JSON.stringify(historyData));
+      // history → Supabase via sbSyncAll
       changed = true;
     }
     if (rs[2] !== null) {
       planifData = rs[2];
-      localStorage.setItem('sc_planifs', JSON.stringify(planifData));
+      // planifs → Supabase via sbSyncAll
       changed = true;
     }
     sbApplySettings(rs[3]);
@@ -1471,6 +1471,18 @@ function sbPullAll() {
     renderProfiles(); renderHome();
     loginHide(); sbUpdateNavBar();
     sbSyncBadgeSet('✓ sync', '#22c55e', true);
+    // Charger les IDs feedbacks lus
+    _loadReadSet();
+    // Vérifier force session en attente
+    if (_sbUser) {
+      _sb.from('force_sessions_pending').select('data').eq('user_id', _sbUser.id).maybeSingle()
+        .then(function(r) {
+          if (r.data && r.data.data) {
+            var pd = document.getElementById('page-session');
+            if (pd && pd.classList.contains('active')) showPendingForceSession();
+          }
+        });
+    }
     return changed;
   }).catch(function(e) {
     console.error('sbPullAll failed:', e);
@@ -1810,12 +1822,12 @@ function loginShowProfile() {
 // ── STATE ──
 let appMode = '100', pct = 100, calcMethod = 'interp';
 // ── PLANIFICATION ──
-let planifData = JSON.parse(localStorage.getItem('sc_planifs') || '[]');
+let planifData = [];
 let activePlanifId = null;  // planif en cours d'édition
 let currentRows = [], currentRefs = [];
 let activeProfile = null;
-let profiles = JSON.parse(localStorage.getItem('sc_profiles') || '[]');
-let historyData = JSON.parse(localStorage.getItem('sc_history') || '{}');
+let profiles = [];
+let historyData = {};
 const BASE_DIST = [50,60,80,100,120,150,160,180,200,220,250,300,400];
 
 // ── CHRONO STATE ──
@@ -1825,7 +1837,7 @@ let chronoInterval = null;
 let chronoRunning = false;
 
 // ── THEME ──
-let lightTheme = localStorage.getItem('sc_theme') === 'light';
+let lightTheme = false;
 if (lightTheme) document.body.classList.add('light-theme');
 
 // ── NAVIGATION ──
@@ -2041,7 +2053,7 @@ function renderSaisonControls() {
 function onStandardChange() {
   var sel = document.getElementById('standardSelect');
   activeStandards = (sel && sel.value) ? [sel.value] : [];
-  localStorage.setItem('sc_active_standards', JSON.stringify(activeStandards));
+  // standards → Supabase via sbSyncAll
   sbScheduleSync();
   renderSaison();
 }
@@ -2049,7 +2061,7 @@ function onStandardChange() {
 function setSaisonGenre(g) {
   saison_genre = g;
   saison_genre_override = true;
-  localStorage.setItem('sc_saison_genre', g);
+  // saison_genre → Supabase via sbSyncAll
   sbScheduleSync();
   renderSaison();
 }
@@ -2135,8 +2147,8 @@ var PLANIF_IMPORTANCE = [
 ];
 
 function savePlanifData() {
-  localStorage.setItem('sc_planifs', JSON.stringify(planifData));
-  if (_sbUser) { sbScheduleSync(); }
+  // planifs → Supabase via sbSyncAll
+  if (_sbUser) { clearTimeout(_sbSyncTimeout); sbSyncAll(); }
 }
 
 // ── Helpers semaines ISO ──
@@ -4913,7 +4925,7 @@ function _waDoImport(pid, r) {
     saison: saison,
     source: 'worldathletics',
   });
-  localStorage.setItem('sc_profiles', JSON.stringify(profiles));
+  // profiles → Supabase via sbSyncAll
   sbScheduleSync();
 
   // Toast
@@ -4956,21 +4968,36 @@ function _renderHomeLastSession() {
 
   var latest = null, latestDate = null, latestAthletes = [];
 
-  Object.keys(historyData).forEach(function(pid) {
-    var sessions = historyData[pid] || [];
-    sessions.forEach(function(s) {
-      var d = new Date(s.date);
+  // Priorité : coach_sessions cache (source de vérité)
+  var csCache = window._coachSessionsCache;
+  if (csCache && csCache.length) {
+    csCache.forEach(function(s) {
+      var d = new Date(s.session_date);
       if (!latestDate || d > latestDate) {
         latestDate = d;
-        latest = s;
-        var pr = profiles.find(function(p){ return p.id === pid; });
-        latestAthletes = pr ? [pr.name] : [];
+        latest = { date: s.session_date, blocks: s.blocks, conditions: s.conditions, note: s.note };
+        latestAthletes = [s.athlete_name];
       } else if (d && latestDate && d.toDateString() === latestDate.toDateString()) {
-        var pr = profiles.find(function(p){ return p.id === pid; });
-        if (pr && latestAthletes.indexOf(pr.name) === -1) latestAthletes.push(pr.name);
+        if (latestAthletes.indexOf(s.athlete_name) === -1) latestAthletes.push(s.athlete_name);
       }
     });
-  });
+  } else {
+    Object.keys(historyData).forEach(function(pid) {
+      var sessions = historyData[pid] || [];
+      sessions.forEach(function(s) {
+        var d = new Date(s.date);
+        if (!latestDate || d > latestDate) {
+          latestDate = d;
+          latest = s;
+          var pr = profiles.find(function(p){ return p.id === pid; });
+          latestAthletes = pr ? [pr.name] : [];
+        } else if (d && latestDate && d.toDateString() === latestDate.toDateString()) {
+          var pr = profiles.find(function(p){ return p.id === pid; });
+          if (pr && latestAthletes.indexOf(pr.name) === -1) latestAthletes.push(pr.name);
+        }
+      });
+    });
+  }
 
   if (!latest) {
     el.innerHTML = '<div style="background:var(--surface);border:1px dashed var(--border);border-radius:8px;padding:16px;text-align:center;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted);">Aucune séance enregistrée</div>';
@@ -5010,12 +5037,23 @@ function _renderHomeStats() {
 
   var recentSessions = 0, totalComps = 0, bestTime = null, bestDist = null;
 
-  Object.keys(historyData).forEach(function(pid) {
-    (historyData[pid] || []).forEach(function(s) {
-      var d = new Date(s.date);
-      if (d >= cutoff) recentSessions++;
+  var csCache2 = window._coachSessionsCache;
+  if (csCache2 && csCache2.length) {
+    // Dédupliquer par date (une séance = une date même si plusieurs athlètes)
+    var seenDates = {};
+    csCache2.forEach(function(s) {
+      var key = (s.session_date||'').slice(0,10);
+      if (!seenDates[key]) { seenDates[key] = true; var d = new Date(s.session_date); if (d >= cutoff) recentSessions++; }
     });
-  });
+  } else {
+    var seenDates2 = {};
+    Object.keys(historyData).forEach(function(pid) {
+      (historyData[pid] || []).forEach(function(s) {
+        var key = (s.date||'').slice(0,10);
+        if (!seenDates2[key]) { seenDates2[key]=true; var d = new Date(s.date); if (d >= cutoff) recentSessions++; }
+      });
+    });
+  }
 
   profiles.forEach(function(p) {
     (p.competResults || []).forEach(function(r) {
@@ -5318,7 +5356,7 @@ function renderResults() {
 
 // ── PROFILES ──
 function saveProfiles() {
-  localStorage.setItem('sc_profiles', JSON.stringify(profiles));
+  // profiles → Supabase via sbSyncAll
   if (_sbUser) {
     clearTimeout(_sbSyncTimeout);
     sbSyncAll();
@@ -5568,8 +5606,8 @@ function renderProfiles() {
 
 // ── HISTORY ──
 function saveHistoryData() {
-  localStorage.setItem('sc_history', JSON.stringify(historyData));
-  if (_sbUser) { sbScheduleSync(); }
+  // history → Supabase via sbSyncAll
+  if (_sbUser) { clearTimeout(_sbSyncTimeout); sbSyncAll(); }
 }
 
 function saveToHistory() {
@@ -6902,6 +6940,7 @@ function coachDeleteGroup(key) {
     }
     delete window[key];
     renderHistoryInline();
+    renderHome();
   });
 }
 
@@ -8443,7 +8482,13 @@ function useForceSession(id) {
     text: lines.join('\n'),
     timestamp: Date.now()
   };
-  localStorage.setItem('sc_force_session_pending', JSON.stringify(sessionData));
+  // Supabase
+  if (_sb && _sbUser) {
+    _sb.from('force_sessions_pending')
+      .upsert({ user_id: _sbUser.id, data: sessionData, updated_at: new Date().toISOString() },
+              { onConflict: 'user_id' })
+      .then(function(r) { if (r.error) console.error('force pending:', r.error.message); });
+  }
   // Aller sur la page Séance et afficher
   goPage('page-session');
   setTimeout(() => {
@@ -8452,7 +8497,17 @@ function useForceSession(id) {
 }
 
 function showPendingForceSession() {
-  const raw = localStorage.getItem('sc_force_session_pending');
+  // Charger depuis Supabase
+  if (_sb && _sbUser) {
+    _sb.from('force_sessions_pending').select('data').eq('user_id', _sbUser.id).maybeSingle()
+      .then(function(r) {
+        if (!r.data || !r.data.data) return;
+        var raw = r.data.data; if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch(e) { return; } }
+        _showPendingForceSessionData(raw);
+      });
+    return;
+  }
+  var _raw_force_dummy = null;  // fallback vide
   if (!raw) return;
   const s = JSON.parse(raw);
   // Afficher en haut de la page Séance une carte récapitulatif
@@ -8485,7 +8540,7 @@ function showPendingForceSession() {
         <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--text);">${s.title}</div>
         <span style="font-family:'DM Mono',monospace;font-size:9px;color:${meta.color};">${meta.label} · ${s.obj === 'prev' ? s.exercices[0]?.exo || '' : (s.exercices[0]?.pct || '') + '%'}</span>
       </div>
-      <button onclick="document.getElementById('forceSessImport').remove();localStorage.removeItem('sc_force_session_pending');"
+      <button onclick="document.getElementById('forceSessImport').remove(); if(_sb&&_sbUser)_sb.from('force_sessions_pending').delete().eq('user_id',_sbUser.id).then(function(){});"
         style="padding:6px 10px;background:none;border:1px solid var(--border);border-radius:3px;color:var(--muted);font-size:11px;cursor:pointer;">✕</button>
     </div>
     <div style="margin-bottom:8px;">${exoLines}</div>
@@ -8973,7 +9028,7 @@ function toggleTheme() {
   lightTheme = !lightTheme;
   document.body.classList.toggle('light-theme', lightTheme);
   document.getElementById('themeToggle').textContent = lightTheme ? '🌙' : '☀️';
-  localStorage.setItem('sc_theme', lightTheme ? 'light' : 'dark');
+  if (_sbUser) { clearTimeout(_sbSyncTimeout); sbSyncAll(); }
 }
 // Appliquer l'icône au chargement
 document.addEventListener('DOMContentLoaded', () => {
@@ -9464,9 +9519,9 @@ function getStandard(catKey, dist, genre) {
 }
 
 // Catégories actives par défaut (sauvegardées en localStorage)
-let activeStandards = JSON.parse(localStorage.getItem('sc_active_standards') || '["CH_U18"]');
-let saison_genre = localStorage.getItem('sc_saison_genre') || 'F';
-let saison_genre_override = !!localStorage.getItem('sc_saison_genre'); // true si l'utilisateur a forcé manuellement
+let activeStandards = ["CH_U18"];  // chargé depuis Supabase settings_data
+let saison_genre = 'F';
+let saison_genre_override = false; // chargé depuis Supabase settings_data
 
 // onStandardChange et setSaisonGenre définis plus haut
 
@@ -9791,7 +9846,7 @@ function saveMultiTimes() {
     saved++;
   });
 
-  localStorage.setItem('sc_history', JSON.stringify(historyData));
+  // history → Supabase via sbSyncAll
   sbScheduleSync();
 
   // Aussi upsert dans coach_sessions pour synchro multi-appareils
@@ -9877,8 +9932,8 @@ function importData(event) {
       // Import
       profiles = data.profiles;
       historyData = data.history || {};
-      localStorage.setItem('sc_profiles', JSON.stringify(profiles));
-      localStorage.setItem('sc_history', JSON.stringify(historyData));
+      // profiles → Supabase via sbSyncAll
+      // history → Supabase via sbSyncAll
       sbScheduleSync();
       // Reset profil actif
       activeProfile = null;
@@ -10962,12 +11017,13 @@ function athSaveRecords() {
 function athSaveRm1() {
   if (!_athProfile || !_sb) return;
   var rm = _athProfile.rm1 || {};
-  ['squat','hipthrust','rdl','powerclean','bench'].forEach(function(ex) {
+  ['squat','hipthrust','deadlift','rdl','powerclean','bench','legext'].forEach(function(ex) {
     var el = document.getElementById('profRm1_' + ex);
     var v = el ? parseFloat(el.value) : NaN;
     if (!isNaN(v) && v > 0) rm[ex] = v; else delete rm[ex];
   });
   _athProfile.rm1 = rm;
+  
   _sb.from('athlete_profiles').update({ rm1: rm }).eq('user_id', _athProfile.user_id).then(function() {
     var el = document.getElementById('athRm1Saved');
     if (el) { el.textContent = '✓ Sauvegardé'; setTimeout(function() { el.textContent = ''; }, 2000); }
@@ -10984,7 +11040,7 @@ function saveFeedbackDraft() {
   var obj = document.getElementById('athObjective'); var com = document.getElementById('athComment');
   if (obj) _feedbackData.objective = obj.value;
   if (com) _feedbackData.comment   = com.value;
-  localStorage.setItem(feedbackDraftKey(), JSON.stringify(_feedbackData));
+  autoSaveDraft(); // Supabase
   var btn = document.getElementById('athDraftBtn'); var msg = document.getElementById('athDraftMsg');
   if (btn) { btn.style.borderColor = '#22c55e'; btn.style.color = '#22c55e'; }
   if (msg) { msg.textContent = '✓ Sauvegardé — ' + new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); msg.style.color = '#22c55e'; }
@@ -10994,32 +11050,40 @@ function autoSaveDraft() {
   var obj = document.getElementById('athObjective'); var com = document.getElementById('athComment');
   if (obj) _feedbackData.objective = obj.value;
   if (com) _feedbackData.comment   = com.value;
-  try { localStorage.setItem(feedbackDraftKey(), JSON.stringify(_feedbackData)); } catch(e) {}
+  if (!_sb || !_athProfile) return;
+  _sb.from('athlete_feedback_drafts')
+    .upsert({ user_id: _athProfile.user_id, week_id: getISOWeekId(), data: _feedbackData, updated_at: new Date().toISOString() },
+            { onConflict: 'user_id,week_id' })
+    .then(function(r) { if (r.error) console.error('draft:', r.error.message); });
 }
-function loadFeedbackDraft() {
-  var raw = localStorage.getItem(feedbackDraftKey());
-  if (!raw) return null;
-  try { return JSON.parse(raw); } catch(e) { return null; }
-}
+function loadFeedbackDraft() { return null; } // remplacé par Supabase
 
 function initFeedbackForm() {
   var emptyDay = function() { return { rpe: null, phys: null, mental: null, coucher: '', lever: '', repos: false, compet: false }; };
-  var draft = loadFeedbackDraft();
-  if (draft && draft.days) {
-    _feedbackData = draft;
-    ATH_DAYS.forEach(function(d) { if (!_feedbackData.days[d]) _feedbackData.days[d] = emptyDay(); });
-  } else {
-    _feedbackData = { days: {}, objective: '', comment: '' };
-    ATH_DAYS.forEach(function(d) { _feedbackData.days[d] = emptyDay(); });
+  // Charger depuis Supabase
+  if (_sb && _athProfile) {
+    _sb.from('athlete_feedback_drafts').select('data')
+      .eq('user_id', _athProfile.user_id).eq('week_id', getISOWeekId()).maybeSingle()
+      .then(function(r) {
+        if (r.data && r.data.data && r.data.data.days) {
+          _feedbackData = r.data.data;
+          ATH_DAYS.forEach(function(d) { if (!_feedbackData.days[d]) _feedbackData.days[d] = emptyDay(); });
+        } else {
+          _feedbackData = { days: {}, objective: '', comment: '' };
+          ATH_DAYS.forEach(function(d) { _feedbackData.days[d] = emptyDay(); });
+        }
+        // Pré-remplir les champs texte
+        var obj = document.getElementById('athObjective'); var com = document.getElementById('athComment');
+        if (obj) obj.value = _feedbackData.objective || '';
+        if (com) com.value = _feedbackData.comment || '';
+        renderDailyRpe(); renderDailyForm(); renderSleepRows(); updateRpeAvg(); updateSleepAvg();
+      });
+    return; // async - suite dans le callback .then()
   }
-  renderDailyRpe(); renderDailyForm(); renderSleepRows();
-  setTimeout(function() {
-    var obj = document.getElementById('athObjective'); var com = document.getElementById('athComment');
-    if (obj && _feedbackData.objective) obj.value = _feedbackData.objective;
-    if (com && _feedbackData.comment)   com.value = _feedbackData.comment;
-    var draftMsg = document.getElementById('athDraftMsg');
-    if (loadFeedbackDraft() && draftMsg) { draftMsg.textContent = '📝 Brouillon chargé'; draftMsg.style.color = 'var(--muted)'; }
-  }, 60);
+  // Fallback si pas connecté
+  _feedbackData = { days: {}, objective: '', comment: '' };
+  ATH_DAYS.forEach(function(d) { _feedbackData.days[d] = emptyDay(); });
+  renderDailyRpe(); renderDailyForm(); renderSleepRows(); updateRpeAvg(); updateSleepAvg();
 }
 
 function getRpeColor(val) {
@@ -11268,7 +11332,11 @@ function submitFeedback() {
     }
     if(btn){btn.textContent='✅ Envoyé !';btn.classList.add('sent');btn.disabled=true;}
     if(msg)msg.textContent='Ton coach a été notifié.';
-    localStorage.removeItem(feedbackDraftKey());
+    // Supprimer le brouillon Supabase après envoi
+    if (_sb && _athProfile) {
+      _sb.from('athlete_feedback_drafts').delete()
+        .eq('user_id', _athProfile.user_id).eq('week_id', getISOWeekId()).then(function(){});
+    }
   });
 }
 
@@ -11837,9 +11905,25 @@ function coachFeedbackCard(fb) {
 
 // Lu/non-lu
 function getFeedbackReadKey() { return 'coach_fb_read_'+(_sbUser?_sbUser.id:'default'); }
-function getReadSet() { try{return new Set(JSON.parse(localStorage.getItem(getFeedbackReadKey())||'[]'));}catch(e){return new Set();} }
-function markAsRead(fbId) { var s=getReadSet();s.add(fbId);localStorage.setItem(getFeedbackReadKey(),JSON.stringify([...s])); }
-function markAllRead(ids) { var s=getReadSet();ids.forEach(function(id){s.add(id);});localStorage.setItem(getFeedbackReadKey(),JSON.stringify([...s])); }
+var _readSetCache = null;
+function getReadSet() { return _readSetCache || new Set(); }
+function _loadReadSet(cb) {
+  if (!_sb || !_sbUser) { _readSetCache = new Set(); if(cb)cb(); return; }
+  _sb.from('feedback_read_ids').select('ids').eq('user_id', _sbUser.id).maybeSingle()
+    .then(function(r) {
+      _readSetCache = new Set(r.data && r.data.ids ? r.data.ids : []);
+      if (cb) cb();
+    });
+}
+function _saveReadSet() {
+  if (!_sb || !_sbUser || !_readSetCache) return;
+  _sb.from('feedback_read_ids')
+    .upsert({ user_id: _sbUser.id, ids: [..._readSetCache], updated_at: new Date().toISOString() },
+            { onConflict: 'user_id' })
+    .then(function(r) { if (r.error) console.error('readIds:', r.error.message); });
+}
+function markAsRead(fbId) { var s=getReadSet();s.add(fbId);_readSetCache=s;_saveReadSet(); }
+function markAllRead(ids) { var s=getReadSet();ids.forEach(function(id){s.add(id);});_readSetCache=s;_saveReadSet(); }
 function isRead(fbId) { return getReadSet().has(fbId); }
 function coachMarkRead(fbId, el) {
   markAsRead(fbId);
@@ -11901,7 +11985,7 @@ function _renderHomeFeedbacks() {
       if (res.error || !res.data || !res.data.length) { el.innerHTML = ''; return; }
       var readKey = 'coach_fb_read_' + _sbUser.id;
       var readSet;
-      try { readSet = new Set(JSON.parse(localStorage.getItem(readKey) || '[]')); }
+      try { readSet = getReadSet(); }
       catch(e2) { readSet = new Set(); }
       var unread = res.data.filter(function(fb) { return !readSet.has(fb.id); }).length;
       var frag = document.createElement('div');
@@ -12085,6 +12169,10 @@ function multiChronoUpdateDisplay() {
 
 
 function renderCoachFeedbacks() {
+  if (!_readSetCache) { _loadReadSet(function() { _doRenderCoachFeedbacks(); }); return; }
+  _doRenderCoachFeedbacks();
+}
+function _doRenderCoachFeedbacks() {
   var el = document.getElementById('feedbacksList');
   if (!el || !_sb || !_sbUser) return;
   el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);padding:20px 0;text-align:center;">Chargement...</div>';
@@ -12203,10 +12291,9 @@ function deleteFeedback(fbId, event) {
 
 function _fbLocalDeleteId(fbId) {
   try {
-    var key = getFeedbackReadKey();
-    var s = new Set(JSON.parse(localStorage.getItem(key) || '[]'));
+    var s = getReadSet();
     s.delete(fbId);
-    localStorage.setItem(key, JSON.stringify([...s]));
+    _saveReadSet(); // via Supabase
   } catch(e) {}
   renderCoachFeedbacks();
 }
@@ -12253,14 +12340,25 @@ setTimeout(function() { if (!_athMode) tryAthleteAutoLogin(); }, 1500);
 // ── AUTO-SYNC : reprend le sync quand l'app redevient visible ou en ligne ──
 var _lastVisibleSync = 0;
 document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'hidden' && _sbUser) {
+    // Forcer la sync AVANT de quitter (iOS tue l'app en background)
+    clearTimeout(_sbSyncTimeout);
+    sbSyncAll();
+  }
   if (document.visibilityState === 'visible' && _sbUser) {
     var now = Date.now();
-    // Re-pull si on revient après plus de 30 secondes d'absence
     if (now - _lastVisibleSync > 30000) {
       _lastVisibleSync = now;
       sbPullAll();
     }
   }
+});
+
+window.addEventListener('beforeunload', function() {
+  if (_sbUser) { clearTimeout(_sbSyncTimeout); sbSyncAll(); }
+});
+window.addEventListener('pagehide', function() {
+  if (_sbUser) { clearTimeout(_sbSyncTimeout); sbSyncAll(); }
 });
 window.addEventListener('online', function() {
   if (_sbUser) {
@@ -12270,19 +12368,17 @@ window.addEventListener('online', function() {
 });
 // Vérifier si une séance force est en attente au chargement
 setTimeout(() => {
-  if (localStorage.getItem('sc_force_session_pending') && document.getElementById('page-session')?.classList.contains('active')) {
-    showPendingForceSession();
-  }
+  // Force session pending chargé depuis Supabase dans sbPullAll → voir showPendingForceSession()
 }, 200);
 </script>
 
 
 
 <!-- ══ PAGE DE CONNEXION ══ -->
-<div id="loginScreen" style="position:fixed;inset:0;z-index:99999;background:#0a0a0b;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;overflow-y:auto;">
+<div id="loginScreen" style="position:fixed;inset:0;z-index:99999;background:#0a0a0b;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:20px;padding-top:max(20px, env(safe-area-inset-top));overflow-y:auto;-webkit-overflow-scrolling:touch;">
 
   <!-- Logo -->
-  <div style="text-align:center;margin-bottom:32px;">
+  <div style="text-align:center;margin-bottom:20px;margin-top:12px;">
     <div style="font-family:'Bebas Neue',sans-serif;font-size:52px;color:#F5C800;letter-spacing:4px;line-height:1;">TRACKSPEED</div>
     <div style="font-family:'DM Mono',monospace;font-size:9px;color:#6b6b7a;letter-spacing:3px;margin-top:4px;">OUTIL DE COACHING SPRINT</div>
   </div>
