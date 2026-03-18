@@ -520,8 +520,6 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
       <button class="toggle-btn active" data-mode="100"     onclick="setMode('100')">100m</button>
       <button class="toggle-btn" data-mode="200"     onclick="setMode('200')">200m</button>
       <button class="toggle-btn" data-mode="400"     onclick="setMode('400')">400m</button>
-      <button class="toggle-btn" data-mode="100+200" onclick="setMode('100+200')">100+200</button>
-      <button class="toggle-btn" data-mode="200+400" onclick="setMode('200+400')">200+400</button>
     </div>
 
     <div class="input-grid">
@@ -5236,10 +5234,10 @@ function setMode(m) {
   document.querySelectorAll('#mode-toggle .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
   document.getElementById('wrap-50').classList.toggle('hidden',  !['50'].includes(m));
   document.getElementById('wrap-60').classList.toggle('hidden',  !['60'].includes(m));
-  document.getElementById('wrap-100').classList.toggle('hidden', !['100','100+200'].includes(m));
-  document.getElementById('wrap-200').classList.toggle('hidden', !['200','100+200','200+400'].includes(m));
-  document.getElementById('wrap-400').classList.toggle('hidden', !['400','200+400'].includes(m));
-  document.getElementById('methodToggle').classList.toggle('visible', ['100+200','200+400'].includes(m));
+  document.getElementById('wrap-100').classList.toggle('hidden', m !== '100');
+  document.getElementById('wrap-200').classList.toggle('hidden', m !== '200');
+  document.getElementById('wrap-400').classList.toggle('hidden', m !== '400');
+  document.getElementById('methodToggle').classList.toggle('visible', false);
   calculate();
 }
 
@@ -5296,13 +5294,6 @@ function calculate() {
   else if (appMode==='100') { const t=validateInput('time100','err100',9.5,25); if(t) refs=[{t,dRef:100}]; }
   else if (appMode==='200') { const t=validateInput('time200','err200',19,50);  if(t) refs=[{t,dRef:200}]; }
   else if (appMode==='400') { const t=validateInput('time400','err400',43,120); if(t) refs=[{t,dRef:400}]; }
-  else if (appMode==='100+200') {
-    const t1=validateInput('time100','err100',9.5,25), t2=validateInput('time200','err200',19,50);
-    if(t1&&t2) refs=[{t:t1,dRef:100},{t:t2,dRef:200}]; else if(t1) refs=[{t:t1,dRef:100}]; else if(t2) refs=[{t:t2,dRef:200}];
-  } else if (appMode==='200+400') {
-    const t2=validateInput('time200','err200',19,50), t4=validateInput('time400','err400',43,120);
-    if(t2&&t4) refs=[{t:t2,dRef:200},{t:t4,dRef:400}]; else if(t2) refs=[{t:t2,dRef:200}]; else if(t4) refs=[{t:t4,dRef:400}];
-  }
 
   if (!refs.length) { showEmpty(); return; }
   currentRefs = refs;
@@ -5497,10 +5488,8 @@ function loadProfileRecordsIntoCalc(records) {
   let refs = [];
 
   if (has100 && has200) {
-    mode = '100+200';
     refs = [{t: records.pr100, dRef: 100}, {t: records.pr200, dRef: 200}];
   } else if (has200 && has400) {
-    mode = '200+400';
     refs = [{t: records.pr200, dRef: 200}, {t: records.pr400, dRef: 400}];
   } else if (has100) {
     mode = '100';
@@ -5526,10 +5515,10 @@ function loadProfileRecordsIntoCalc(records) {
   document.querySelectorAll('#mode-toggle .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
   document.getElementById('wrap-50').classList.toggle('hidden',  mode !== '50');
   document.getElementById('wrap-60').classList.toggle('hidden',  mode !== '60');
-  document.getElementById('wrap-100').classList.toggle('hidden', !['100','100+200'].includes(mode));
-  document.getElementById('wrap-200').classList.toggle('hidden', !['200','100+200','200+400'].includes(mode));
-  document.getElementById('wrap-400').classList.toggle('hidden', !['400','200+400'].includes(mode));
-  document.getElementById('methodToggle').classList.toggle('visible', ['100+200','200+400'].includes(mode));
+  document.getElementById('wrap-100').classList.toggle('hidden', mode !== '100');
+  document.getElementById('wrap-200').classList.toggle('hidden', mode !== '200');
+  document.getElementById('wrap-400').classList.toggle('hidden', mode !== '400');
+  document.getElementById('methodToggle').classList.toggle('visible', false);
 
   // Remplir les champs visibles
   if (has50)  document.getElementById('time50').value  = records.pr50;
@@ -8896,16 +8885,14 @@ function sendSessionToAthletes() {
   var rows = selectedAthletes.map(function(pid) {
     var p = profiles.find(function(pr) { return pr.id === pid; });
     if (!p) return null;
-    // Calculer les refs de l'athlète pour les temps cibles
-    var pRefs = [];
+    // Construire toutes les refs disponibles (même algo que l'onglet Calcul)
+    var pAllRefs = [];
     if (p.records) {
-      var refDists = [50,60,100,200,400];
-      refDists.forEach(function(d) {
+      [50,60,100,200,400].forEach(function(d) {
         var t = p.records['pr'+d];
-        if (t) pRefs.push({ dRef: d, t: parseFloat(t) });
+        if (t) pAllRefs.push({ dRef: d, t: parseFloat(t) });
       });
-      pRefs.sort(function(a,b){return a.dRef-b.dRef;});
-      if (pRefs.length > 2) pRefs = [pRefs[0], pRefs[pRefs.length-1]];
+      pAllRefs.sort(function(a,b){return a.dRef-b.dRef;});
     }
     var blocksWithTimes = sessionBlocks.map(function(b, bi) {
       var times = [];
@@ -8914,11 +8901,15 @@ function sendSessionToAthletes() {
         var t = inp ? parseFloat(inp.value) : NaN;
         times.push(isNaN(t) ? null : t);
       }
-      // Calculer tCible : temps à 100% × (pct/100)
       var tCible = null;
-      if (pRefs.length > 0) {
-        var t100 = computeTarget(b.dist, pRefs);
-        tCible = Math.round(t100 * (b.pct/100) * 100) / 100;
+      if (pAllRefs.length > 0) {
+        var dist = b.dist;
+        // Toujours 1 seule ref : le PR le plus proche de la distance du bloc
+        var closest = pAllRefs.reduce(function(best, ref) {
+          return Math.abs(ref.dRef - dist) < Math.abs(best.dRef - dist) ? ref : best;
+        });
+        var t100 = computeTarget(dist, [closest]);
+        tCible = Math.round(t100 / (b.pct/100) * 100) / 100;
       }
       return Object.assign({}, b, { times: times, tCible: tCible });
     });
@@ -11348,9 +11339,9 @@ function athSetMode(m) {
   document.querySelectorAll('#ath-mode-toggle .toggle-btn').forEach(function(b){b.classList.toggle('active',b.dataset.amode===m);});
   var show = function(id,v){var el=document.getElementById(id);if(el)el.classList.toggle('hidden',!v);};
   show('ath-wrap-50',['50'].includes(m)); show('ath-wrap-60',['60'].includes(m));
-  show('ath-wrap-100',['100','100+200'].includes(m)); show('ath-wrap-200',['200','100+200','200+400'].includes(m));
-  show('ath-wrap-400',['400','200+400'].includes(m));
-  var mt=document.getElementById('ath-methodToggle'); if(mt)mt.classList.toggle('visible',['100+200','200+400'].includes(m));
+  show('ath-wrap-100', m==='100'); show('ath-wrap-200', m==='200');
+  show('ath-wrap-400', m==='400');
+  var mt=document.getElementById('ath-methodToggle'); if(mt)mt.classList.toggle('visible', false);
   athCalculate();
 }
 function athSetMethod(m) {
@@ -11375,8 +11366,7 @@ function athCalculate() {
   else if(m==='100'){var t=athGetInput('ath-time100',9.5,25);if(t)refs=[{t:t,dRef:100}];}
   else if(m==='200'){var t=athGetInput('ath-time200',19,50);if(t)refs=[{t:t,dRef:200}];}
   else if(m==='400'){var t=athGetInput('ath-time400',43,120);if(t)refs=[{t:t,dRef:400}];}
-  else if(m==='100+200'){var t1=athGetInput('ath-time100',9.5,25),t2=athGetInput('ath-time200',19,50);if(t1&&t2)refs=[{t:t1,dRef:100},{t:t2,dRef:200}];else if(t1)refs=[{t:t1,dRef:100}];else if(t2)refs=[{t:t2,dRef:200}];}
-  else if(m==='200+400'){var t2=athGetInput('ath-time200',19,50),t4=athGetInput('ath-time400',43,120);if(t2&&t4)refs=[{t:t2,dRef:200},{t:t4,dRef:400}];else if(t2)refs=[{t:t2,dRef:200}];else if(t4)refs=[{t:t4,dRef:400}];}
+
   var bodyEl=document.getElementById('ath-resultsBody'); var metaEl=document.getElementById('ath-resultsMeta');
   if(!bodyEl)return;
   if(!refs.length){bodyEl.innerHTML='<div class="empty-state"><span class="empty-icon">⏱</span>Entrez un temps de référence</div>';if(metaEl)metaEl.innerHTML='';return;}
@@ -13070,8 +13060,6 @@ setTimeout(() => {
         <button class="toggle-btn active" data-amode="100" onclick="athSetMode('100')">100m</button>
         <button class="toggle-btn" data-amode="200" onclick="athSetMode('200')">200m</button>
         <button class="toggle-btn" data-amode="400" onclick="athSetMode('400')">400m</button>
-        <button class="toggle-btn" data-amode="100+200" onclick="athSetMode('100+200')">100+200</button>
-        <button class="toggle-btn" data-amode="200+400" onclick="athSetMode('200+400')">200+400</button>
       </div>
       <div class="input-grid">
         <div class="input-wrap hidden" id="ath-wrap-50"><label>50m (s)</label><input type="number" id="ath-time50" placeholder="6.20" step="0.01" min="5" max="15" oninput="athCalculate()"></div>
