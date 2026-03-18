@@ -11833,6 +11833,7 @@ function athDeleteSession(sessionId) {
 // JOURNAL MUSCU ATHLÈTE
 // ═══════════════════════════════════════════════
 var _journalSets = [];   // séries en cours de saisie
+var _journalEditId = null; // id de la séance en édition (null = nouvelle)
 var _journalEntries = []; // exercices de la séance en cours
 var _journalSessionDate = '';
 
@@ -11891,6 +11892,9 @@ function journalCancelForm() {
   var form = document.getElementById('journalForm');
   if (form) form.style.display = 'none';
   _journalEntries = [];
+  _journalEditId = null;
+  var saveBtn = document.getElementById('journalSaveBtn');
+  if (saveBtn) saveBtn.textContent = '💾 SAUVEGARDER LA SÉANCE';
 }
 
 function journalRenderSets() {
@@ -11976,14 +11980,20 @@ function journalSaveSession() {
     note: note,
     updated_at: new Date().toISOString()
   };
-  _sb.from('athlete_journal').insert(payload).then(function(r) {
-    if (btn) { btn.disabled = false; btn.textContent = '💾 SAUVEGARDER LA SÉANCE'; }
+  var dbOp = _journalEditId
+    ? _sb.from('athlete_journal').update(payload).eq('id', _journalEditId).eq('user_id', _athProfile.user_id)
+    : _sb.from('athlete_journal').insert(payload);
+  var isEdit = !!_journalEditId;
+  dbOp.then(function(r) {
+    if (btn) { btn.disabled = false; btn.textContent = isEdit ? '💾 METTRE À JOUR LA SÉANCE' : '💾 SAUVEGARDER LA SÉANCE'; }
     if (r.error) {
       if (msg) { msg.textContent = '⚠ Erreur : ' + r.error.message; msg.style.color = '#ef4444'; }
       return;
     }
-    if (msg) { msg.textContent = '✅ Séance sauvegardée !'; msg.style.color = '#22c55e'; }
+    if (msg) { msg.textContent = isEdit ? '✅ Séance mise à jour !' : '✅ Séance sauvegardée !'; msg.style.color = '#22c55e'; }
     _journalEntries = [];
+    _journalEditId = null;
+    if (btn) btn.textContent = '💾 SAUVEGARDER LA SÉANCE';
     setTimeout(function() {
       var form = document.getElementById('journalForm');
       if (form) form.style.display = 'none';
@@ -12056,9 +12066,10 @@ function journalLoadHistory() {
           });
           html += '</div></div>';
         });
-        // Bouton supprimer
-        html += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">';
-        html += '<button data-jid="' + s.id + '" onclick="journalDeleteSession(this.dataset.jid)" style="background:none;border:1px solid var(--border);border-radius:4px;padding:6px 12px;font-family:DM Mono,monospace;font-size:8px;color:var(--muted);cursor:pointer;">🗑 Supprimer</button>';
+        // Boutons Modifier + Supprimer
+        html += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;gap:8px;">';
+        html += '<button data-jid="' + s.id + '" onclick="journalEditSession(this.dataset.jid)" style="background:none;border:1px solid var(--accent);border-radius:4px;padding:6px 14px;font-family:DM Mono,monospace;font-size:8px;color:var(--accent);cursor:pointer;flex:1;">✏️ Modifier</button>';
+        html += '<button data-jid="' + s.id + '" onclick="journalDeleteSession(this.dataset.jid)" style="background:none;border:1px solid var(--border);border-radius:4px;padding:6px 12px;font-family:DM Mono,monospace;font-size:8px;color:var(--muted);cursor:pointer;">🗑</button>';
         html += '</div>';
         html += '</div></div>';
       });
@@ -12101,6 +12112,55 @@ function journalToggleDetail(hdr) {
   det.style.display = open ? 'none' : 'block';
   if (chev) chev.style.transform = open ? '' : 'rotate(180deg)';
   hdr.parentElement.style.borderColor = open ? 'var(--border)' : 'var(--accent)';
+}
+
+function journalEditSession(id) {
+  if (!_sb || !_athProfile) return;
+  // Charger la séance depuis Supabase
+  _sb.from('athlete_journal').select('*').eq('id', id).maybeSingle().then(function(r) {
+    if (!r.data) { alert('Séance introuvable.'); return; }
+    var s = r.data;
+    // Pré-remplir le formulaire
+    _journalEntries = s.entries || [];
+    _journalSessionDate = s.session_date;
+    _journalEditId = id; // mode édition
+    var dateEl = document.getElementById('journalFormDate');
+    if (dateEl) {
+      var d = new Date((s.session_date||'')+'T12:00:00');
+      var days=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+      var months=['jan.','fév.','mar.','avr.','mai','juin','juil.','aoû.','sep.','oct.','nov.','déc.'];
+      dateEl.textContent = days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()];
+    }
+    // Mettre à jour le bouton sauvegarder
+    var saveBtn = document.getElementById('journalSaveBtn');
+    if (saveBtn) saveBtn.textContent = '💾 METTRE À JOUR LA SÉANCE';
+    // Remplir la note
+    var noteEl = document.getElementById('journalNote');
+    if (noteEl) noteEl.value = s.note || '';
+    // Afficher le récap des exercices existants
+    var container = document.getElementById('journalEntries');
+    container.innerHTML = '';
+    _journalEntries.forEach(function(e) {
+      var best = null;
+      (e.sets||[]).forEach(function(set){if(set.weight&&set.weight>(best||0))best=set.weight;});
+      var setsStr = (e.sets||[]).map(function(s2){return (s2.reps||'?')+' × '+(s2.weight?s2.weight+'kg':'—');}).join(' · ');
+      container.innerHTML += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start;">'
+        + '<div><div style="font-family:Bebas Neue,sans-serif;font-size:16px;color:var(--text);">' + e.name + '</div>'
+        + '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:3px;">' + setsStr + '</div></div>'
+        + (best ? '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--accent2);">' + best + 'kg</div>' : '')
+        + '</div>';
+    });
+    // Reset les séries en cours
+    _journalSets = [{ reps: '', weight: '', unit: 'kg' }];
+    journalRenderSets();
+    var sel = document.getElementById('journalExoSelect');
+    if (sel) sel.value = '';
+    document.getElementById('journalSaveMsg').textContent = '';
+    // Switcher sur l'onglet journal et afficher le form
+    forceTab('journal');
+    var form = document.getElementById('journalForm');
+    if (form) { form.style.display = 'block'; form.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  });
 }
 
 function journalDeleteSession(id) {
