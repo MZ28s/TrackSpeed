@@ -11177,8 +11177,7 @@ function coachFeedbackCard(fb) {
   html+='<div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">';
   html+='<div style="text-align:right;"><div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);letter-spacing:1px;margin-bottom:4px;">RPE MOY.</div>';
   html+='<div style="font-family:Bebas Neue,sans-serif;font-size:36px;line-height:1;color:'+(fb.rpe?rpeAvgColor:'var(--muted)')+';"> '+(fb.rpe?fb.rpe:'—')+'</div></div>';
-  var delOnclick = 'deleteFeedback(' + JSON.stringify(fb.id) + ',event)';
-  html+='<button onclick="'+delOnclick+'" style="background:none;border:1px solid rgba(239,68,68,.4);border-radius:4px;padding:4px 8px;font-family:DM Mono,monospace;font-size:8px;color:#ef4444;cursor:pointer;white-space:nowrap;transition:all .15s;" title="Supprimer ce feedback">🗑 Suppr.</button>';
+  html+='<button onclick="deleteFeedback(\'' + fb.id + '\',event)" style="background:none;border:1px solid rgba(239,68,68,.4);border-radius:4px;padding:4px 8px;font-family:DM Mono,monospace;font-size:8px;color:#ef4444;cursor:pointer;white-space:nowrap;transition:all .15s;" title="Supprimer ce feedback">🗑 Suppr.</button>';
   html+='</div></div>';
   // Tableau jours
   html+='<div style="margin-bottom:14px;"><div style="font-family:DM Mono,monospace;font-size:7px;letter-spacing:2px;color:var(--accent);margin-bottom:8px;">PAR JOUR</div>';
@@ -11502,7 +11501,8 @@ function renderCoachFeedbacks() {
       if (unread > 0) html += '<span style="color:var(--accent);font-weight:700;">'+unread+' non lu'+(unread>1?'s':'')+' · </span>';
       html += feedbacks.length+' au total</div>';
       if (unread > 0) {
-        html += '<button onclick="markAllRead('+JSON.stringify(allIds)+');renderCoachFeedbacks();" style="background:none;border:1px solid var(--border);border-radius:4px;padding:5px 10px;font-family:DM Mono,monospace;font-size:8px;color:var(--muted);cursor:pointer;">Tout marquer lu</button>';
+        window._fbAllIds = allIds;
+        html += '<button onclick="markAllRead(window._fbAllIds);renderCoachFeedbacks();" style="background:none;border:1px solid var(--border);border-radius:4px;padding:5px 10px;font-family:DM Mono,monospace;font-size:8px;color:var(--muted);cursor:pointer;">Tout marquer lu</button>';
       }
       html += '</div>';
 
@@ -11515,8 +11515,7 @@ function renderCoachFeedbacks() {
 
         // En-tête de la semaine (toujours cliquable)
         html += '<div style="margin-bottom:12px;" id="fbgroup_'+gid+'">';
-        var toggleCall = 'fbToggleWeek(' + JSON.stringify(gid) + ')';
-        html += '<div onclick="'+toggleCall+'" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--surface);border:1px solid '+(weekUnread>0?'rgba(245,200,0,.4)':'var(--border)')+';border-radius:8px;cursor:pointer;user-select:none;margin-bottom:4px;">';
+        html += '<div onclick="fbToggleWeek(\'' + gid + '\')" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--surface);border:1px solid '+(weekUnread>0?'rgba(245,200,0,.4)':'var(--border)')+';border-radius:8px;cursor:pointer;user-select:none;margin-bottom:4px;">';
         html += '<div style="display:flex;align-items:center;gap:10px;">';
         html += '<span id="fbarr_'+gid+'" style="font-size:11px;color:var(--muted);transition:transform .2s;">'+(open?'▼':'▶')+'</span>';
         html += '<div>';
