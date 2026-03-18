@@ -11241,6 +11241,7 @@ function renderAthHistory() {
     return;
   }
   var athName = (_athProfile.name || '').toLowerCase();
+
   _sb.from('coach_sessions')
     .select('*')
     .eq('coach_uid', _athCoachUid)
@@ -11256,73 +11257,140 @@ function renderAthHistory() {
         return sName === athName || sName.includes(athName) || athName.includes(sName);
       });
       if (!sessions.length) {
-        el.innerHTML = '<div style="text-align:center;padding:40px 0;font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">Aucune séance reçue pour le moment.</div>';
+        el.innerHTML = '<div style="text-align:center;padding:40px 0;font-family:DM Mono,monospace;font-size:10px;color:var(--muted);"><div style="font-size:32px;margin-bottom:10px;">📂</div>Aucune séance reçue pour le moment.</div>';
         return;
       }
-      var html = '';
+
+      // Grouper par date
+      var byDate = {};
+      var dateOrder = [];
       sessions.forEach(function(s) {
-        var blocks = s.blocks || [];
-        var isDone = s.type === 'done';
-        var blocksDesc = blocks.map(function(b) {
-          return (b.reps || 1) + '×' + (b.dist || '?') + 'm @ ' + (b.pct || '?') + '%'
-            + (b.rest > 0 ? ' · récup ' + b.rest + 'min' : '');
-        }).join(' | ');
-
-        // Temps par répétition
-        var timesHtml = '';
-        if (isDone) {
-          blocks.forEach(function(b, bi) {
-            if (!b.times) return;
-            var hasAny = b.times.some(function(t) { return t !== null; });
-            if (!hasAny) return;
-            timesHtml += '<div style="margin-top:10px;">';
-            timesHtml += '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);letter-spacing:1px;margin-bottom:4px;">BLOC ' + (bi+1) + ' — ' + b.reps + '×' + b.dist + 'm</div>';
-            timesHtml += '<div style="display:flex;flex-wrap:wrap;gap:4px;">';
-            b.times.forEach(function(t, ri) {
-              if (t === null || t === undefined) return;
-              // Calcul temps cible si refs disponibles
-              var cls = 'session-time-badge';
-              var diff = null;
-              if (b.tCible) { diff = t - b.tCible; }
-              if (diff !== null) {
-                if (Math.abs(diff) <= 0.15) cls += ' green';
-                else if (diff < 0) cls += ' yellow';
-                else cls += ' red';
-              }
-              var label = 'R' + (ri+1) + ' ' + parseFloat(t).toFixed(2) + 's';
-              if (diff !== null) label += ' (' + (diff > 0 ? '+' : '') + diff.toFixed(2) + ')';
-              timesHtml += '<span class="' + cls + '">' + label + '</span>';
-            });
-            timesHtml += '</div></div>';
-          });
-        }
-
-        // Badge type
-        var typeBadge = isDone
-          ? '<span style="font-family:DM Mono,monospace;font-size:8px;background:rgba(34,197,94,.15);color:#22c55e;border-radius:4px;padding:2px 8px;letter-spacing:.5px;">✓ RÉALISÉE</span>'
-          : '<span style="font-family:DM Mono,monospace;font-size:8px;background:rgba(245,200,0,.15);color:var(--accent);border-radius:4px;padding:2px 8px;letter-spacing:.5px;">📋 À FAIRE</span>';
-
-        html += '<div class="session-chip" style="margin-bottom:12px;">';
-        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
-        html += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;">' + (s.session_date || '—') + '</div>';
-        html += typeBadge;
-        html += '</div>';
-        // Blocs
-        blocks.forEach(function(b, bi) {
-          html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--text);padding:6px 0;' + (bi > 0 ? 'border-top:1px solid var(--border);' : '') + '">';
-          html += '<span style="font-family:Bebas Neue,sans-serif;font-size:16px;color:var(--accent);">' + (b.reps||1) + '×</span> ';
-          html += '<strong>' + (b.dist||'?') + 'm</strong> @ ' + (b.pct||'?') + '%';
-          if (b.rest > 0) html += ' <span style="color:var(--muted);font-size:9px;">· récup ' + b.rest + 'min</span>';
-          html += '</div>';
-        });
-        if (timesHtml) html += timesHtml;
-        if (s.conditions) html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:8px;">🌤 ' + s.conditions + '</div>';
-        if (s.note) html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:4px;">💬 ' + s.note + '</div>';
-        html += '</div>';
+        var key = (s.session_date || '').slice(0, 10);
+        if (!byDate[key]) { byDate[key] = []; dateOrder.push(key); }
+        byDate[key].push(s);
       });
+
+      function fmtDate(key) {
+        var d = new Date(key + 'T12:00:00');
+        if (isNaN(d)) return key;
+        var days = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+        var months = ['jan.','fév.','mar.','avr.','mai','juin','juil.','aoû.','sep.','oct.','nov.','déc.'];
+        return days[d.getDay()] + ' ' + d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+      }
+
+      var html = '';
+
+      dateOrder.forEach(function(dateKey) {
+        html += '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:2px;color:var(--accent);padding:12px 0 6px;border-bottom:1px solid var(--border);margin-bottom:10px;">// ' + fmtDate(dateKey).toUpperCase() + '</div>';
+
+        byDate[dateKey].forEach(function(s, gi) {
+          var blocks   = s.blocks || [];
+          var isDone   = s.type === 'done';
+          var detailId = 'athd_' + dateKey.replace(/-/g,'') + '_' + gi;
+          var cardId   = 'athc_' + dateKey.replace(/-/g,'') + '_' + gi;
+
+          // Résumé blocs
+          var blocsSummary = blocks.map(function(b) {
+            return (b.reps || '?') + '×' + (b.dist || '?') + 'm';
+          }).join('  ');
+
+          // Meilleur temps global
+          var allT = [];
+          blocks.forEach(function(b) {
+            (b.times || []).forEach(function(t) { if (t !== null && !isNaN(t)) allT.push(t); });
+          });
+          var bestTime = allT.length ? Math.min.apply(null, allT).toFixed(2) + 's' : '';
+
+          // Badge
+          var typeBadge = isDone
+            ? '<span style="font-family:DM Mono,monospace;font-size:8px;background:rgba(34,197,94,.15);color:#22c55e;border-radius:4px;padding:2px 8px;">✓ RÉALISÉE</span>'
+            : '<span style="font-family:DM Mono,monospace;font-size:8px;background:rgba(245,200,0,.15);color:var(--accent);border-radius:4px;padding:2px 8px;">📋 À FAIRE</span>';
+
+          // Carte
+          html += '<div id="' + cardId + '" data-detail="' + detailId + '" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;margin-bottom:10px;overflow:hidden;cursor:pointer;transition:border-color .15s;" onclick="athToggleHistDetail(this.dataset.detail, this)">';
+
+          // En-tête
+          html += '<div style="padding:14px 16px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">';
+          html += '<div style="flex:1;min-width:0;">';
+          html += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--text);">' + (s.athlete_name || '—').toUpperCase() + '</div>';
+          html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--accent);margin-top:3px;letter-spacing:1px;">' + blocsSummary + '</div>';
+          if (s.conditions) html += '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);margin-top:2px;">📍 ' + s.conditions + '</div>';
+          html += '</div>';
+          html += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">';
+          if (bestTime && isDone) html += '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;color:var(--accent2);line-height:1;">' + bestTime + '</div>';
+          html += typeBadge;
+          html += '<div id="athchev_' + detailId + '" style="font-size:12px;color:var(--muted);transition:transform .2s;">▼</div>';
+          html += '</div></div>';
+
+          // Détail
+          html += '<div id="' + detailId + '" style="display:none;border-top:1px solid var(--border);"><div style="padding:14px 16px;">';
+
+          if (s.conditions || s.note) {
+            html += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border);">';
+            if (s.conditions) html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">📍 <span style="color:var(--text);">' + s.conditions + '</span></div>';
+            if (s.note) html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">📝 <span style="color:var(--text);">' + s.note + '</span></div>';
+            html += '</div>';
+          }
+
+          // Tableau par bloc
+          blocks.forEach(function(b, bi) {
+            var reps = Array.isArray(b.reps) ? b.reps.length : (parseInt(b.reps) || 0);
+            html += '<div style="margin-bottom:14px;">';
+            html += '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:1px;color:var(--accent);margin-bottom:8px;">BLOC ' + (bi+1) + ' — ' + reps + '×' + (b.dist||'?') + 'm @ ' + (b.pct||'?') + '%' + (b.rest > 0 ? ' · ' + b.rest + 'min récup' : '') + '</div>';
+
+            if (isDone && b.times && b.times.some(function(t){return t!==null;})) {
+              var validT = b.times.filter(function(t){return t!==null&&!isNaN(t);});
+              var best = validT.length ? Math.min.apply(null, validT) : null;
+
+              html += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:DM Mono,monospace;font-size:10px;">';
+              html += '<thead><tr>';
+              html += '<th style="text-align:left;padding:5px 8px;font-size:8px;color:var(--muted);border-bottom:1px solid var(--border);">ATHLÈTE</th>';
+              for (var ri = 0; ri < reps; ri++) {
+                html += '<th style="padding:5px 6px;font-size:8px;color:var(--muted);border-bottom:1px solid var(--border);text-align:center;min-width:54px;">R' + (ri+1) + '</th>';
+              }
+              html += '<th style="padding:5px 6px;font-size:8px;color:var(--accent);border-bottom:1px solid var(--border);text-align:center;">MEILLEUR</th>';
+              html += '</tr></thead><tbody><tr>';
+              html += '<td style="padding:6px 8px;font-family:Bebas Neue,sans-serif;font-size:14px;color:var(--text);border-bottom:1px solid var(--border);white-space:nowrap;">' + (s.athlete_name || '—') + '</td>';
+              for (var ri2 = 0; ri2 < reps; ri2++) {
+                var t = b.times[ri2];
+                var hasVal = t !== null && t !== undefined && !isNaN(t);
+                var isBest = hasVal && parseFloat(t) === best;
+                html += '<td style="padding:6px 4px;border-bottom:1px solid var(--border);text-align:center;">';
+                if (hasVal) {
+                  html += '<span style="font-size:11px;color:' + (isBest ? '#51cf66' : 'var(--text)') + ';' + (isBest ? 'font-weight:bold;' : '') + '">' + parseFloat(t).toFixed(2) + '</span>';
+                } else {
+                  html += '<span style="color:var(--border);">—</span>';
+                }
+                html += '</td>';
+              }
+              html += '<td style="padding:6px 4px;border-bottom:1px solid var(--border);text-align:center;">';
+              if (best !== null) html += '<span style="font-family:Bebas Neue,sans-serif;font-size:14px;color:#51cf66;">' + best.toFixed(2) + 's</span>';
+              html += '</td></tr></tbody></table></div>';
+            } else if (!isDone) {
+              // Séance à faire : afficher temps cibles si disponibles
+              html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Séance planifiée — présente-toi !</div>';
+            }
+            html += '</div>';
+          });
+
+          html += '</div></div></div>';
+        });
+      });
+
       el.innerHTML = html;
     });
 }
+
+function athToggleHistDetail(detailId, cardEl) {
+  var detail = document.getElementById(detailId);
+  var chev   = document.getElementById('athchev_' + detailId);
+  if (!detail) return;
+  var open = detail.style.display !== 'none';
+  detail.style.display = open ? 'none' : 'block';
+  if (chev) chev.style.transform = open ? '' : 'rotate(180deg)';
+  if (cardEl) cardEl.style.borderColor = open ? 'var(--border)' : 'var(--accent)';
+}
+
 
 // ── Coach feedbacks ───────────────────────────────────────
 var COACH_DAYS_IDS = ['lun','mar','mer','jeu','ven','sam','dim'];
