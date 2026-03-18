@@ -11485,7 +11485,7 @@ function renderCoachFeedbacks() {
       var allIds  = feedbacks.map(function(fb) { return fb.id; });
       var unread  = allIds.filter(function(id) { return !readSet.has(id); }).length;
 
-      // Grouper par semaine
+      // Grouper par semaine, tri décroissant
       var weekMap = {};
       feedbacks.forEach(function(fb) {
         var wid = fb.week_id || 'unknown';
@@ -11502,25 +11502,56 @@ function renderCoachFeedbacks() {
       if (unread > 0) html += '<span style="color:var(--accent);font-weight:700;">'+unread+' non lu'+(unread>1?'s':'')+' · </span>';
       html += feedbacks.length+' au total</div>';
       if (unread > 0) {
-        html += '<button onclick="markAllRead('+JSON.stringify(allIds)+');renderCoachFeedbacks();" style="background:none;border:1px solid var(--border);border-radius:4px;padding:5px 10px;font-family:DM Mono,monospace;font-size:8px;color:var(--muted);cursor:pointer;letter-spacing:.5px;">Tout marquer lu</button>';
+        html += '<button onclick="markAllRead('+JSON.stringify(allIds)+');renderCoachFeedbacks();" style="background:none;border:1px solid var(--border);border-radius:4px;padding:5px 10px;font-family:DM Mono,monospace;font-size:8px;color:var(--muted);cursor:pointer;">Tout marquer lu</button>';
       }
       html += '</div>';
 
-      // Feedbacks non lus en premier, puis lus
-      var unreadFbs = feedbacks.filter(function(fb) { return !readSet.has(fb.id); });
-      var readFbs   = feedbacks.filter(function(fb) { return  readSet.has(fb.id); });
+      // Une section par semaine
+      weeks.forEach(function(week, wi) {
+        var weekUnread = week.items.filter(function(fb) { return !readSet.has(fb.id); }).length;
+        var gid = 'fbweek_' + wi;
+        // Par défaut ouvert si non lus, fermé si tout lu
+        var open = weekUnread > 0;
 
-      if (unreadFbs.length) {
-        html += '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:10px;">// NON LUS</div>';
-        unreadFbs.forEach(function(fb) { html += coachFeedbackCard(fb); });
-      }
-      if (readFbs.length) {
-        html += '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:2px;color:var(--muted);margin-top:20px;margin-bottom:10px;">// LUS</div>';
-        readFbs.forEach(function(fb) { html += coachFeedbackCard(fb); });
-      }
+        // En-tête de la semaine (toujours cliquable)
+        html += '<div style="margin-bottom:12px;" id="fbgroup_'+gid+'">';
+        var toggleCall = 'fbToggleWeek(' + JSON.stringify(gid) + ')';
+        html += '<div onclick="'+toggleCall+'" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--surface);border:1px solid '+(weekUnread>0?'rgba(245,200,0,.4)':'var(--border)')+';border-radius:8px;cursor:pointer;user-select:none;margin-bottom:4px;">';
+        html += '<div style="display:flex;align-items:center;gap:10px;">';
+        html += '<span id="fbarr_'+gid+'" style="font-size:11px;color:var(--muted);transition:transform .2s;">'+(open?'▼':'▶')+'</span>';
+        html += '<div>';
+        html += '<div style="font-family:Bebas Neue,sans-serif;font-size:17px;letter-spacing:1px;">'+week.label+'</div>';
+        html += '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);margin-top:1px;">'+week.items.length+' feedback'+(week.items.length>1?'s':'');
+        if (weekUnread > 0) html += ' · <span style="color:var(--accent);">'+weekUnread+' non lu'+(weekUnread>1?'s':'')+'</span>';
+        html += '</div></div></div>';
+        // RPE moyens des athlètes dans cette semaine
+        html += '<div style="display:flex;gap:6px;align-items:center;">';
+        week.items.forEach(function(fb) {
+          var col = !fb.rpe?'var(--muted)':fb.rpe<=3?'#22c55e':fb.rpe<=5?'#86efac':fb.rpe<=7?'#f59e0b':fb.rpe<=8?'#ef4444':'#991b1b';
+          html += '<div style="text-align:center;">';
+          html += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:'+col+';line-height:1;">'+(fb.rpe||'—')+'</div>';
+          html += '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);white-space:nowrap;">'+(fb.athlete_name||'?').split(' ')[0]+'</div>';
+          html += '</div>';
+        });
+        html += '</div></div>';
+
+        // Contenu du groupe
+        html += '<div id="fbcontent_'+gid+'" style="display:'+(open?'block':'none')+';">';
+        week.items.forEach(function(fb) { html += coachFeedbackCard(fb); });
+        html += '</div></div>';
+      });
 
       el.innerHTML = html;
     });
+}
+
+function fbToggleWeek(gid) {
+  var content = document.getElementById('fbcontent_'+gid);
+  var arrow   = document.getElementById('fbarr_'+gid);
+  if (!content) return;
+  var open = content.style.display !== 'none';
+  content.style.display = open ? 'none' : 'block';
+  if (arrow) arrow.textContent = open ? '▶' : '▼';
 }
 
 
@@ -11528,7 +11559,7 @@ function deleteFeedback(fbId, event) {
   if (event) event.stopPropagation();
   if (!confirm('Supprimer ce feedback ? Cette action est irréversible.')) return;
   if (!_sb || !_sbUser) return;
-  _sb.from('athlete_feedback').delete().eq('id', fbId).eq('coach_uid', _sbUser.id)
+  _sb.from('athlete_feedback').delete().eq('id', fbId)
     .then(function(r) {
       if (r.error) { alert('Erreur : ' + r.error.message); return; }
       // Retirer du readSet local
