@@ -11880,7 +11880,8 @@ function journalNewSession() {
   }
   var form = document.getElementById('journalForm');
   if (form) form.style.display = 'block';
-  document.getElementById('journalEntries').innerHTML = '';
+  _journalEntries = [];
+  journalRenderEntries();
   document.getElementById('journalNote').value = '';
   journalRenderSets();
   var sel = document.getElementById('journalExoSelect');
@@ -11942,20 +11943,65 @@ function journalAddEntry() {
     return { reps: s.reps ? parseInt(s.reps) : null, weight: s.weight ? parseFloat(s.weight) : null };
   });
   _journalEntries.push({ exo: exoId, name: exoName, sets: sets });
-  // Afficher dans le récap
-  var container = document.getElementById('journalEntries');
-  var best = sets.reduce(function(m, s) { return (s.weight && s.weight > (m||0)) ? s.weight : m; }, null);
-  var setsStr = sets.map(function(s) { return (s.reps||'?') + ' × ' + (s.weight ? s.weight + 'kg' : '—'); }).join(' · ');
-  container.innerHTML += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start;">'
-    + '<div><div style="font-family:Bebas Neue,sans-serif;font-size:16px;color:var(--text);">' + exoName + '</div>'
-    + '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:3px;">' + setsStr + '</div></div>'
-    + (best ? '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--accent2);">' + best + 'kg</div>' : '')
-    + '</div>';
+  journalRenderEntries();
   // Reset
   _journalSets = [{ reps: '', weight: '', unit: 'kg' }];
   journalRenderSets();
   if (sel) sel.value = '';
   if (custom) { custom.value = ''; custom.style.display = 'none'; }
+}
+
+function journalRenderEntries() {
+  var container = document.getElementById('journalEntries');
+  if (!container) return;
+  if (!_journalEntries.length) { container.innerHTML = ''; return; }
+  var html = '';
+  _journalEntries.forEach(function(e, idx) {
+    var best = null;
+    (e.sets||[]).forEach(function(s){ if(s.weight&&s.weight>(best||0)) best=s.weight; });
+    var setsStr = (e.sets||[]).map(function(s){ return (s.reps||'?')+' × '+(s.weight?s.weight+'kg':'—'); }).join(' · ');
+    html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">';
+    html += '<div><div style="font-family:Bebas Neue,sans-serif;font-size:16px;color:var(--text);">' + e.name + '</div>';
+    html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:3px;">' + setsStr + '</div></div>';
+    if (best) html += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--accent2);">' + best + 'kg</div>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:6px;">';
+    html += '<button data-idx="' + idx + '" onclick="journalEditEntry(parseInt(this.dataset.idx))" style="flex:1;background:none;border:1px solid var(--accent);border-radius:6px;padding:7px;font-family:DM Mono,monospace;font-size:8px;color:var(--accent);cursor:pointer;letter-spacing:.5px;">&#9999; Modifier</button>';
+    html += '<button data-idx="' + idx + '" onclick="journalRemoveEntry(parseInt(this.dataset.idx))" style="background:none;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-family:DM Mono,monospace;font-size:8px;color:var(--muted);cursor:pointer;">&#10005;</button>';
+    html += '</div></div>';
+  });
+  container.innerHTML = html;
+}
+
+function journalRemoveEntry(idx) {
+  _journalEntries.splice(idx, 1);
+  journalRenderEntries();
+}
+
+function journalEditEntry(idx) {
+  var entry = _journalEntries[idx];
+  if (!entry) return;
+  var sel = document.getElementById('journalExoSelect');
+  var custom = document.getElementById('journalExoCustom');
+  if (sel) {
+    if (JOURNAL_EXO_LABELS[entry.exo]) {
+      sel.value = entry.exo;
+      if (custom) custom.style.display = 'none';
+    } else {
+      sel.value = 'other';
+      if (custom) { custom.style.display = 'block'; custom.value = entry.name; }
+    }
+  }
+  _journalSets = (entry.sets||[]).map(function(s) {
+    return { reps: s.reps !== null ? String(s.reps) : '', weight: s.weight !== null ? String(s.weight) : '', unit: 'kg' };
+  });
+  if (!_journalSets.length) _journalSets = [{ reps: '', weight: '', unit: 'kg' }];
+  journalRenderSets();
+  _journalEntries.splice(idx, 1);
+  journalRenderEntries();
+  var setsEl = document.getElementById('journalSetsContainer');
+  if (setsEl) setsEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 // Afficher/cacher champ libre
@@ -12140,16 +12186,7 @@ function journalEditSession(id) {
     // Afficher le récap des exercices existants
     var container = document.getElementById('journalEntries');
     container.innerHTML = '';
-    _journalEntries.forEach(function(e) {
-      var best = null;
-      (e.sets||[]).forEach(function(set){if(set.weight&&set.weight>(best||0))best=set.weight;});
-      var setsStr = (e.sets||[]).map(function(s2){return (s2.reps||'?')+' × '+(s2.weight?s2.weight+'kg':'—');}).join(' · ');
-      container.innerHTML += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start;">'
-        + '<div><div style="font-family:Bebas Neue,sans-serif;font-size:16px;color:var(--text);">' + e.name + '</div>'
-        + '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:3px;">' + setsStr + '</div></div>'
-        + (best ? '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--accent2);">' + best + 'kg</div>' : '')
-        + '</div>';
-    });
+        journalRenderEntries();
     // Reset les séries en cours
     _journalSets = [{ reps: '', weight: '', unit: 'kg' }];
     journalRenderSets();
