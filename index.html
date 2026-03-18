@@ -6971,10 +6971,14 @@ function toggleHistDetail(detailId, cardEl) {
 
 function deleteSessionFromHistoryData(pid, idx) {
   if (!historyData[pid]) return;
+  var session = historyData[pid][idx];
+  // Supprimer aussi dans coach_sessions si présent
+  if (session && session._csId && _sb) {
+    _sb.from('coach_sessions').delete().eq('id', session._csId).then(function(){});
+  }
   historyData[pid].splice(idx, 1);
   saveHistoryData();
   renderHistoryInline();
-  // Aussi mettre à jour la page historique si active
   const hp = document.getElementById('page-history');
   if (hp && hp.classList.contains('active')) renderHistory();
 }
@@ -8828,21 +8832,8 @@ function sendSessionToAthletes() {
     return;
   }
 
-  // Aussi sauver dans historyData local
-  rows.forEach(function(row) {
-    var pid = selectedAthletes.find(function(id) {
-      var p = profiles.find(function(pr) { return pr.id === id; });
-      return p && p.name === row.athlete_name;
-    });
-    if (pid) {
-      if (!historyData[pid]) historyData[pid] = [];
-      var session = { date: row.session_date, conditions: row.conditions, blocks: row.blocks, athlete: row.athlete_name, note: row.note };
-      historyData[pid].unshift(session);
-    }
-  });
-  localStorage.setItem('sc_history', JSON.stringify(historyData));
-  clearTimeout(_sbSyncTimeout);
-  sbPush('history_data', historyData);
+  // Pas d'insertion locale - coach_sessions est la source de vérité
+  // Le merge se fait dans sbPullAll après confirmation Supabase
 
   // Insérer dans coach_sessions (table accessible aux athlètes)
   _sb.from('coach_sessions').insert(rows).then(function(r) {
@@ -11330,12 +11321,19 @@ function renderAthHistory() {
         el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:#ef4444;">Erreur : ' + r.error.message + '</div>';
         return;
       }
-      var sessions = (r.data || []).filter(function(s) {
+      var allForAthlete = (r.data || []).filter(function(s) {
         var sName = (s.athlete_name || '').toLowerCase();
         return sName === athName || sName.includes(athName) || athName.includes(sName);
       });
+      // Filtrer par onglet actif
+      var sessions = allForAthlete.filter(function(s) {
+        return s.type === _athCurrentTab;
+      });
       if (!sessions.length) {
-        el.innerHTML = '<div style="text-align:center;padding:40px 0;font-family:DM Mono,monospace;font-size:10px;color:var(--muted);"><div style="font-size:32px;margin-bottom:10px;">📂</div>Aucune séance reçue pour le moment.</div>';
+        var emptyMsg = _athCurrentTab === 'planned'
+          ? '<div style="font-size:32px;margin-bottom:10px;">📋</div>Aucune séance à faire pour le moment.'
+          : '<div style="font-size:32px;margin-bottom:10px;">✓</div>Aucune séance réalisée pour le moment.';
+        el.innerHTML = '<div style="text-align:center;padding:40px 0;font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">' + emptyMsg + '</div>';
         return;
       }
 
@@ -11487,6 +11485,11 @@ function renderAthHistory() {
             html += '<div id="asendmsg_' + sid2 + '" style="font-family:DM Mono,monospace;font-size:9px;text-align:center;min-height:14px;margin-top:8px;"></div>';
             html += '</div>';
           }
+
+          // Bouton suppression athlète
+          html += '<div style="padding:10px 16px;border-top:1px solid var(--border);background:var(--surface2);">';
+          html += '<button data-sid="' + s.id + '" onclick="athDeleteSession(this.dataset.sid)" style="background:none;border:1px solid var(--border);border-radius:4px;padding:6px 14px;font-family:DM Mono,monospace;font-size:8px;color:var(--muted);cursor:pointer;-webkit-tap-highlight-color:transparent;">✕ Supprimer cette séance</button>';
+          html += '</div>';
 
           html += '</div></div></div>';
         });
