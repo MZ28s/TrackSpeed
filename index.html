@@ -10960,13 +10960,7 @@ function renderSleepRows() {
     var day = _feedbackData.days[d];
     var isRepos = day.repos;
     var dur = calcSleepDuration(day.coucher, day.lever);
-    var durColor = !dur ? 'var(--muted)' : (function(){
-      var parts = dur.split('h');
-      var h = parseFloat(parts[0]);
-      var m = parts[1] ? parseFloat(parts[1]) : 0;
-      var total = h + m / 60;
-      return total >= 8 ? '#22c55e' : total >= 7 ? '#f59e0b' : '#ef4444';
-    })();
+    var durColor = getSleepColor(dur);
     var borderBot = i < ATH_DAYS.length - 1 ? 'border-bottom:1px solid var(--border);' : '';
     html += '<div style="padding:12px 0;' + borderBot + (isRepos ? 'opacity:.5;' : '') + '">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
@@ -11000,12 +10994,21 @@ function calcSleepDuration(coucher, lever) {
   return h+'h'+(m>0?String(m).padStart(2,'0'):'');
 }
 
+function getSleepColor(dur) {
+  if (!dur) return 'var(--muted)';
+  var parts = dur.split('h');
+  var h = parseFloat(parts[0]);
+  var m = parts[1] ? parseFloat(parts[1]) : 0;
+  var total = h + m / 60;
+  return total >= 8 ? '#22c55e' : total >= 7 ? '#f59e0b' : '#ef4444';
+}
+
 function feedbackSleepChange(day, field, val) {
   if (!_feedbackData.days[day]) return;
   _feedbackData.days[day][field] = val;
   var d = _feedbackData.days[day]; var dur = calcSleepDuration(d.coucher, d.lever);
   var durEl = document.getElementById('sleep-dur-'+day);
-  if (durEl) { durEl.textContent=dur||'—'; durEl.style.color=dur?'var(--accent)':'var(--muted)'; }
+  if (durEl) { durEl.textContent = dur || '—'; durEl.style.color = getSleepColor(dur); }
   updateSleepAvg(); autoSaveDraft();
 }
 
