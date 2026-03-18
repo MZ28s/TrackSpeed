@@ -711,7 +711,11 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
         <input type="number" id="rm_hipthrust" placeholder="120" step="1" min="10" max="500" style="font-size:16px;">
       </div>
       <div class="input-wrap">
-        <label>RDL / Deadlift</label>
+        <label>Deadlift</label>
+        <input type="number" id="rm_deadlift" placeholder="120" step="1" min="10" max="400" style="font-size:16px;">
+      </div>
+      <div class="input-wrap">
+        <label>RDL</label>
         <input type="number" id="rm_rdl" placeholder="110" step="1" min="10" max="400" style="font-size:16px;">
       </div>
       <div class="input-wrap">
@@ -721,6 +725,10 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
       <div class="input-wrap">
         <label>Bench Press</label>
         <input type="number" id="rm_bench" placeholder="80" step="1" min="10" max="300" style="font-size:16px;">
+      </div>
+      <div class="input-wrap">
+        <label>Leg Extension</label>
+        <input type="number" id="rm_legext" placeholder="60" step="1" min="10" max="200" style="font-size:16px;">
       </div>
     </div>
     <p style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:12px;">
@@ -5315,9 +5323,11 @@ function submitProfile() {
   const rm1 = {
     squat:      getPRVal('rm_squat'),
     hipthrust:  getPRVal('rm_hipthrust'),
+    deadlift:   getPRVal('rm_deadlift'),
     rdl:        getPRVal('rm_rdl'),
     powerclean: getPRVal('rm_powerclean'),
     bench:      getPRVal('rm_bench'),
+    legext:     getPRVal('rm_legext'),
   };
   const editId = document.getElementById('editProfileId').value;
   if (editId) {
@@ -5344,7 +5354,7 @@ function cancelEditProfile() {
   const cEl = document.getElementById('newProfileCategorie');
   if (cEl) cEl.value = '';
   ['pr50','pr60','pr100','pr200','pr400'].forEach(id => document.getElementById(id).value = '');
-  ['rm_squat','rm_hipthrust','rm_rdl','rm_powerclean','rm_bench']
+  ['rm_squat','rm_hipthrust','rm_deadlift','rm_rdl','rm_powerclean','rm_bench','rm_legext']
     .forEach(id => document.getElementById(id).value = '');
   document.getElementById('profileFormTitle').textContent = '// Nouvel athlète';
   document.getElementById('profileSubmitBtn').textContent = '+ Ajouter l\'athlète';
@@ -5365,7 +5375,7 @@ function editProfile(id) {
     document.getElementById('pr'+d).value = r['pr'+d] !== null && r['pr'+d] !== undefined ? r['pr'+d] : '';
   });
   const rm = p.rm1 || {};
-  const rmKeys = ['squat','hipthrust','rdl','powerclean','bench'];
+  const rmKeys = ['squat','hipthrust','deadlift','rdl','powerclean','bench','legext'];
   rmKeys.forEach(k => {
     const el = document.getElementById('rm_'+k);
     if (el) el.value = rm[k] !== null && rm[k] !== undefined ? rm[k] : '';
@@ -7561,72 +7571,27 @@ function saveSessionWithTimes() {
 
 // ── EXERCICES ────────────────────────────────────────────
 const EXERCISES = [
-  // Barres libres
-  { id:'squat',     label:'Back Squat',        icon:'🏋', cat:'barre',
+  { id:'squat',      label:'Back Squat',     icon:'🏋', cat:'barre',
     muscles:'Quadriceps, fessiers, ischio-jambiers, érecteurs',
     tip:'Dos plat, genoux dans l\'axe des orteils, descente sous le parallèle.' },
-  { id:'frontsquat',label:'Front Squat',        icon:'🏋', cat:'barre',
-    muscles:'Quadriceps (++), fessiers, core',
-    tip:'Barre sur deltoïdes antérieurs, coudes hauts. Meilleure activation quad que back squat.' },
-  { id:'hipthrust',  label:'Hip Thrust',         icon:'🔥', cat:'barre',
+  { id:'hipthrust',  label:'Hip Thrust',     icon:'🔥', cat:'barre',
     muscles:'Grand fessier (++), ischio-jambiers',
     tip:'Principal exercice fessier. Corrélé directement à la vitesse de pointe (Contreras, 2015).' },
-  { id:'rdl',        label:'RDL (Romanian DL)',  icon:'⬇️', cat:'barre',
-    muscles:'Ischio-jambiers (++), grand fessier, érecteurs',
-    tip:'Dos neutre, barre proche du corps. Étirement maximal des ischio-jambiers.' },
-  { id:'deadlift',   label:'Deadlift',           icon:'💀', cat:'barre',
+  { id:'deadlift',   label:'Deadlift',       icon:'💀', cat:'barre',
     muscles:'Ischio-jambiers, fessiers, érecteurs, trapèzes',
     tip:'Traction complète depuis le sol. Force absolue totale du corps postérieur.' },
-  { id:'trapbar',    label:'Trap-Bar Deadlift',  icon:'💀', cat:'barre',
-    muscles:'Quadriceps, fessiers, ischio-jambiers',
-    tip:'Profil biomécanique intermédiaire squat/deadlift. Très sûr pour sprinters.' },
-  { id:'lunge',      label:'Fente avant barre',  icon:'🦵', cat:'barre',
-    muscles:'Quadriceps, fessiers, stabilisateurs',
-    tip:'Pas long, genou arrière frôle le sol. Travail unilatéral spécifique sprint.' },
-  { id:'splitbulgare',label:'Split Squat bulgare',icon:'🦵', cat:'barre',
-    muscles:'Quadriceps, grand fessier, ischio-jambiers',
-    tip:'Pied arrière surélevé (40-50cm). Meilleur exercice unilatéral pour sprinters selon la littérature.' },
-  { id:'stepup',     label:'Step-up lesté',      icon:'🦵', cat:'barre',
-    muscles:'Grand fessier, quadriceps, ischio-jambiers',
-    tip:'Hauteur box = 90° genou. Pousser à travers le talon pour activer le fessier.' },
-  { id:'goodmorning',label:'Good Morning',       icon:'⬇️', cat:'barre',
-    muscles:'Ischio-jambiers, érecteurs, fessiers',
-    tip:'Barre sur nuque, inclinaison du buste 45-90°. Force de la chaîne postérieure en position d\'étirement.' },
-  // Machines
-  { id:'legpress',   label:'Leg Press',          icon:'🖥️', cat:'machine',
-    muscles:'Quadriceps (++), fessiers',
-    tip:'Pieds hauts = fessiers. Pieds bas = quadriceps. Amplitude maximale recommandée.' },
-  { id:'legext',     label:'Leg Extension',      icon:'🖥️', cat:'machine',
+  { id:'rdl',        label:'RDL',            icon:'⬇️', cat:'barre',
+    muscles:'Ischio-jambiers (++), grand fessier, érecteurs',
+    tip:'Dos neutre, barre proche du corps. Étirement maximal des ischio-jambiers.' },
+  { id:'powerclean', label:'Power Clean',    icon:'⚡', cat:'barre',
+    muscles:'Chaîne postérieure complète, trapèzes, bras',
+    tip:'Mouvement explosif de triple extension. Transfert direct sur la puissance de départ.' },
+  { id:'bench',      label:'Bench Press',    icon:'💪', cat:'barre',
+    muscles:'Grand pectoral, deltoïde antérieur, triceps',
+    tip:'Force du haut du corps. Utile pour la mécanique de bras en sprint.' },
+  { id:'legext',     label:'Leg Extension',  icon:'🖥️', cat:'machine',
     muscles:'Quadriceps (isolation)',
     tip:'Isolation pure du quadriceps. Utile pour compléter le volume sans surcharger la colonne.' },
-  { id:'legcurl',    label:'Leg Curl couché',    icon:'🖥️', cat:'machine',
-    muscles:'Ischio-jambiers (isolation)',
-    tip:'Isolation ischio-jambiers. Complémentaire du RDL. Réduire le risque de déséquilibre IJ/quad.' },
-  { id:'seatedhipabd',label:'Hip Abduction',     icon:'🖥️', cat:'machine',
-    muscles:'Moyen fessier, petit fessier',
-    tip:'Stabilité du bassin en course. Muscles souvent négligés, essentiels pour la mécanique de sprint.' },
-  { id:'seatedhipadd',label:'Hip Adduction',     icon:'🖥️', cat:'machine',
-    muscles:'Adducteurs',
-    tip:'Équilibre abducteurs/adducteurs. Prévention des blessures à l\'aine.' },
-  // Poids du corps / élastiques
-  { id:'nordic',     label:'Nordic Curl',        icon:'🏃', cat:'pdc',
-    muscles:'Ischio-jambiers (excentrique ++)',
-    tip:'Exercice excentrique de référence. Réduit les risques de déchirure IJ de 50-70% (Petersen, 2011).' },
-  { id:'glute_bridge',label:'Glute Bridge lesté', icon:'🏃', cat:'pdc',
-    muscles:'Grand fessier, ischio-jambiers',
-    tip:'Version sol du hip thrust. Accessible sans banc. Avec haltère sur les hanches.' },
-  { id:'sissy_squat',label:'Sissy Squat',        icon:'🏃', cat:'pdc',
-    muscles:'Quadriceps (étirement extrême)',
-    tip:'Renforcement quad en position d\'étirement. Utile pour prévention tendinite patellaire.' },
-  { id:'calfrise',   label:'Mollets debout',     icon:'🏃', cat:'pdc',
-    muscles:'Soléaire, gastrocnémien',
-    tip:'Mollets = moteurs de la propulsion. Souvent sous-entraînés chez le sprinter.' },
-  { id:'elasticabd', label:'Abduction élastique', icon:'🟡', cat:'elastique',
-    muscles:'Moyen fessier',
-    tip:'Activation légère en échauffement ou en fin de séance. Élastique autour des genoux.' },
-  { id:'elastichipext',label:'Extension hanche élastique',icon:'🟡', cat:'elastique',
-    muscles:'Grand fessier, ischio-jambiers',
-    tip:'Debout, élastique fixé à la cheville. Reproduit le mouvement d\'extension de hanche en course.' },
 ];
 
 // ── ZONES D'ENTRAÎNEMENT ─────────────────────────────────
@@ -10526,7 +10491,7 @@ function renderAthForce() {
   var el = document.getElementById('athForceContent');
   if (!el || !_athProfile) return;
   var rm1 = _athProfile.rm1 || {};
-  var exos = [{id:'squat',label:'Back Squat',icon:'🏋'},{id:'hipthrust',label:'Hip Thrust',icon:'🔁'},{id:'rdl',label:'RDL',icon:'📐'},{id:'powerclean',label:'Power Clean',icon:'⚡'},{id:'bench',label:'Bench Press',icon:'💪'}];
+  var exos = [{id:'squat',label:'Back Squat',icon:'🏋'},{id:'hipthrust',label:'Hip Thrust',icon:'🔥'},{id:'deadlift',label:'Deadlift',icon:'💀'},{id:'rdl',label:'RDL',icon:'⬇️'},{id:'powerclean',label:'Power Clean',icon:'⚡'},{id:'bench',label:'Bench Press',icon:'💪'},{id:'legext',label:'Leg Extension',icon:'🖥️'}];
   var pcts = [50,60,70,75,80,85,90,95,100]; var html = '';
   exos.forEach(function(exo) {
     var rm = rm1[exo.id]; if (!rm) return;
@@ -10640,7 +10605,7 @@ function renderAthProfileInfo() {
     if (el && r['pr'+d]) el.value = r['pr'+d];
   });
   var rm = p.rm1 || {};
-  ['squat','hipthrust','rdl','powerclean','bench'].forEach(function(ex) {
+  ['squat','hipthrust','deadlift','rdl','powerclean','bench','legext'].forEach(function(ex) {
     var el = document.getElementById('profRm1_' + ex);
     if (el && rm[ex]) el.value = rm[ex];
   });
@@ -12181,10 +12146,12 @@ setTimeout(() => {
       <div class="ath-card-title">1RM Musculation</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
         <div class="record-item"><span class="record-label">🏋 Back Squat (kg)</span><input class="record-input" type="number" id="profRm1_squat" placeholder="—" step="0.5" onchange="athSaveRm1()"></div>
-        <div class="record-item"><span class="record-label">🔁 Hip Thrust (kg)</span><input class="record-input" type="number" id="profRm1_hipthrust" placeholder="—" step="0.5" onchange="athSaveRm1()"></div>
-        <div class="record-item"><span class="record-label">📐 RDL (kg)</span><input class="record-input" type="number" id="profRm1_rdl" placeholder="—" step="0.5" onchange="athSaveRm1()"></div>
+        <div class="record-item"><span class="record-label">🔥 Hip Thrust (kg)</span><input class="record-input" type="number" id="profRm1_hipthrust" placeholder="—" step="0.5" onchange="athSaveRm1()"></div>
+        <div class="record-item"><span class="record-label">💀 Deadlift (kg)</span><input class="record-input" type="number" id="profRm1_deadlift" placeholder="—" step="0.5" onchange="athSaveRm1()"></div>
+        <div class="record-item"><span class="record-label">⬇️ RDL (kg)</span><input class="record-input" type="number" id="profRm1_rdl" placeholder="—" step="0.5" onchange="athSaveRm1()"></div>
         <div class="record-item"><span class="record-label">⚡ Power Clean (kg)</span><input class="record-input" type="number" id="profRm1_powerclean" placeholder="—" step="0.5" onchange="athSaveRm1()"></div>
         <div class="record-item"><span class="record-label">💪 Bench Press (kg)</span><input class="record-input" type="number" id="profRm1_bench" placeholder="—" step="0.5" onchange="athSaveRm1()"></div>
+        <div class="record-item"><span class="record-label">🖥️ Leg Extension (kg)</span><input class="record-input" type="number" id="profRm1_legext" placeholder="—" step="0.5" onchange="athSaveRm1()"></div>
       </div>
       <div id="athRm1Saved" style="font-family:'DM Mono',monospace;font-size:8px;color:#22c55e;margin-top:10px;min-height:14px;text-align:right;"></div>
     </div>
