@@ -6868,11 +6868,12 @@ function _renderHistoryFromCS(container, sessions) {
         });
         html += '</tbody></table></div></div>';
       });
-      // Boutons supprimer par athlète
-      html += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;">';
-      grp.athletes.forEach(function(a) {
-        html += '<button data-csid="'+a.csId+'" onclick="coachDeleteSession(this.dataset.csid)" style="background:none;border:1px solid var(--border);border-radius:3px;padding:4px 10px;font-family:DM Mono,monospace;font-size:8px;color:var(--muted);cursor:pointer;">✕ Supprimer '+a.name+'</button>';
-      });
+      // Bouton supprimer toute la séance
+      var allCsIds = grp.athletes.map(function(a){return a.csId;});
+      var grpKey = 'csgrp_' + dateKey.replace(/-/g,'') + '_' + gi;
+      window[grpKey] = allCsIds;
+      html += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">';
+      html += '<button data-key="'+grpKey+'" onclick="coachDeleteGroup(this.dataset.key)" style="background:none;border:1px solid #ef444466;border-radius:4px;padding:6px 14px;font-family:DM Mono,monospace;font-size:8px;color:#ef4444;cursor:pointer;letter-spacing:.5px;">🗑 Supprimer cette séance</button>';
       html += '</div>';
       html += '</div></div>';
     });
@@ -6886,6 +6887,22 @@ function toggleCsDetail(card) {
   var open = det.style.display !== 'none';
   det.style.display = open ? 'none' : 'block';
   card.style.borderColor = open ? 'var(--border)' : 'var(--accent)';
+}
+
+function coachDeleteGroup(key) {
+  var ids = window[key];
+  if (!ids || !ids.length) return;
+  var nb = ids.length;
+  if (!confirm('Supprimer cette séance' + (nb > 1 ? ' pour ' + nb + ' athlètes' : '') + ' ?')) return;
+  if (!_sb) return;
+  _sb.from('coach_sessions').delete().in('id', ids).then(function(r) {
+    if (r.error) { alert('Erreur : ' + r.error.message); return; }
+    if (window._coachSessionsCache) {
+      window._coachSessionsCache = window._coachSessionsCache.filter(function(s) { return !ids.includes(s.id); });
+    }
+    delete window[key];
+    renderHistoryInline();
+  });
 }
 
 function coachDeleteSession(csId) {
