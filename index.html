@@ -1011,9 +1011,11 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
     </div>
 
     <div class="btn-row" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
-      <button class="btn" onclick="openShareModal()" style="border-color:var(--accent2);color:var(--accent2);">📤 Partager la séance</button>
-      <button class="btn" onclick="openPresentation()" id="btnPresentation" style="border-color:var(--muted);color:var(--muted);">📺 Présentation</button>
+      <button class="btn primary" onclick="sendSessionToAthletes()" id="btnSendSession" style="flex:2;">📲 Envoyer aux athlètes</button>
+      <button class="btn" onclick="openShareModal()" style="border-color:var(--accent2);color:var(--accent2);">📤 Partager</button>
+      <button class="btn" onclick="openPresentation()" id="btnPresentation" style="border-color:var(--muted);color:var(--muted);">📺</button>
     </div>
+    <div id="sendSessionMsg" style="font-family:'DM Mono',monospace;font-size:9px;text-align:center;min-height:14px;margin-top:8px;"></div>
   </div>
 </div><!-- end stab-content-plan -->
 
@@ -1393,7 +1395,8 @@ function sbPush(table, data) {
 
 function sbPull(table) {
   if (!_sbUser || !_sb) return Promise.resolve(null);
-  return _sb.from(table).select('data').eq('user_id', _sbUser.id).maybeSingle()
+  return _sb.from(table).select('data').eq('user_id', _sbUser.id)
+    .order('updated_at', { ascending: false }).limit(1).maybeSingle()
     .then(function(r) {
       if (r.error) { console.error('sbPull [' + table + ']:', r.error.message, r.error); return null; }
       return (r.data && r.data.data !== undefined) ? r.data.data : null;
@@ -1462,7 +1465,7 @@ function sbPullAll() {
 function sbScheduleSync() {
   if (!_sbUser) return;
   clearTimeout(_sbSyncTimeout);
-  _sbSyncTimeout = setTimeout(sbSyncAll, 2000);
+  _sbSyncTimeout = setTimeout(sbSyncAll, 500);
 }
 
 function sbSyncAll() {
@@ -5284,7 +5287,10 @@ function renderResults() {
 // ── PROFILES ──
 function saveProfiles() {
   localStorage.setItem('sc_profiles', JSON.stringify(profiles));
-  if (_sbUser) { sbScheduleSync(); }
+  if (_sbUser) {
+    clearTimeout(_sbSyncTimeout);
+    sbSyncAll();
+  }
 }
 
 function getPRVal(id) {
@@ -8698,6 +8704,61 @@ function chronoBeep() {
 // ════════════════════════════════════════════════════════
 // ══  FONCTIONNALITÉ 2 : PARTAGE SÉANCE  ═════════════════
 // ════════════════════════════════════════════════════════
+function sendSessionToAthletes() {
+  if (!sessionBlocks.length) { alert('Aucun bloc de séance à envoyer.'); return; }
+  if (!selectedAthletes.length) { alert('Sélectionne au moins un athlète dans le tableau.'); return; }
+  if (!_sbUser) { alert('Tu dois être connecté pour envoyer une séance.'); return; }
+
+  var btn = document.getElementById('btnSendSession');
+  var msg = document.getElementById('sendSessionMsg');
+  if (btn) { btn.disabled = true; btn.textContent = 'Envoi...'; }
+
+  // 1. Sauvegarder les temps saisis pour chaque athlète sélectionné
+  var date = new Date().toISOString().slice(0, 10);
+  var conditions = (document.getElementById('sessConditions') || {}).value || '';
+  var note = (document.getElementById('sessGlobalNote') || {}).value || '';
+
+  selectedAthletes.forEach(function(pid) {
+    var p = profiles.find(function(pr) { return pr.id === pid; });
+    if (!p) return;
+    var blocksWithTimes = sessionBlocks.map(function(b, bi) {
+      var times = [];
+      for (var r = 0; r < b.reps; r++) {
+        var inp = document.getElementById('mt_' + pid + '_' + bi + '_' + r);
+        var t = inp ? parseFloat(inp.value) : NaN;
+        times.push(isNaN(t) ? null : t);
+      }
+      return Object.assign({}, b, { times: times });
+    });
+    var session = { date: date, conditions: conditions, blocks: blocksWithTimes, athlete: p.name, note: note };
+    if (!historyData[pid]) historyData[pid] = [];
+    // Éviter les doublons (même date + même blocs)
+    var alreadyToday = historyData[pid].some(function(s) {
+      return s.date === date && JSON.stringify(s.blocks) === JSON.stringify(blocksWithTimes);
+    });
+    if (!alreadyToday) historyData[pid].unshift(session);
+  });
+
+  localStorage.setItem('sc_history', JSON.stringify(historyData));
+
+  // 2. Push immédiat vers Supabase (pas de délai)
+  clearTimeout(_sbSyncTimeout);
+  sbPush('history_data', historyData).then(function(result) {
+    if (btn) { btn.disabled = false; btn.textContent = '📲 Envoyer aux athlètes'; }
+    if (result && result.ok) {
+      var names = selectedAthletes.map(function(pid) {
+        var p = profiles.find(function(pr) { return pr.id === pid; });
+        return p ? p.name : pid;
+      }).join(', ');
+      if (msg) { msg.textContent = '✅ Envoyé à ' + names; msg.style.color = '#22c55e'; }
+      setTimeout(function() { if (msg) msg.textContent = ''; }, 4000);
+      renderHistoryInline();
+    } else {
+      if (msg) { msg.textContent = '⚠ Erreur envoi — données sauvées localement'; msg.style.color = '#f59e0b'; }
+    }
+  });
+}
+
 function openShareModal() {
   if (!sessionBlocks.length) { alert('Aucune séance à partager.'); return; }
   const date = new Date().toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long'});
@@ -8718,7 +8779,7 @@ function openShareModal() {
   });
   const note = document.getElementById('sessGlobalNote')?.value?.trim();
   if (note) txt += `\n📝 ${note}`;
-  txt += '\n\n— TrackSpeed v0.1';
+  txt += '\n\n— TrackSpeed v0.4';
   document.getElementById('shareText').value = txt;
   document.getElementById('shareCopiedMsg').style.display = 'none';
   document.getElementById('shareModal').classList.remove('hidden');
@@ -10287,8 +10348,12 @@ function showLinkAthleteModal(profileId) {
   confirmBtn.onclick = function() {
     var id = document.getElementById('linkAthIdInput').value;
     if (!id) return;
-    linkAthleteById(id, profileId);
+    var idClean = (id || '').trim().toUpperCase();
     modal.remove();
+    linkAthleteById(idClean, profileId, function(ok, msg) {
+      alert(ok ? '✅ ' + msg : '❌ ' + msg);
+      if (ok) { sbPullAll().then(function() { renderProfiles(); renderHome(); }); }
+    });
   };
   var closeBtn = document.createElement('button');
   closeBtn.textContent = 'Annuler';
