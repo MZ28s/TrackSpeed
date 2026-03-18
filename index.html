@@ -10835,8 +10835,7 @@ function athGoPage(name) {
   }
   if (name === 'feedback') { renderDailyRpe(); renderDailyForm(); renderSleepRows(); }
   if (name === 'calc')     { athCalculate(); }
-  if (name === 'force')    { athRenderExoSelector(); athUpdateForceTable(); }
-  if (name === 'journal')  { journalInit(); }
+  if (name === 'force')    { athRenderExoSelector(); athUpdateForceTable(); journalLoadHistory(); }
 }
 
 // ── enterAthleteMode ─────────────────────────────────────
@@ -11842,12 +11841,29 @@ var JOURNAL_EXO_LABELS = {
   rdl:'RDL', powerclean:'Power Clean', bench:'Bench Press', legext:'Leg Extension'
 };
 
+function forceTab(tab) {
+  var charges = document.getElementById('force-tab-charges');
+  var journal  = document.getElementById('force-tab-journal');
+  var btnC = document.getElementById('forceTabCharges');
+  var btnJ = document.getElementById('forceTabJournal');
+  if (!charges || !journal) return;
+  if (tab === 'charges') {
+    charges.style.display = 'block'; journal.style.display = 'none';
+    if (btnC) { btnC.style.background='var(--accent)'; btnC.style.color='#000'; }
+    if (btnJ) { btnJ.style.background='var(--surface2)'; btnJ.style.color='var(--muted)'; }
+  } else {
+    charges.style.display = 'none'; journal.style.display = 'block';
+    if (btnC) { btnC.style.background='var(--surface2)'; btnC.style.color='var(--muted)'; }
+    if (btnJ) { btnJ.style.background='var(--accent)'; btnJ.style.color='#000'; }
+    journalLoadHistory();
+  }
+}
+
 function journalInit() {
   _journalEntries = [];
   _journalSets = [{ reps: '', weight: '', unit: 'kg' }];
   var form = document.getElementById('journalForm');
   if (form) form.style.display = 'none';
-  journalLoadHistory();
 }
 
 function journalNewSession() {
@@ -12995,24 +13011,81 @@ setTimeout(() => {
   <!-- FORCE -->
   <div id="ath-page-force" class="ath-page">
     <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:4px;">// Musculation sprint</div>
-    <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;margin-bottom:16px;line-height:1;">FORCE</div>
-    <div class="card" style="margin-bottom:10px;">
-      <div class="card-title">// Exercice</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;" id="ath-exoSelector"></div>
-      <div style="background:var(--surface2);border-radius:4px;padding:12px;margin-bottom:10px;">
-        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;">CALCULER / METTRE À JOUR LE 1RM</div>
-        <div class="input-grid" style="margin-bottom:8px;">
-          <div class="input-wrap"><label>1RM direct (kg)</label><input type="number" id="ath-rm_direct" placeholder="100" step="0.5" min="1" max="600" oninput="athUpdateForceTable()" style="font-size:18px;"></div>
-          <div class="input-wrap"><label style="color:var(--muted);">— ou estimation —</label><div style="display:flex;gap:6px;"><input type="number" id="ath-rm_weight" placeholder="80 kg" step="0.5" min="1" max="600" oninput="athEstimateRM()" style="font-size:16px;flex:1;"><input type="number" id="ath-rm_reps" placeholder="5 reps" step="1" min="1" max="30" oninput="athEstimateRM()" style="font-size:16px;flex:1;"></div></div>
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;margin-bottom:14px;line-height:1;">FORCE</div>
+
+    <!-- Onglets CHARGES / JOURNAL -->
+    <div style="display:flex;gap:0;margin-bottom:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+      <button id="forceTabCharges" onclick="forceTab('charges')"
+        style="flex:1;padding:13px;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:1px;border:none;cursor:pointer;transition:all .15s;background:var(--accent);color:#000;">
+        📊 CHARGES
+      </button>
+      <button id="forceTabJournal" onclick="forceTab('journal')"
+        style="flex:1;padding:13px;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:1px;border:none;cursor:pointer;transition:all .15s;background:var(--surface2);color:var(--muted);">
+        📓 JOURNAL
+      </button>
+    </div>
+
+    <!-- ONGLET CHARGES -->
+    <div id="force-tab-charges">
+      <div class="card" style="margin-bottom:10px;">
+        <div class="card-title">// Exercice</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;" id="ath-exoSelector"></div>
+        <div style="background:var(--surface2);border-radius:4px;padding:12px;margin-bottom:10px;">
+          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;">CALCULER / METTRE À JOUR LE 1RM</div>
+          <div class="input-grid" style="margin-bottom:8px;">
+            <div class="input-wrap"><label>1RM direct (kg)</label><input type="number" id="ath-rm_direct" placeholder="100" step="0.5" min="1" max="600" oninput="athUpdateForceTable()" style="font-size:18px;"></div>
+            <div class="input-wrap"><label style="color:var(--muted);">— ou estimation —</label><div style="display:flex;gap:6px;"><input type="number" id="ath-rm_weight" placeholder="80 kg" step="0.5" min="1" max="600" oninput="athEstimateRM()" style="font-size:16px;flex:1;"><input type="number" id="ath-rm_reps" placeholder="5 reps" step="1" min="1" max="30" oninput="athEstimateRM()" style="font-size:16px;flex:1;"></div></div>
+          </div>
+          <div id="ath-rmEstimateResult" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);"></div>
+          <button class="btn primary" style="width:100%;margin-top:8px;font-size:11px;" onclick="athSaveRMToProfile()">💾 Enregistrer dans mon profil</button>
         </div>
-        <div id="ath-rmEstimateResult" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);"></div>
-        <button class="btn primary" style="width:100%;margin-top:8px;font-size:11px;" onclick="athSaveRMToProfile()">💾 Enregistrer dans mon profil</button>
+      </div>
+      <div class="card" id="ath-forceTableCard">
+        <div class="card-title" id="ath-forceTableTitle">// Tableau des charges</div>
+        <div id="ath-forceTableZones" style="margin-bottom:8px;"></div>
+        <div id="ath-forceTableRows"><div class="empty-state"><span class="empty-icon">📊</span>Sélectionne un exercice</div></div>
       </div>
     </div>
-    <div class="card" id="ath-forceTableCard">
-      <div class="card-title" id="ath-forceTableTitle">// Tableau des charges</div>
-      <div id="ath-forceTableZones" style="margin-bottom:8px;"></div>
-      <div id="ath-forceTableRows"><div class="empty-state"><span class="empty-icon">📊</span>Sélectionne un exercice</div></div>
+
+    <!-- ONGLET JOURNAL -->
+    <div id="force-tab-journal" style="display:none;">
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:16px;">Note tes séances et suis ta progression.</div>
+      <button onclick="journalNewSession()" style="width:100%;background:var(--accent);border:none;border-radius:10px;padding:16px;font-family:'Bebas Neue',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:20px;min-height:56px;">+ NOUVELLE SÉANCE</button>
+      <div id="journalForm" style="display:none;" class="ath-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <div class="ath-card-title" style="margin-bottom:0;">Séance du <span id="journalFormDate"></span></div>
+          <button onclick="journalCancelForm()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);">✕</button>
+        </div>
+        <div id="journalEntries"></div>
+        <div style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:12px;">
+          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:10px;">AJOUTER UN EXERCICE</div>
+          <select id="journalExoSelect" style="width:100%;margin-bottom:10px;font-size:14px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);outline:none;">
+            <option value="">-- Choisir un exercice --</option>
+            <option value="squat">🏋 Back Squat</option>
+            <option value="hipthrust">🔥 Hip Thrust</option>
+            <option value="deadlift">💀 Deadlift</option>
+            <option value="rdl">⬇️ RDL</option>
+            <option value="powerclean">⚡ Power Clean</option>
+            <option value="bench">💪 Bench Press</option>
+            <option value="legext">🖥️ Leg Extension</option>
+            <option value="other">✏️ Autre (libre)</option>
+          </select>
+          <input id="journalExoCustom" type="text" placeholder="Nom de l'exercice..." style="display:none;width:100%;box-sizing:border-box;margin-bottom:10px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;">
+          <div id="journalSetsContainer">
+            <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;">SÉRIES</div>
+            <div id="journalSetRows"></div>
+            <button onclick="journalAddSet()" style="background:rgba(245,200,0,.12);border:2px solid var(--accent);border-radius:10px;padding:14px;width:100%;font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--accent);cursor:pointer;margin-top:10px;letter-spacing:1px;min-height:52px;-webkit-tap-highlight-color:transparent;">+ AJOUTER UNE SÉRIE</button>
+          </div>
+          <button onclick="journalAddEntry()" style="width:100%;background:var(--surface);border:1px solid var(--accent);border-radius:8px;padding:12px;font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--accent);cursor:pointer;margin-top:10px;letter-spacing:1px;">✓ AJOUTER CET EXERCICE</button>
+        </div>
+        <div style="margin-bottom:12px;">
+          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px;">NOTE DE SÉANCE (optionnel)</div>
+          <textarea id="journalNote" placeholder="Ressenti, observations..." style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;outline:none;resize:none;min-height:60px;"></textarea>
+        </div>
+        <button onclick="journalSaveSession()" id="journalSaveBtn" style="width:100%;background:var(--accent);border:none;border-radius:10px;padding:16px;font-family:'Bebas Neue',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:1px;min-height:56px;">💾 SAUVEGARDER LA SÉANCE</button>
+        <div id="journalSaveMsg" style="font-family:'DM Mono',monospace;font-size:9px;text-align:center;min-height:14px;margin-top:8px;"></div>
+      </div>
+      <div id="journalHistory"><div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-align:center;padding:20px 0;">Chargement...</div></div>
     </div>
   </div>
 
@@ -13032,69 +13105,6 @@ setTimeout(() => {
       </button>
     </div>
     <div id="athHistoryContent"><div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);">Chargement...</div></div>
-  </div>
-
-  <!-- JOURNAL -->
-  <div id="ath-page-journal" class="ath-page">
-    <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:4px;">// MUSCULATION</div>
-    <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;margin-bottom:4px;line-height:1;">MON JOURNAL</div>
-    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:20px;">Trace tes séances de musculation et suis ta progression.</div>
-
-    <!-- Bouton nouvelle séance -->
-    <button onclick="journalNewSession()" style="width:100%;background:var(--accent);border:none;border-radius:10px;padding:16px;font-family:'Bebas Neue',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:20px;min-height:56px;">+ NOUVELLE SÉANCE MUSCU</button>
-
-    <!-- Formulaire nouvelle séance (caché par défaut) -->
-    <div id="journalForm" style="display:none;" class="ath-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-        <div class="ath-card-title" style="margin-bottom:0;">Séance du <span id="journalFormDate"></span></div>
-        <button onclick="journalCancelForm()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);">✕</button>
-      </div>
-
-      <!-- Liste exercices ajoutés -->
-      <div id="journalEntries"></div>
-
-      <!-- Ajouter un exercice -->
-      <div style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:12px;">
-        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:10px;">AJOUTER UN EXERCICE</div>
-
-        <!-- Sélecteur exercice -->
-        <select id="journalExoSelect" style="width:100%;margin-bottom:10px;font-size:14px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);outline:none;">
-          <option value="">-- Choisir un exercice --</option>
-          <option value="squat">🏋 Back Squat</option>
-          <option value="hipthrust">🔥 Hip Thrust</option>
-          <option value="deadlift">💀 Deadlift</option>
-          <option value="rdl">⬇️ RDL</option>
-          <option value="powerclean">⚡ Power Clean</option>
-          <option value="bench">💪 Bench Press</option>
-          <option value="legext">🖥️ Leg Extension</option>
-          <option value="other">✏️ Autre (libre)</option>
-        </select>
-
-        <!-- Nom libre si "autre" -->
-        <input id="journalExoCustom" type="text" placeholder="Nom de l'exercice..." style="display:none;width:100%;box-sizing:border-box;margin-bottom:10px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;">
-
-        <!-- Séries -->
-        <div id="journalSetsContainer">
-          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;">SÉRIES</div>
-          <div id="journalSetRows"></div>
-          <button onclick="journalAddSet()" style="background:rgba(245,200,0,.12);border:2px solid var(--accent);border-radius:10px;padding:14px;width:100%;font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--accent);cursor:pointer;margin-top:10px;letter-spacing:1px;min-height:52px;-webkit-tap-highlight-color:transparent;">+ AJOUTER UNE SÉRIE</button>
-        </div>
-
-        <button onclick="journalAddEntry()" style="width:100%;background:var(--surface);border:1px solid var(--accent);border-radius:8px;padding:12px;font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--accent);cursor:pointer;margin-top:10px;letter-spacing:1px;">✓ AJOUTER CET EXERCICE</button>
-      </div>
-
-      <!-- Note de séance -->
-      <div style="margin-bottom:12px;">
-        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px;">NOTE DE SÉANCE (optionnel)</div>
-        <textarea id="journalNote" placeholder="Ressenti, observations..." style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;outline:none;resize:none;min-height:60px;"></textarea>
-      </div>
-
-      <button onclick="journalSaveSession()" id="journalSaveBtn" style="width:100%;background:var(--accent);border:none;border-radius:10px;padding:16px;font-family:'Bebas Neue',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:1px;min-height:56px;">💾 SAUVEGARDER LA SÉANCE</button>
-      <div id="journalSaveMsg" style="font-family:'DM Mono',monospace;font-size:9px;text-align:center;min-height:14px;margin-top:8px;"></div>
-    </div>
-
-    <!-- Historique journal -->
-    <div id="journalHistory"><div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-align:center;padding:20px 0;">Chargement...</div></div>
   </div>
 
   <!-- PROFIL -->
@@ -13206,7 +13216,6 @@ setTimeout(() => {
     <button class="ath-nav-btn active" id="ath-nav-feedback" onclick="athGoPage('feedback')"><span class="icon">📋</span>Feedback</button>
     <button class="ath-nav-btn" id="ath-nav-calc" onclick="athGoPage('calc')"><span class="icon">⏱</span>Calcul</button>
     <button class="ath-nav-btn" id="ath-nav-force" onclick="athGoPage('force')"><span class="icon">🏋</span>Force</button>
-    <button class="ath-nav-btn" id="ath-nav-journal" onclick="athGoPage('journal')"><span class="icon">📓</span>Journal</button>
     <button class="ath-nav-btn" id="ath-nav-history" onclick="athGoPage('history')"><span class="icon">📊</span>Séances</button>
     <button class="ath-nav-btn" id="ath-nav-profile" onclick="athGoPage('profile')"><span class="icon">👤</span>Profil</button>
   </nav>
