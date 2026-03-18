@@ -1466,49 +1466,8 @@ function sbPullAll() {
       changed = true;
     }
     sbApplySettings(rs[3]);
-    // Merger les séances athletes (type=done) dans historyData
-    if (coachSessions.length) {
-      coachSessions.filter(function(s) { return s.type === 'done'; }).forEach(function(s) {
-        var p = profiles.find(function(pr) {
-          var pn = (pr.name||'').toLowerCase();
-          var sn = (s.athlete_name||'').toLowerCase();
-          return pn === sn || pn.includes(sn) || sn.includes(pn);
-        });
-        if (!p) return;
-        var pid = p.id;
-        if (!historyData[pid]) historyData[pid] = [];
-
-        // Chercher un doublon : même _csId OU même date+athlète sans _csId
-        var existingIdx = -1;
-        historyData[pid].forEach(function(h, idx) {
-          if (h._csId === s.id) { existingIdx = idx; return; }
-          // Doublon sans _csId : même date et même athlète
-          var sDate = (s.session_date || '').slice(0, 10);
-          var hDate = (h.date || '').slice(0, 10);
-          var sAth  = (s.athlete_name || '').toLowerCase();
-          var hAth  = (h.athlete || '').toLowerCase();
-          if (hDate === sDate && hAth === sAth && !h._csId) { existingIdx = idx; }
-        });
-
-        var session = {
-          _csId: s.id,
-          date: s.session_date,
-          conditions: s.conditions,
-          blocks: s.blocks,
-          athlete: s.athlete_name,
-          note: s.note
-        };
-
-        if (existingIdx >= 0) {
-          // Remplacer l'entrée existante (met à jour avec les temps)
-          historyData[pid][existingIdx] = session;
-        } else {
-          historyData[pid].unshift(session);
-        }
-        changed = true;
-      });
-      if (changed) localStorage.setItem('sc_history', JSON.stringify(historyData));
-    }
+    // Stocker coach_sessions en cache global pour renderHistoryInline
+    window._coachSessionsCache = coachSessions;
     renderProfiles(); renderHome();
     loginHide(); sbUpdateNavBar();
     sbSyncBadgeSet('✓ sync', '#22c55e', true);
@@ -6720,10 +6679,21 @@ function renderHistoryInline() {
   var container = document.getElementById('stab-hist-inner');
   if (!container) return;
 
-  // ── Rassembler toutes les sessions ──
+  // Si coach_sessions est en cache, on l'utilise directement
+  var csCache = window._coachSessionsCache;
+  if (csCache && csCache.length) {
+    _renderHistoryFromCS(container, csCache);
+    return;
+  }
+
+  // Fallback : historyData local avec déduplication
   var allSessions = [];
+  var seenKeys = {};
   Object.keys(historyData).forEach(function(pid) {
     (historyData[pid] || []).forEach(function(s, idx) {
+      var key = (s.date||'').slice(0,10) + '_' + (s.athlete||'').toLowerCase();
+      if (seenKeys[key]) return; // déduplique
+      seenKeys[key] = true;
       allSessions.push(Object.assign({}, s, { _pid: pid, _idx: idx }));
     });
   });
@@ -6734,23 +6704,17 @@ function renderHistoryInline() {
     return;
   }
 
-  // ── Trier par date décroissante ──
-  allSessions.sort(function(a, b) {
-    return new Date(b.date) - new Date(a.date);
-  });
+  allSessions.sort(function(a, b) { return new Date(b.date) - new Date(a.date); });
 
-  // ── Regrouper par date (YYYY-MM-DD) ──
-  var byDate = {};
-  var dateOrder = [];
+  // Grouper par date
+  var byDate = {}; var dateOrder = [];
   allSessions.forEach(function(s) {
-    // Normaliser la date : on prend les 10 premiers chars (YYYY-MM-DD) ou toute la string
     var raw = (s.date || '').toString();
     var key = raw.length >= 10 ? raw.slice(0, 10) : raw;
     if (!byDate[key]) { byDate[key] = []; dateOrder.push(key); }
     byDate[key].push(s);
   });
 
-  // ── Formatter une date lisible ──
   function fmtDate(key) {
     var d = new Date(key + 'T12:00:00');
     if (isNaN(d)) return key;
@@ -6759,122 +6723,184 @@ function renderHistoryInline() {
     return days[d.getDay()] + ' ' + d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
   }
 
-  // ── Construire le HTML ──
   var html = '';
-
   dateOrder.forEach(function(dateKey) {
     var sessions = byDate[dateKey];
-
-    // Regrouper les sessions du même jour par même set de blocs (séance collective)
-    // Sessions avec les mêmes blocs = même séance, différents athlètes
-    var groups = []; // [{blocks, athletes:[{name,pid,idx,times}], conditions, note}]
-
+    var groups = [];
     sessions.forEach(function(s) {
-      var blocKey = JSON.stringify((s.blocks || s.blocs || []).map(function(b) {
-        return b.reps + 'x' + b.dist + '@' + b.pct;
-      }));
-      // Chercher un groupe existant avec même blocKey
+      var blocKey = JSON.stringify((s.blocks || s.blocs || []).map(function(b) { return b.reps + 'x' + b.dist + '@' + b.pct; }));
       var grp = null;
       for (var gi = 0; gi < groups.length; gi++) {
         if (groups[gi]._blocKey === blocKey) { grp = groups[gi]; break; }
       }
       if (!grp) {
-        grp = {
-          _blocKey: blocKey,
-          blocks: s.blocks || s.blocs || [],
-          conditions: s.conditions || '',
-          note: s.note || s.globalNote || '',
-          athletes: [],
-          sessions: []
-        };
+        grp = { _blocKey: blocKey, blocks: s.blocks || s.blocs || [], conditions: s.conditions || '', note: s.note || s.globalNote || '', athletes: [], sessions: [] };
         groups.push(grp);
       }
-      var pName = s.athlete || (function() {
-        var p = profiles.find(function(x) { return x.id === s._pid; });
-        return p ? p.name : '—';
-      })();
+      var pName = s.athlete || (function() { var p = profiles.find(function(x) { return x.id === s._pid; }); return p ? p.name : '—'; })();
       grp.athletes.push({ name: pName, pid: s._pid, idx: s._idx, times: s.blocks || [] });
       grp.sessions.push(s);
     });
 
-    // ── En-tête de date ──
-    html += '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:2px;color:var(--accent);'
-      + 'padding:12px 0 6px;border-bottom:1px solid var(--border);margin-bottom:10px;">'
+    html += '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:2px;color:var(--accent);padding:12px 0 6px;border-bottom:1px solid var(--border);margin-bottom:10px;">'
       + '// ' + fmtDate(dateKey).toUpperCase() + '</div>';
 
-    // ── Carte par groupe de séance ──
     groups.forEach(function(grp, gi) {
-      var grpId = 'hist_' + dateKey.replace(/-/g,'') + '_' + gi;
+      var grpId   = 'hist_' + dateKey.replace(/-/g,'') + '_' + gi;
       var detailId = 'histd_' + dateKey.replace(/-/g,'') + '_' + gi;
-
-      // Résumé blocs
-      var blocsSummary = grp.blocks.map(function(b) {
-        return (b.reps || '?') + '×' + (b.dist || '?') + 'm';
-      }).join('  ');
-
-      // Liste athlètes
-      var athleteNames = grp.athletes.map(function(a) { return a.name; });
-      var athleteStr   = athleteNames.join(', ');
-
-      // Meilleur temps global (1er bloc, 1ère distance disponible)
+      var blocsSummary = grp.blocks.map(function(b) { return (b.reps||'?')+'×'+(b.dist||'?')+'m'; }).join('  ');
+      var athleteStr = grp.athletes.map(function(a) { return a.name; }).join(', ');
       var allTimes = [];
       grp.athletes.forEach(function(a) {
-        (a.times || []).forEach(function(b) {
-          (b.times || []).forEach(function(t) {
-            if (t !== null && t !== undefined && !isNaN(t)) allTimes.push(t);
-          });
-          // format saveSessionWithTimes (reps array — b.reps peut être un nombre ou un tableau)
-          if (Array.isArray(b.reps)) {
-            b.reps.forEach(function(r) {
-              if (r && r.tReal !== null && r.tReal !== undefined && !isNaN(r.tReal)) allTimes.push(r.tReal);
-            });
-          }
+        (a.times||[]).forEach(function(b) {
+          (b.times||[]).forEach(function(t) { if (t!==null&&!isNaN(t)) allTimes.push(t); });
         });
       });
-      var bestTime = allTimes.length ? Math.min.apply(null, allTimes).toFixed(2) + 's' : '';
+      var bestTime = allTimes.length ? Math.min.apply(null,allTimes).toFixed(2)+'s' : '';
 
-      // ── Carte aperçu ──
-      html += '<div id="' + grpId + '" style="'
-        + 'background:var(--surface);border:1px solid var(--border);border-radius:4px;'
-        + 'margin-bottom:10px;overflow:hidden;cursor:pointer;'
-        + 'transition:border-color .15s;" '
-        + 'onclick="toggleHistDetail(\'' + detailId + '\', this)">'
-
-        // En-tête cliquable
+      html += '<div id="'+grpId+'" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;margin-bottom:10px;overflow:hidden;cursor:pointer;transition:border-color .15s;" data-did="'+detailId+'" onclick="toggleHistDetail(this.dataset.did,this)">';
         + '<div style="padding:14px 16px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">'
-
-          // Côté gauche
           + '<div style="flex:1;min-width:0;">'
-            // Athlètes
-            + '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--text);'
-            + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
-            + athleteStr + '</div>'
-            // Blocs
-            + '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--accent);margin-top:3px;letter-spacing:1px;">'
-            + blocsSummary + '</div>'
-            // Conditions
-            + (grp.conditions ? '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);margin-top:2px;">📍 ' + grp.conditions + '</div>' : '')
+            + '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+athleteStr+'</div>'
+            + '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--accent);margin-top:3px;letter-spacing:1px;">'+blocsSummary+'</div>'
+            + (grp.conditions?'<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);margin-top:2px;">📍 '+grp.conditions+'</div>':'')
           + '</div>'
-
-          // Côté droit : meilleur temps + chevron
           + '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">'
-            + (bestTime ? '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;color:var(--accent2);line-height:1;">' + bestTime + '</div>' : '')
-            + '<div class="hist-chevron" id="chev_' + detailId + '" style="font-size:12px;color:var(--muted);transition:transform .2s;">▼</div>'
+            + (bestTime?'<div style="font-family:Bebas Neue,sans-serif;font-size:22px;color:var(--accent2);line-height:1;">'+bestTime+'</div>':'')
+            + '<div class="hist-chevron" id="chev_'+detailId+'" style="font-size:12px;color:var(--muted);transition:transform .2s;">▼</div>'
           + '</div>'
-
         + '</div>'
-
-        // ── Détail (caché par défaut) ──
-        + '<div id="' + detailId + '" style="display:none;border-top:1px solid var(--border);">'
+        + '<div id="'+detailId+'" style="display:none;border-top:1px solid var(--border);">'
           + _buildHistDetail(grp)
         + '</div>'
-
-        + '</div>';
+      + '</div>';
     });
   });
-
   container.innerHTML = html;
 }
+
+// ── Affichage depuis coach_sessions (source principale) ──
+function _renderHistoryFromCS(container, sessions) {
+  if (!sessions.length) {
+    container.innerHTML = '<div style="text-align:center;padding:40px 0;font-family:DM Mono,monospace;font-size:10px;color:var(--muted);"><div style="font-size:32px;margin-bottom:10px;">📂</div>Aucune séance sauvegardée.</div>';
+    return;
+  }
+
+  function fmtDate(key) {
+    var d = new Date((key||'')+'T12:00:00'); if(isNaN(d))return key;
+    var days=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+    var months=['jan.','fév.','mar.','avr.','mai','juin','juil.','aoû.','sep.','oct.','nov.','déc.'];
+    return days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()]+' '+d.getFullYear();
+  }
+
+  // Grouper par date puis par blocs (même séance collective)
+  var byDate = {}; var dateOrder = [];
+  sessions.forEach(function(s) {
+    var key = (s.session_date||'').slice(0,10);
+    if (!byDate[key]) { byDate[key]=[]; dateOrder.push(key); }
+    byDate[key].push(s);
+  });
+
+  var html = '';
+  dateOrder.forEach(function(dateKey) {
+    var daySessions = byDate[dateKey];
+    // Regrouper par même set de blocs
+    var groups = [];
+    daySessions.forEach(function(s) {
+      var bKey = JSON.stringify((s.blocks||[]).map(function(b){return b.reps+'x'+b.dist+'@'+b.pct;}));
+      var grp = groups.find(function(g){return g._bKey===bKey;});
+      if (!grp) { grp={_bKey:bKey,blocks:s.blocks||[],conditions:s.conditions||'',note:s.note||'',athletes:[],csIds:[]}; groups.push(grp); }
+      grp.athletes.push({name:s.athlete_name,times:s.blocks||[],csId:s.id});
+      grp.csIds.push(s.id);
+    });
+
+    html += '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:2px;color:var(--accent);padding:12px 0 6px;border-bottom:1px solid var(--border);margin-bottom:10px;">// '+fmtDate(dateKey).toUpperCase()+'</div>';
+
+    groups.forEach(function(grp, gi) {
+      var detailId = 'hcs_'+dateKey.replace(/-/g,'')+'_'+gi;
+      var blocsSummary = grp.blocks.map(function(b){return (b.reps||'?')+'×'+(b.dist||'?')+'m';}).join('  ');
+      var athStr = grp.athletes.map(function(a){return a.name;}).join(', ');
+      var allT = []; grp.athletes.forEach(function(a){(a.times||[]).forEach(function(b){(b.times||[]).forEach(function(t){if(t!==null&&!isNaN(t))allT.push(t);});});});
+      var bestTime = allT.length ? Math.min.apply(null,allT).toFixed(2)+'s' : '';
+
+      html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:4px;margin-bottom:10px;overflow:hidden;transition:border-color .15s;">';
+      // En-tête cliquable
+      html += '<div style="padding:14px 16px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;cursor:pointer;" onclick="toggleCsDetail(this.parentElement)">';
+      html += '<div style="flex:1;min-width:0;"><div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--text);">'+athStr+'</div>';
+      html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--accent);margin-top:3px;">'+blocsSummary+'</div>';
+      if (grp.conditions) html += '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);margin-top:2px;">📍 '+grp.conditions+'</div>';
+      html += '</div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">';
+      if (bestTime) html += '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;color:var(--accent2);">'+bestTime+'</div>';
+      html += '<div style="font-size:12px;color:var(--muted);">▼</div></div></div>';
+
+      // Détail
+      html += '<div data-det style="display:none;border-top:1px solid var(--border);padding:14px 16px;">';
+      if (grp.conditions||grp.note) {
+        html += '<div style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border);font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">';
+        if(grp.conditions) html+='📍 '+grp.conditions+'  ';
+        if(grp.note) html+='📝 '+grp.note;
+        html += '</div>';
+      }
+      // Tableau par bloc
+      grp.blocks.forEach(function(b,bi) {
+        var reps = Array.isArray(b.reps)?b.reps.length:(parseInt(b.reps)||0);
+        html += '<div style="margin-bottom:14px;"><div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:1px;color:var(--accent);margin-bottom:8px;">BLOC '+(bi+1)+' — '+reps+'×'+(b.dist||'?')+'m @ '+(b.pct||'?')+'%'+(b.rest>0?' · '+b.rest+'min récup':'')+'</div>';
+        html += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:DM Mono,monospace;font-size:10px;min-width:200px;">';
+        html += '<thead><tr><th style="text-align:left;padding:5px 8px;font-size:8px;color:var(--muted);border-bottom:1px solid var(--border);position:sticky;left:0;background:var(--surface);">ATHLÈTE</th>';
+        for(var r=0;r<reps;r++) html+='<th style="padding:5px 6px;font-size:8px;color:var(--muted);border-bottom:1px solid var(--border);text-align:center;min-width:54px;">R'+(r+1)+'</th>';
+        html += '<th style="padding:5px 6px;font-size:8px;color:var(--accent);border-bottom:1px solid var(--border);text-align:center;">MEILLEUR</th></tr></thead><tbody>';
+        grp.athletes.forEach(function(a) {
+          var blockData = (a.times||[])[bi]||{};
+          var timesArr = blockData.times || [];
+          var validT = timesArr.filter(function(t){return t!==null&&!isNaN(t);});
+          var best = validT.length?Math.min.apply(null,validT):null;
+          html += '<tr><td style="padding:6px 8px;font-family:Bebas Neue,sans-serif;font-size:14px;color:var(--text);border-bottom:1px solid var(--border);position:sticky;left:0;background:var(--surface);white-space:nowrap;">'+a.name+'</td>';
+          for(var r2=0;r2<reps;r2++){
+            var t=timesArr[r2]; var hasVal=t!==null&&!isNaN(t); var isBest=hasVal&&parseFloat(t)===best;
+            html+='<td style="padding:6px 4px;border-bottom:1px solid var(--border);text-align:center;">';
+            if(hasVal) html+='<span style="font-family:DM Mono,monospace;font-size:11px;color:'+(isBest?'#51cf66':'var(--text)')+';">'+(isBest?'<strong>':'')+parseFloat(t).toFixed(2)+(isBest?'</strong>':'')+'</span>';
+            else html+='<span style="color:var(--border);">—</span>';
+            html+='</td>';
+          }
+          html+='<td style="padding:6px 4px;border-bottom:1px solid var(--border);text-align:center;">';
+          if(best!==null) html+='<span style="font-family:Bebas Neue,sans-serif;font-size:14px;color:#51cf66;">'+best.toFixed(2)+'s</span>';
+          html+='</td></tr>';
+        });
+        html += '</tbody></table></div></div>';
+      });
+      // Boutons supprimer par athlète
+      html += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;">';
+      grp.athletes.forEach(function(a) {
+        html += '<button data-csid="'+a.csId+'" onclick="coachDeleteSession(this.dataset.csid)" style="background:none;border:1px solid var(--border);border-radius:3px;padding:4px 10px;font-family:DM Mono,monospace;font-size:8px;color:var(--muted);cursor:pointer;">✕ Supprimer '+a.name+'</button>';
+      });
+      html += '</div>';
+      html += '</div></div>';
+    });
+  });
+  container.innerHTML = html;
+}
+
+function toggleCsDetail(card) {
+  var det = card.querySelector('[data-det]');
+  if (!det) return;
+  var open = det.style.display !== 'none';
+  det.style.display = open ? 'none' : 'block';
+  card.style.borderColor = open ? 'var(--border)' : 'var(--accent)';
+}
+
+function coachDeleteSession(csId) {
+  if (!confirm('Supprimer cette séance ?')) return;
+  if (!_sb) return;
+  _sb.from('coach_sessions').delete().eq('id', csId).then(function(r) {
+    if (r.error) { alert('Erreur : '+r.error.message); return; }
+    // Retirer du cache local
+    if (window._coachSessionsCache) {
+      window._coachSessionsCache = window._coachSessionsCache.filter(function(s){return s.id!==csId;});
+    }
+    renderHistoryInline();
+  });
+}
+
 
 // ── Construire le HTML du détail d'une séance ──
 function _buildHistDetail(grp) {
@@ -9740,12 +9766,37 @@ function saveMultiTimes() {
 
     var session = { date: date, conditions: conditions, blocks: blocksWithTimes, athlete: p.name, note: note };
     if (!historyData[pid]) historyData[pid] = [];
+    // Eviter doublons : supprimer entrée existante même date+athlète
+    historyData[pid] = historyData[pid].filter(function(h) {
+      return !((h.date||'').slice(0,10) === date && (h.athlete||'').toLowerCase() === p.name.toLowerCase() && !h._csId);
+    });
     historyData[pid].unshift(session);
     saved++;
   });
 
   localStorage.setItem('sc_history', JSON.stringify(historyData));
   sbScheduleSync();
+
+  // Aussi upsert dans coach_sessions pour synchro multi-appareils
+  if (_sb && _sbUser) {
+    var csRows = selectedAthletes.map(function(pid) {
+      var p = profiles.find(function(pr) { return pr.id === pid; });
+      if (!p) return null;
+      var bwt = sessionBlocks.map(function(b, bi) {
+        var times = [];
+        for (var r = 0; r < b.reps; r++) {
+          var inp = document.getElementById('mt_' + pid + '_' + bi + '_' + r);
+          var t = inp ? parseFloat(inp.value) : NaN;
+          times.push(isNaN(t) ? null : t);
+        }
+        return Object.assign({}, b, { times: times });
+      });
+      return { coach_uid: _sbUser.id, athlete_name: p.name, session_date: date,
+               blocks: bwt, conditions: conditions, note: note, type: 'done' };
+    }).filter(Boolean);
+    if (csRows.length) _sb.from('coach_sessions').insert(csRows).then(function(){});
+  }
+
   renderHistoryInline();
 
   // Feedback visuel (pas d'alert bloquant)
@@ -11454,6 +11505,9 @@ function renderAthHistory() {
               html += '<td style="padding:6px 4px;border-bottom:1px solid var(--border);text-align:center;">';
               if (best !== null) html += '<span style="font-family:Bebas Neue,sans-serif;font-size:14px;color:#51cf66;">' + best.toFixed(2) + 's</span>';
               html += '</td></tr></tbody></table></div>';
+              // Bouton modifier les temps
+              html += '<button data-sid="' + s.id + '" data-nb="' + blocks.length + '" data-reps=\'' + JSON.stringify(blocks.map(function(b2){return Array.isArray(b2.reps)?b2.reps.length:(parseInt(b2.reps)||0);})) + '\' onclick="athEditTimes(this)" style="margin-top:8px;background:none;border:1px solid var(--border);border-radius:4px;padding:6px 12px;font-family:DM Mono,monospace;font-size:8px;color:var(--muted);cursor:pointer;">✏️ Modifier mes temps</button>';
+              html += '<div id="athedit_' + s.id + '" style="display:none;margin-top:10px;"></div>';
             } else if (!isDone) {
               // Séance à faire : chrono + saisie temps
               html += '<div style="margin-top:8px;">';
@@ -11545,6 +11599,68 @@ function athResetChrono(sid, bi) {
   delete _athChronos[key];
   var disp = document.getElementById('acdisp_' + key);
   if (disp) { disp.textContent = '00:00'; disp.style.color = 'var(--accent)'; }
+}
+
+function athEditTimes(btn) {
+  var sid  = btn.dataset.sid;
+  var nb   = parseInt(btn.dataset.nb);
+  var reps = JSON.parse(btn.dataset.reps);
+  var wrap = document.getElementById('athedit_' + sid);
+  if (!wrap) return;
+  if (wrap.style.display !== 'none') { wrap.style.display='none'; return; }
+  _sb.from('coach_sessions').select('blocks').eq('id', sid).maybeSingle().then(function(r) {
+    if (!r.data) return;
+    var blocks = r.data.blocks || [];
+    var html = '';
+    blocks.forEach(function(b, bi) {
+      var tCibleStr = b.tCible ? parseFloat(b.tCible).toFixed(2)+'s' : null;
+      html += '<div style="margin-bottom:10px;"><div style="font-family:DM Mono,monospace;font-size:8px;color:var(--accent);margin-bottom:6px;">BLOC '+(bi+1)+(tCibleStr?' — CIBLE <span style=color:var(--accent2)>'+tCibleStr+'</span>':'')+'</div>';
+      html += '<div style="display:grid;grid-template-columns:repeat('+Math.min(reps[bi]||1,4)+',1fr);gap:6px;">';
+      for (var ri=0; ri<(reps[bi]||0); ri++) {
+        var cur = (b.times&&b.times[ri]!=null) ? b.times[ri] : '';
+        html += '<div><div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);text-align:center;margin-bottom:3px;">R'+(ri+1)+'</div>';
+        html += '<input class="ath-time-input" type="number" step="0.01" min="1" max="99" value="'+cur+'" placeholder="'+(tCibleStr||'—')+'" id="atedit_'+sid+'_'+bi+'_'+ri+'" data-cible="'+(b.tCible||0)+'" oninput="athColorInput(this,parseFloat(this.dataset.cible))">';
+        html += '</div>';
+      }
+      html += '</div></div>';
+    });
+    html += '<button data-sid="'+sid+'" data-nb="'+nb+'" onclick="athSubmitEditFromBtn(this)" style="width:100%;background:var(--accent);border:none;border-radius:8px;padding:12px;font-family:Bebas Neue,sans-serif;font-size:18px;color:#000;cursor:pointer;margin-top:8px;min-height:48px;">&#128228; METTRE À JOUR</button>';
+    window['_reps_'+sid] = reps;
+    html += '<div id="atheditMsg_'+sid+'" style="font-family:DM Mono,monospace;font-size:9px;text-align:center;min-height:14px;margin-top:6px;"></div>';
+    wrap.innerHTML = html;
+    wrap.style.display = 'block';
+  });
+}
+
+function athSubmitEditFromBtn(btn) {
+  var sid  = btn.dataset.sid;
+  var nb   = parseInt(btn.dataset.nb);
+  var reps = window['_reps_'+sid] || [];
+  athSubmitEditBtn(btn, sid, nb, reps);
+}
+function athSubmitEditBtn(btn, sid, nb, reps) {
+  if (!sid) { sid=btn.dataset.sid; nb=parseInt(btn.dataset.nb); reps=JSON.parse(btn.dataset.reps||'[]'); }
+  var msg  = document.getElementById('atheditMsg_'+sid);
+  btn.disabled = true; btn.textContent = 'Envoi...';
+  _sb.from('coach_sessions').select('blocks').eq('id', sid).maybeSingle().then(function(r) {
+    if (!r.data) { btn.disabled=false; btn.textContent='📤 METTRE À JOUR'; return; }
+    var blocks = r.data.blocks || [];
+    blocks.forEach(function(b, bi) {
+      var times = [];
+      for (var ri=0; ri<(reps[bi]||0); ri++) {
+        var inp = document.getElementById('atedit_'+sid+'_'+bi+'_'+ri);
+        var t = inp ? parseFloat(inp.value) : NaN;
+        times.push(isNaN(t)?null:t);
+      }
+      b.times = times;
+    });
+    _sb.from('coach_sessions').update({blocks:blocks, type:'done'}).eq('id',sid).then(function(r2) {
+      btn.disabled=false; btn.textContent='📤 METTRE À JOUR';
+      if (r2.error) { if(msg){msg.textContent='Erreur : '+r2.error.message;msg.style.color='#ef4444';} return; }
+      if(msg){msg.textContent='✅ Mis à jour !';msg.style.color='#22c55e';}
+      setTimeout(function() { renderAthHistory(); }, 1200);
+    });
+  });
 }
 
 function athColorInput(inp, tCible) {
