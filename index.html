@@ -8707,20 +8707,20 @@ function chronoBeep() {
 function sendSessionToAthletes() {
   if (!sessionBlocks.length) { alert('Aucun bloc de séance à envoyer.'); return; }
   if (!selectedAthletes.length) { alert('Sélectionne au moins un athlète dans le tableau.'); return; }
-  if (!_sbUser) { alert('Tu dois être connecté pour envoyer une séance.'); return; }
+  if (!_sb || !_sbUser) { alert('Tu dois être connecté pour envoyer une séance.'); return; }
 
   var btn = document.getElementById('btnSendSession');
   var msg = document.getElementById('sendSessionMsg');
   if (btn) { btn.disabled = true; btn.textContent = 'Envoi...'; }
 
-  // 1. Sauvegarder les temps saisis pour chaque athlète sélectionné
   var date = new Date().toISOString().slice(0, 10);
   var conditions = (document.getElementById('sessConditions') || {}).value || '';
   var note = (document.getElementById('sessGlobalNote') || {}).value || '';
 
-  selectedAthletes.forEach(function(pid) {
+  // Construire une ligne par athlète pour coach_sessions
+  var rows = selectedAthletes.map(function(pid) {
     var p = profiles.find(function(pr) { return pr.id === pid; });
-    if (!p) return;
+    if (!p) return null;
     var blocksWithTimes = sessionBlocks.map(function(b, bi) {
       var times = [];
       for (var r = 0; r < b.reps; r++) {
@@ -8730,32 +8730,57 @@ function sendSessionToAthletes() {
       }
       return Object.assign({}, b, { times: times });
     });
-    var session = { date: date, conditions: conditions, blocks: blocksWithTimes, athlete: p.name, note: note };
-    if (!historyData[pid]) historyData[pid] = [];
-    // Éviter les doublons (même date + même blocs)
-    var alreadyToday = historyData[pid].some(function(s) {
-      return s.date === date && JSON.stringify(s.blocks) === JSON.stringify(blocksWithTimes);
+    // Détecter si tous les temps sont null (séance à faire) ou remplis (séance faite)
+    var hasTimes = blocksWithTimes.some(function(b) {
+      return b.times && b.times.some(function(t) { return t !== null; });
     });
-    if (!alreadyToday) historyData[pid].unshift(session);
-  });
+    return {
+      coach_uid:    _sbUser.id,
+      athlete_name: p.name,
+      session_date: date,
+      blocks:       blocksWithTimes,
+      conditions:   conditions,
+      note:         note,
+      type:         hasTimes ? 'done' : 'planned'
+    };
+  }).filter(Boolean);
 
-  localStorage.setItem('sc_history', JSON.stringify(historyData));
-
-  // 2. Push immédiat vers Supabase (pas de délai)
-  clearTimeout(_sbSyncTimeout);
-  sbPush('history_data', historyData).then(function(result) {
+  if (!rows.length) {
     if (btn) { btn.disabled = false; btn.textContent = '📲 Envoyer aux athlètes'; }
-    if (result && result.ok) {
-      var names = selectedAthletes.map(function(pid) {
-        var p = profiles.find(function(pr) { return pr.id === pid; });
-        return p ? p.name : pid;
-      }).join(', ');
-      if (msg) { msg.textContent = '✅ Envoyé à ' + names; msg.style.color = '#22c55e'; }
-      setTimeout(function() { if (msg) msg.textContent = ''; }, 4000);
-      renderHistoryInline();
-    } else {
-      if (msg) { msg.textContent = '⚠ Erreur envoi — données sauvées localement'; msg.style.color = '#f59e0b'; }
+    return;
+  }
+
+  // Aussi sauver dans historyData local
+  rows.forEach(function(row) {
+    var pid = selectedAthletes.find(function(id) {
+      var p = profiles.find(function(pr) { return pr.id === id; });
+      return p && p.name === row.athlete_name;
+    });
+    if (pid) {
+      if (!historyData[pid]) historyData[pid] = [];
+      var session = { date: row.session_date, conditions: row.conditions, blocks: row.blocks, athlete: row.athlete_name, note: row.note };
+      historyData[pid].unshift(session);
     }
+  });
+  localStorage.setItem('sc_history', JSON.stringify(historyData));
+  clearTimeout(_sbSyncTimeout);
+  sbPush('history_data', historyData);
+
+  // Insérer dans coach_sessions (table accessible aux athlètes)
+  _sb.from('coach_sessions').insert(rows).then(function(r) {
+    if (btn) { btn.disabled = false; btn.textContent = '📲 Envoyer aux athlètes'; }
+    if (r.error) {
+      console.error('coach_sessions insert:', r.error);
+      if (msg) { msg.textContent = '⚠ ' + r.error.message; msg.style.color = '#f59e0b'; }
+      return;
+    }
+    var names = rows.map(function(row) { return row.athlete_name; }).join(', ');
+    var types = rows.every(function(row) { return row.type === 'planned'; }) ? 'à faire'
+              : rows.every(function(row) { return row.type === 'done'; })    ? 'avec temps'
+              : 'envoyée(s)';
+    if (msg) { msg.textContent = '✅ Séance ' + types + ' → ' + names; msg.style.color = '#22c55e'; }
+    setTimeout(function() { if (msg) msg.textContent = ''; }, 5000);
+    renderHistoryInline();
   });
 }
 
@@ -11208,33 +11233,95 @@ function athSaveRMToProfile() {
 
 // ── Historique séances ────────────────────────────────────
 function renderAthHistory() {
-  var el=document.getElementById('athHistoryContent');
-  if(!el||!_sb||!_athProfile)return;
-  el.innerHTML='<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Chargement...</div>';
-  if(!_athCoachUid){el.innerHTML='<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Non lié à un coach — aucune séance disponible.</div>';return;}
-  _sb.from('history_data').select('data').eq('user_id',_athCoachUid).maybeSingle().then(function(r){
-    if(r.error||!r.data){el.innerHTML='<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Aucune séance enregistrée.</div>';return;}
-    var allHistory=r.data.data||r.data||{};
-    var athName=(_athProfile.name||'').toLowerCase();
-    var sessions=[];
-    Object.keys(allHistory).forEach(function(pid){
-      var arr=allHistory[pid];if(!Array.isArray(arr))return;
-      arr.forEach(function(s){
-        var sName=(s.athlete||'').toLowerCase();
-        if(sName===athName||sName.includes(athName)||athName.includes(sName))sessions.push(s);
+  var el = document.getElementById('athHistoryContent');
+  if (!el || !_sb || !_athProfile) return;
+  el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Chargement...</div>';
+  if (!_athCoachUid) {
+    el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Non lié à un coach — aucune séance disponible.</div>';
+    return;
+  }
+  var athName = (_athProfile.name || '').toLowerCase();
+  _sb.from('coach_sessions')
+    .select('*')
+    .eq('coach_uid', _athCoachUid)
+    .order('session_date', { ascending: false })
+    .limit(50)
+    .then(function(r) {
+      if (r.error) {
+        el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:#ef4444;">Erreur : ' + r.error.message + '</div>';
+        return;
+      }
+      var sessions = (r.data || []).filter(function(s) {
+        var sName = (s.athlete_name || '').toLowerCase();
+        return sName === athName || sName.includes(athName) || athName.includes(sName);
       });
+      if (!sessions.length) {
+        el.innerHTML = '<div style="text-align:center;padding:40px 0;font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">Aucune séance reçue pour le moment.</div>';
+        return;
+      }
+      var html = '';
+      sessions.forEach(function(s) {
+        var blocks = s.blocks || [];
+        var isDone = s.type === 'done';
+        var blocksDesc = blocks.map(function(b) {
+          return (b.reps || 1) + '×' + (b.dist || '?') + 'm @ ' + (b.pct || '?') + '%'
+            + (b.rest > 0 ? ' · récup ' + b.rest + 'min' : '');
+        }).join(' | ');
+
+        // Temps par répétition
+        var timesHtml = '';
+        if (isDone) {
+          blocks.forEach(function(b, bi) {
+            if (!b.times) return;
+            var hasAny = b.times.some(function(t) { return t !== null; });
+            if (!hasAny) return;
+            timesHtml += '<div style="margin-top:10px;">';
+            timesHtml += '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);letter-spacing:1px;margin-bottom:4px;">BLOC ' + (bi+1) + ' — ' + b.reps + '×' + b.dist + 'm</div>';
+            timesHtml += '<div style="display:flex;flex-wrap:wrap;gap:4px;">';
+            b.times.forEach(function(t, ri) {
+              if (t === null || t === undefined) return;
+              // Calcul temps cible si refs disponibles
+              var cls = 'session-time-badge';
+              var diff = null;
+              if (b.tCible) { diff = t - b.tCible; }
+              if (diff !== null) {
+                if (Math.abs(diff) <= 0.15) cls += ' green';
+                else if (diff < 0) cls += ' yellow';
+                else cls += ' red';
+              }
+              var label = 'R' + (ri+1) + ' ' + parseFloat(t).toFixed(2) + 's';
+              if (diff !== null) label += ' (' + (diff > 0 ? '+' : '') + diff.toFixed(2) + ')';
+              timesHtml += '<span class="' + cls + '">' + label + '</span>';
+            });
+            timesHtml += '</div></div>';
+          });
+        }
+
+        // Badge type
+        var typeBadge = isDone
+          ? '<span style="font-family:DM Mono,monospace;font-size:8px;background:rgba(34,197,94,.15);color:#22c55e;border-radius:4px;padding:2px 8px;letter-spacing:.5px;">✓ RÉALISÉE</span>'
+          : '<span style="font-family:DM Mono,monospace;font-size:8px;background:rgba(245,200,0,.15);color:var(--accent);border-radius:4px;padding:2px 8px;letter-spacing:.5px;">📋 À FAIRE</span>';
+
+        html += '<div class="session-chip" style="margin-bottom:12px;">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+        html += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;">' + (s.session_date || '—') + '</div>';
+        html += typeBadge;
+        html += '</div>';
+        // Blocs
+        blocks.forEach(function(b, bi) {
+          html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--text);padding:6px 0;' + (bi > 0 ? 'border-top:1px solid var(--border);' : '') + '">';
+          html += '<span style="font-family:Bebas Neue,sans-serif;font-size:16px;color:var(--accent);">' + (b.reps||1) + '×</span> ';
+          html += '<strong>' + (b.dist||'?') + 'm</strong> @ ' + (b.pct||'?') + '%';
+          if (b.rest > 0) html += ' <span style="color:var(--muted);font-size:9px;">· récup ' + b.rest + 'min</span>';
+          html += '</div>';
+        });
+        if (timesHtml) html += timesHtml;
+        if (s.conditions) html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:8px;">🌤 ' + s.conditions + '</div>';
+        if (s.note) html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:4px;">💬 ' + s.note + '</div>';
+        html += '</div>';
+      });
+      el.innerHTML = html;
     });
-    sessions.sort(function(a,b){return(b.date||'').localeCompare(a.date||'');});
-    if(!sessions.length){el.innerHTML='<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Aucune séance enregistrée pour toi.</div>';return;}
-    var html='';
-    sessions.slice(0,30).forEach(function(s){
-      var blocks=(s.blocks||[]).map(function(b){return(b.reps||1)+'x'+(b.dist||b.distance||'?')+'m@'+(b.pct||'?')+'%';}).join(' · ');
-      var timesHtml='';
-      if(s.blocks){s.blocks.forEach(function(b){if(!b.times)return;var tgt=b.tCible||null;b.times.forEach(function(t){if(t===null||t===undefined)return;var cls='session-time-badge';if(tgt){var diff=t-tgt;if(Math.abs(diff)<=0.15)cls+=' green';else if(diff<0)cls+=' yellow';else cls+=' red';}timesHtml+='<span class="'+cls+'">'+parseFloat(t).toFixed(2)+'s</span>';});});}
-      html+='<div class="session-chip"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><div style="font-family:Bebas Neue,sans-serif;font-size:16px;">'+(s.date||'—')+'</div></div>'+(blocks?'<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);">'+blocks+'</div>':'')+(s.globalNote||s.note?'<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);margin-top:4px;">💬 '+(s.globalNote||s.note)+'</div>':'')+(timesHtml?'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;">'+timesHtml+'</div>':'')+'</div>';
-    });
-    el.innerHTML=html;
-  });
 }
 
 // ── Coach feedbacks ───────────────────────────────────────
