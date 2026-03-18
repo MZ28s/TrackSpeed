@@ -10809,7 +10809,7 @@ function renderDailyRpe() {
       var disabledAttr = isRepos ? 'disabled ' : '';
       rpeButtons += '<button ' + disabledAttr + 'onclick="setDayRpe(\''+d+'\','+ t +')" style="' + bgStyle + 'font-family:Bebas Neue,sans-serif;font-size:18px;border:2px solid;border-radius:6px;width:100%;padding:10px 2px;cursor:'+(isRepos?'default':'pointer')+';line-height:1;transition:all .12s;flex:1;min-width:0;-webkit-tap-highlight-color:transparent;">' + t + '</button>';
     }
-    html += '<div class="fb-day-row" id="rpe-row-'+d+'" style="flex-direction:column;gap:6px;align-items:stretch;padding:10px 0;">' +
+    html += '<div class="fb-day-row" id="rpe-row-'+d+'" style="display:flex;flex-direction:column;gap:6px;align-items:stretch;padding:10px 0;border-bottom:1px solid var(--border);">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;">' +
         '<div style="display:flex;align-items:center;gap:6px;flex:1;">' +
           '<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:700;color:var(--text);">' + ATH_DAYS_LABELS[i].toUpperCase() + '</div>' +
