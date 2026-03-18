@@ -10816,11 +10816,13 @@ function renderDailyRpe() {
           '<button class="fb-tag-btn '+(isRepos?'active-repos':'')+'" onclick="toggleDayOption(\''+d+'\',\'repos\')" title="Repos">😴</button>' +
           '<button class="fb-tag-btn '+(isCompet?'active-compet':'')+'" onclick="toggleDayOption(\''+d+'\',\'compet\')" title="Compétition">🏆</button>' +
         '</div>' +
-        '<div id="rpeVal_'+d+'" style="font-family:Bebas Neue,sans-serif;font-size:26px;color:'+rpeColor+';line-height:1;min-width:32px;text-align:right;">'+(rpeVal!==null&&!isRepos?rpeVal:'—')+'</div>' +
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+          (isCompet?'<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--accent);letter-spacing:1px;">🏆</div>':'') +
+          '<div id="rpeVal_'+d+'" style="font-family:Bebas Neue,sans-serif;font-size:26px;color:'+rpeColor+';line-height:1;min-width:32px;text-align:right;">'+(rpeVal!==null&&!isRepos?rpeVal:'—')+'</div>' +
+        '</div>' +
       '</div>' +
       '<div style="display:flex;gap:3px;opacity:'+(isRepos?'.3':'1')+'">' + rpeButtons + '</div>' +
       (isRepos?'<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);">😴 Repos — RPE non applicable</div>':'') +
-      (isCompet&&!isRepos?'<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--accent);letter-spacing:1px;">🏆 COMPÉTITION</div>':'') +
     '</div>';
   });
   el.innerHTML = html; updateRpeAvg();
@@ -10870,18 +10872,18 @@ function renderDailyForm() {
     var day = _feedbackData.days[d];
     var isRepos = day.repos;
     var borderBot = i < ATH_DAYS.length - 1 ? 'border-bottom:1px solid var(--border);' : '';
-    html += '<div style="padding:12px 0;' + borderBot + (isRepos ? 'opacity:.5;' : '') + '">' +
+    html += '<div style="padding:12px 0;' + borderBot + '">' +
       '<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:700;color:var(--text);margin-bottom:10px;display:flex;align-items:center;gap:6px;">' +
         ATH_DAYS_LABELS[i].toUpperCase() + (isRepos ? ' <span style="font-size:13px;">😴</span>' : '') +
       '</div>' +
       '<div style="display:flex;flex-direction:column;gap:8px;">' +
         '<div>' +
           '<div style="font-family:DM Mono,monospace;font-size:8px;color:#3b82f6;letter-spacing:1px;margin-bottom:6px;">PHYSIQUE</div>' +
-          '<div style="display:flex;gap:4px;" id="form-phys-'+d+'">'+makeSmileyBtns(d,'phys',PHYS_SMILEYS,day.phys,isRepos)+'</div>' +
+          '<div style="display:flex;gap:4px;" id="form-phys-'+d+'">'+makeSmileyBtns(d,'phys',PHYS_SMILEYS,day.phys,false)+'</div>' +
         '</div>' +
         '<div>' +
           '<div style="font-family:DM Mono,monospace;font-size:8px;color:#8b5cf6;letter-spacing:1px;margin-bottom:6px;">MENTAL</div>' +
-          '<div style="display:flex;gap:4px;" id="form-mental-'+d+'">'+makeSmileyBtns(d,'mental',MENTAL_SMILEYS,day.mental,isRepos)+'</div>' +
+          '<div style="display:flex;gap:4px;" id="form-mental-'+d+'">'+makeSmileyBtns(d,'mental',MENTAL_SMILEYS,day.mental,false)+'</div>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -10927,7 +10929,7 @@ function renderSleepRows() {
     var dur = calcSleepDuration(day.coucher, day.lever);
     var durColor = getSleepColor(dur);
     var borderBot = i < ATH_DAYS.length - 1 ? 'border-bottom:1px solid var(--border);' : '';
-    html += '<div style="padding:12px 0;' + borderBot + (isRepos ? 'opacity:.5;' : '') + '">' +
+    html += '<div style="padding:12px 0;' + borderBot + '">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
         '<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">' +
           ATH_DAYS_LABELS[i].toUpperCase() + (isRepos ? ' <span style="font-size:13px;">😴</span>' : '') +
@@ -10938,11 +10940,11 @@ function renderSleepRows() {
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
         '<div>' +
           '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);letter-spacing:1px;margin-bottom:5px;text-align:center;">🌙 COUCHER</div>' +
-          '<input class="sleep-time-input" type="time" id="coucher_'+d+'" value="'+(day.coucher||'')+'" '+(isRepos?'disabled ':'')+' onchange="feedbackSleepChange(\''+d+'\',\'coucher\',this.value)">' +
+          '<input class="sleep-time-input" type="time" id="coucher_'+d+'" value="'+(day.coucher||'')+'" onchange="feedbackSleepChange(\''+d+'\',\'coucher\',this.value)">' +
         '</div>' +
         '<div>' +
           '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);letter-spacing:1px;margin-bottom:5px;text-align:center;">☀️ LEVER</div>' +
-          '<input class="sleep-time-input" type="time" id="lever_'+d+'" value="'+(day.lever||'')+'" '+(isRepos?'disabled ':'')+' onchange="feedbackSleepChange(\''+d+'\',\'lever\',this.value)">' +
+          '<input class="sleep-time-input" type="time" id="lever_'+d+'" value="'+(day.lever||'')+'" onchange="feedbackSleepChange(\''+d+'\',\'lever\',this.value)">' +
         '</div>' +
       '</div>' +
     '</div>';
