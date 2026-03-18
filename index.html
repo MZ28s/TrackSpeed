@@ -12239,26 +12239,45 @@ function _renderAthHomeFeedbackCard() {
     .then(function(r) {
       var submitted = !!(r.data);
       var badge = document.getElementById('athFeedbackBadge');
+      var today = new Date().getDay(); // 0=dim,1=lun..6=sam
+      var isSunday = today === 0;
 
       if (submitted) {
         if (badge) badge.style.display = 'none';
         el.innerHTML = '<div data-pg="feedback" style="background:rgba(34,197,94,.1);border:1px solid #22c55e;border-radius:12px;padding:16px;display:flex;align-items:center;gap:14px;cursor:pointer;" onclick="athGoPage(this.dataset.pg)">'
-          + '<div style="font-size:28px;">✅</div>'
-          + '<div><div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:#22c55e;">FEEDBACK ENVOYÉ</div>'
+          + '<div style="font-size:28px;">&#9989;</div>'
+          + '<div><div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:#22c55e;">FEEDBACK &#201;NVOY&#201;</div>'
           + '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:2px;">' + getISOWeekLabel() + '</div></div>'
           + '</div>';
-      } else {
-        if (badge) badge.style.display = 'block';
+      } else if (isSunday) {
+        if (badge) { badge.style.display = 'block'; badge.style.background = '#ef4444'; }
         el.innerHTML = '<div data-pg="feedback" style="background:rgba(239,68,68,.1);border:2px solid #ef4444;border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:space-between;gap:14px;cursor:pointer;" onclick="athGoPage(this.dataset.pg)">'
           + '<div style="display:flex;align-items:center;gap:14px;">'
-          + '<div style="font-size:28px;">📋</div>'
-          + '<div><div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:#ef4444;">FEEDBACK À ENVOYER</div>'
-          + '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:2px;">Rappel : envoie ton bilan de semaine</div>'
+          + '<div style="font-size:28px;">&#128680;</div>'
+          + '<div><div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:#ef4444;">ENVOYER AUJOURD&#39;HUI</div>'
+          + '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:2px;">Dernier jour pour envoyer ton bilan</div></div>'
           + '</div>'
-          + '<div style="font-family:Bebas Neue,sans-serif;font-size:24px;color:#ef4444;">→</div>'
+          + '<div style="font-family:Bebas Neue,sans-serif;font-size:24px;color:#ef4444;">&#8594;</div>'
           + '</div>';
+      } else {
+        var dayMap = ['dim','lun','mar','mer','jeu','ven','sam'];
+        var todayKey = dayMap[today];
+        var todayData = _feedbackData && _feedbackData.days && _feedbackData.days[todayKey];
+        var todayFilled = todayData && (todayData.rpe !== null || todayData.phys !== null);
+        var color = todayFilled ? '#22c55e' : '#f59e0b';
+        var icon = todayFilled ? '&#128221;' : '&#9998;';
+        var msg = todayFilled ? 'Aujourd&#39;hui rempli — Envoi dimanche' : 'Remplis aujourd&#39;hui — Envoi dimanche';
+        var label = todayFilled ? 'FEEDBACK EN COURS' : 'A REMPLIR AUJOURD&#39;HUI';
+        if (badge) { badge.style.display = todayFilled ? 'none' : 'block'; badge.style.background = '#f59e0b'; }
+        var elHtml = "<div data-pg='feedback' style='background:rgba(245,158,11,.08);border:1px solid "+color+";border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:space-between;gap:14px;cursor:pointer;' onclick='athGoPage(this.dataset.pg)'>";
+        elHtml += "<div style='display:flex;align-items:center;gap:14px;'><div style='font-size:28px;'>"+icon+"</div>";
+        elHtml += "<div><div style='font-family:Bebas Neue,sans-serif;font-size:18px;color:"+color+";'>"+label+"</div>";
+        elHtml += "<div style='font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:2px;'>"+msg+"</div></div>";
+        elHtml += "<div style='font-family:Bebas Neue,sans-serif;font-size:24px;color:"+color+";'>→</div></div>";
+        el.innerHTML = elHtml;
       }
     });
+
 }
 
 function _renderAthHomeSessions() {
