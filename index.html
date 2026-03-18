@@ -10811,8 +10811,8 @@ function renderDailyRpe() {
     }
     html += '<div class="fb-day-row" id="rpe-row-'+d+'" style="flex-direction:column;gap:6px;align-items:stretch;padding:10px 0;">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;">' +
-        '<div style="display:flex;align-items:center;gap:8px;">' +
-          '<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:700;color:var(--text);min-width:32px;">'+ATH_DAYS_LABELS[i].substring(0,3).toUpperCase()+'</div>' +
+        '<div style="display:flex;align-items:center;gap:6px;flex:1;">' +
+          '<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:700;color:var(--text);">' + ATH_DAYS_LABELS[i].toUpperCase() + '</div>' +
           '<button class="fb-tag-btn '+(isRepos?'active-repos':'')+'" onclick="toggleDayOption(\''+d+'\',\'repos\')" title="Repos">😴</button>' +
           '<button class="fb-tag-btn '+(isCompet?'active-compet':'')+'" onclick="toggleDayOption(\''+d+'\',\'compet\')" title="Compétition">🏆</button>' +
         '</div>' +
