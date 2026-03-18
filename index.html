@@ -11220,9 +11220,16 @@ function markAllRead(ids) { var s=getReadSet();ids.forEach(function(id){s.add(id
 function isRead(fbId) { return getReadSet().has(fbId); }
 function coachMarkRead(fbId, el) {
   markAsRead(fbId);
-  if(!el)return;
-  el.style.opacity='.75'; el.style.borderColor=''; el.removeAttribute('onclick');
-  var dot=el.querySelector('.unread-dot');if(dot)dot.remove();
+  if (!el) return;
+  el.style.opacity = '.75';
+  el.style.borderColor = 'var(--border)';
+  var dot = el.querySelector('.unread-dot'); if (dot) dot.remove();
+  // Déplacer la card dans la section "lus" visuellement sans rechargement complet
+  var unreadSection = el.closest && el.closest('[data-section="unread"]');
+  if (unreadSection) {
+    var readSection = document.querySelector('[data-section="read"]');
+    if (readSection) readSection.insertBefore(el, readSection.firstChild);
+  }
 }
 
 function coachWeekGroup(week, isReadGroup) {
@@ -11464,14 +11471,21 @@ function renderCoachFeedbacks() {
     .eq('coach_uid', _sbUser.id)
     .order('created_at', { ascending: false })
     .then(function(r) {
-      if (r.error) { el.innerHTML = '<div style="color:#ef4444;font-family:DM Mono,monospace;font-size:9px;">Erreur: '+r.error.message+'</div>'; return; }
+      if (r.error) {
+        el.innerHTML = '<div style="color:#ef4444;font-family:DM Mono,monospace;font-size:9px;padding:20px 0;">Erreur : '+r.error.message+'</div>';
+        return;
+      }
       var feedbacks = r.data || [];
       if (!feedbacks.length) {
-        el.innerHTML = '<div style="text-align:center;padding:40px 0;"><div style="font-size:32px;margin-bottom:12px;">📭</div><div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">Aucun feedback reçu pour l&#39;instant.</div></div>';
+        el.innerHTML = '<div style="text-align:center;padding:40px 0;"><div style="font-size:32px;margin-bottom:12px;">📭</div><div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">Aucun feedback reçu.</div></div>';
         return;
       }
 
-      // Group by week
+      var readSet = getReadSet();
+      var allIds  = feedbacks.map(function(fb) { return fb.id; });
+      var unread  = allIds.filter(function(id) { return !readSet.has(id); }).length;
+
+      // Grouper par semaine
       var weekMap = {};
       feedbacks.forEach(function(fb) {
         var wid = fb.week_id || 'unknown';
@@ -11480,25 +11494,30 @@ function renderCoachFeedbacks() {
       });
       var weeks = Object.values(weekMap).sort(function(a,b) { return b.id.localeCompare(a.id); });
 
-      var readSet = getReadSet();
-      var allIds = feedbacks.map(function(fb) { return fb.id; });
-      var unreadCount = allIds.filter(function(id) { return !readSet.has(id); }).length;
+      var html = '';
 
-      var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+      // Barre du haut
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">';
       html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">';
-      if (unreadCount > 0) html += '<span style="color:var(--accent);font-weight:700;">'+unreadCount+' non lu'+( unreadCount>1?'s':'')+' · </span>';
+      if (unread > 0) html += '<span style="color:var(--accent);font-weight:700;">'+unread+' non lu'+(unread>1?'s':'')+' · </span>';
       html += feedbacks.length+' au total</div>';
-      if (unreadCount > 0) {
-        html += '<button onclick="markAllRead('+JSON.stringify(allIds)+');renderCoachFeedbacks();" style="background:none;border:1px solid var(--border);border-radius:4px;padding:5px 10px;font-family:DM Mono,monospace;font-size:8px;color:var(--muted);cursor:pointer;">Tout marquer lu</button>';
+      if (unread > 0) {
+        html += '<button onclick="markAllRead('+JSON.stringify(allIds)+');renderCoachFeedbacks();" style="background:none;border:1px solid var(--border);border-radius:4px;padding:5px 10px;font-family:DM Mono,monospace;font-size:8px;color:var(--muted);cursor:pointer;letter-spacing:.5px;">Tout marquer lu</button>';
       }
       html += '</div>';
 
-      // Sort: unread weeks first, then read
-      var unreadWeeks = weeks.filter(function(w) { return w.items.some(function(fb) { return !readSet.has(fb.id); }); });
-      var readWeeks   = weeks.filter(function(w) { return w.items.every(function(fb) { return readSet.has(fb.id); }); });
+      // Feedbacks non lus en premier, puis lus
+      var unreadFbs = feedbacks.filter(function(fb) { return !readSet.has(fb.id); });
+      var readFbs   = feedbacks.filter(function(fb) { return  readSet.has(fb.id); });
 
-      unreadWeeks.forEach(function(w) { html += coachWeekGroup(w, false); });
-      readWeeks.forEach(function(w)   { html += coachWeekGroup(w, true);  });
+      if (unreadFbs.length) {
+        html += '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:10px;">// NON LUS</div>';
+        unreadFbs.forEach(function(fb) { html += coachFeedbackCard(fb); });
+      }
+      if (readFbs.length) {
+        html += '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:2px;color:var(--muted);margin-top:20px;margin-bottom:10px;">// LUS</div>';
+        readFbs.forEach(function(fb) { html += coachFeedbackCard(fb); });
+      }
 
       el.innerHTML = html;
     });
