@@ -10836,6 +10836,7 @@ function athGoPage(name) {
   if (name === 'feedback') { renderDailyRpe(); renderDailyForm(); renderSleepRows(); }
   if (name === 'calc')     { athCalculate(); }
   if (name === 'force')    { athRenderExoSelector(); athUpdateForceTable(); }
+  if (name === 'journal')  { journalInit(); }
 }
 
 // ── enterAthleteMode ─────────────────────────────────────
@@ -11829,6 +11830,273 @@ function athDeleteSession(sessionId) {
   });
 }
 
+// ═══════════════════════════════════════════════
+// JOURNAL MUSCU ATHLÈTE
+// ═══════════════════════════════════════════════
+var _journalSets = [];   // séries en cours de saisie
+var _journalEntries = []; // exercices de la séance en cours
+var _journalSessionDate = '';
+
+var JOURNAL_EXO_LABELS = {
+  squat:'Back Squat', hipthrust:'Hip Thrust', deadlift:'Deadlift',
+  rdl:'RDL', powerclean:'Power Clean', bench:'Bench Press', legext:'Leg Extension'
+};
+
+function journalInit() {
+  _journalEntries = [];
+  _journalSets = [{ reps: '', weight: '', unit: 'kg' }];
+  var form = document.getElementById('journalForm');
+  if (form) form.style.display = 'none';
+  journalLoadHistory();
+}
+
+function journalNewSession() {
+  _journalEntries = [];
+  _journalSets = [{ reps: '', weight: '', unit: 'kg' }];
+  _journalSessionDate = new Date().toISOString().slice(0, 10);
+  var dateEl = document.getElementById('journalFormDate');
+  if (dateEl) {
+    var d = new Date(_journalSessionDate + 'T12:00:00');
+    var days = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+    var months = ['jan.','fév.','mar.','avr.','mai','juin','juil.','aoû.','sep.','oct.','nov.','déc.'];
+    dateEl.textContent = days[d.getDay()] + ' ' + d.getDate() + ' ' + months[d.getMonth()];
+  }
+  var form = document.getElementById('journalForm');
+  if (form) form.style.display = 'block';
+  document.getElementById('journalEntries').innerHTML = '';
+  document.getElementById('journalNote').value = '';
+  journalRenderSets();
+  var sel = document.getElementById('journalExoSelect');
+  if (sel) sel.value = '';
+  document.getElementById('journalSaveMsg').textContent = '';
+}
+
+function journalCancelForm() {
+  var form = document.getElementById('journalForm');
+  if (form) form.style.display = 'none';
+  _journalEntries = [];
+}
+
+function journalRenderSets() {
+  var container = document.getElementById('journalSetRows');
+  if (!container) return;
+  var html = '';
+  _journalSets.forEach(function(s, i) {
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:6px;margin-bottom:6px;align-items:center;">';
+    html += '<div><div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);margin-bottom:3px;">REPS</div>'
+      + '<input type="number" min="1" max="100" value="' + (s.reps||'') + '" placeholder="8" '
+      + 'oninput="_journalSets['+i+'].reps=this.value" '
+      + 'style="width:100%;box-sizing:border-box;padding:10px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--accent);font-family:DM Mono,monospace;font-size:16px;outline:none;text-align:center;min-height:48px;"></div>';
+    html += '<div><div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);margin-bottom:3px;">CHARGE (kg)</div>'
+      + '<input type="number" min="0" max="500" step="0.5" value="' + (s.weight||'') + '" placeholder="60" '
+      + 'oninput="_journalSets['+i+'].weight=this.value" '
+      + 'style="width:100%;box-sizing:border-box;padding:10px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--accent);font-family:DM Mono,monospace;font-size:16px;outline:none;text-align:center;min-height:48px;"></div>';
+    html += '<div style="align-self:flex-end;">'
+      + '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);margin-bottom:3px;">SÉR.</div>'
+      + '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--muted);padding:10px 6px;text-align:center;">' + (i+1) + '</div></div>';
+    html += '<div style="align-self:flex-end;">'
+      + (i > 0 ? '<button onclick="_journalSets.splice('+i+',1);journalRenderSets()" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:10px 4px;min-height:48px;">✕</button>' : '<div style="min-height:48px;padding:10px 4px;width:28px;"></div>')
+      + '</div>';
+    html += '</div>';
+  });
+  container.innerHTML = html;
+}
+
+function journalAddSet() {
+  _journalSets.push({ reps: '', weight: '', unit: 'kg' });
+  journalRenderSets();
+}
+
+function journalAddEntry() {
+  var sel = document.getElementById('journalExoSelect');
+  var custom = document.getElementById('journalExoCustom');
+  var exoId = sel ? sel.value : '';
+  var exoName = exoId === 'other' ? (custom ? custom.value.trim() : '') :
+                (JOURNAL_EXO_LABELS[exoId] || '');
+  if (!exoName) { alert('Choisis un exercice.'); return; }
+  var validSets = _journalSets.filter(function(s) {
+    return (s.reps !== '' && s.reps !== null) || (s.weight !== '' && s.weight !== null);
+  });
+  if (!validSets.length) { alert('Entre au moins une série.'); return; }
+  var sets = validSets.map(function(s) {
+    return { reps: s.reps ? parseInt(s.reps) : null, weight: s.weight ? parseFloat(s.weight) : null };
+  });
+  _journalEntries.push({ exo: exoId, name: exoName, sets: sets });
+  // Afficher dans le récap
+  var container = document.getElementById('journalEntries');
+  var best = sets.reduce(function(m, s) { return (s.weight && s.weight > (m||0)) ? s.weight : m; }, null);
+  var setsStr = sets.map(function(s) { return (s.reps||'?') + ' × ' + (s.weight ? s.weight + 'kg' : '—'); }).join(' · ');
+  container.innerHTML += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start;">'
+    + '<div><div style="font-family:Bebas Neue,sans-serif;font-size:16px;color:var(--text);">' + exoName + '</div>'
+    + '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:3px;">' + setsStr + '</div></div>'
+    + (best ? '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--accent2);">' + best + 'kg</div>' : '')
+    + '</div>';
+  // Reset
+  _journalSets = [{ reps: '', weight: '', unit: 'kg' }];
+  journalRenderSets();
+  if (sel) sel.value = '';
+  if (custom) { custom.value = ''; custom.style.display = 'none'; }
+}
+
+// Afficher/cacher champ libre
+document.addEventListener('change', function(e) {
+  if (e.target && e.target.id === 'journalExoSelect') {
+    var custom = document.getElementById('journalExoCustom');
+    if (custom) custom.style.display = e.target.value === 'other' ? 'block' : 'none';
+  }
+});
+
+function journalSaveSession() {
+  if (!_sb || !_athProfile) { alert('Non connecté'); return; }
+  if (!_journalEntries.length) { alert('Ajoute au moins un exercice.'); return; }
+  var btn = document.getElementById('journalSaveBtn');
+  var msg = document.getElementById('journalSaveMsg');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sauvegarde...'; }
+  var note = (document.getElementById('journalNote') || {}).value || '';
+  var payload = {
+    user_id: _athProfile.user_id,
+    session_date: _journalSessionDate,
+    entries: _journalEntries,
+    note: note,
+    updated_at: new Date().toISOString()
+  };
+  _sb.from('athlete_journal').insert(payload).then(function(r) {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 SAUVEGARDER LA SÉANCE'; }
+    if (r.error) {
+      if (msg) { msg.textContent = '⚠ Erreur : ' + r.error.message; msg.style.color = '#ef4444'; }
+      return;
+    }
+    if (msg) { msg.textContent = '✅ Séance sauvegardée !'; msg.style.color = '#22c55e'; }
+    _journalEntries = [];
+    setTimeout(function() {
+      var form = document.getElementById('journalForm');
+      if (form) form.style.display = 'none';
+      journalLoadHistory();
+    }, 1200);
+  });
+}
+
+function journalLoadHistory() {
+  var el = document.getElementById('journalHistory');
+  if (!el || !_sb || !_athProfile) return;
+  el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);text-align:center;padding:20px 0;">Chargement...</div>';
+  _sb.from('athlete_journal').select('*')
+    .eq('user_id', _athProfile.user_id)
+    .order('session_date', { ascending: false })
+    .limit(50)
+    .then(function(r) {
+      if (r.error) { el.innerHTML = '<div style="color:#ef4444;font-family:DM Mono,monospace;font-size:9px;">Erreur : ' + r.error.message + '</div>'; return; }
+      var sessions = r.data || [];
+      if (!sessions.length) {
+        el.innerHTML = '<div style="text-align:center;padding:40px 0;font-family:DM Mono,monospace;font-size:10px;color:var(--muted);"><div style="font-size:32px;margin-bottom:10px;">📓</div>Aucune séance enregistrée.</div>';
+        return;
+      }
+      // Grouper par exercice pour voir la progression
+      var html = '';
+      sessions.forEach(function(s, si) {
+        var d = new Date((s.session_date||'')+'T12:00:00');
+        var days=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+        var months=['jan.','fév.','mar.','avr.','mai','juin','juil.','aoû.','sep.','oct.','nov.','déc.'];
+        var dateStr = days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()]+' '+d.getFullYear();
+        var entries = s.entries || [];
+        // Best lift of the session
+        var sessionBest = null;
+        entries.forEach(function(e) {
+          (e.sets||[]).forEach(function(set) { if (set.weight && set.weight > (sessionBest||0)) sessionBest = set.weight; });
+        });
+        var detId = 'jdet_' + si;
+        html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:10px;overflow:hidden;">';
+        // Header cliquable
+        html += '<div style="padding:14px 16px;display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer;" onclick="journalToggleDetail(this)">';
+        html += '<div>';
+        html += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--text);">' + dateStr.toUpperCase() + '</div>';
+        html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--accent);margin-top:3px;">' + entries.length + ' exercice' + (entries.length>1?'s':'') + ' · ' + entries.reduce(function(t,e){return t+(e.sets||[]).length;},0) + ' séries</div>';
+        if (s.note) html += '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);margin-top:2px;">💬 ' + s.note + '</div>';
+        html += '</div>';
+        html += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">';
+        if (sessionBest) html += '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:var(--accent2);">' + sessionBest + 'kg</div>';
+        html += '<div class="jchev" style="font-size:12px;color:var(--muted);transition:transform .2s;">▼</div>';
+        html += '</div></div>';
+        // Détail
+        html += '<div style="display:none;border-top:1px solid var(--border);padding:14px 16px;">';
+        entries.forEach(function(e) {
+          var bestW = null;
+          (e.sets||[]).forEach(function(set){if(set.weight&&set.weight>(bestW||0))bestW=set.weight;});
+          html += '<div style="margin-bottom:12px;">';
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+          html += '<div style="font-family:Bebas Neue,sans-serif;font-size:16px;color:var(--text);">' + e.name + '</div>';
+          if (bestW) html += '<div style="font-family:Bebas Neue,sans-serif;font-size:16px;color:#51cf66;">' + bestW + 'kg</div>';
+          html += '</div>';
+          // Tableau séries
+          html += '<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:0;border:1px solid var(--border);border-radius:6px;overflow:hidden;font-family:DM Mono,monospace;font-size:10px;">';
+          html += '<div style="padding:5px 8px;background:var(--surface2);font-size:8px;color:var(--muted);">SÉR.</div>';
+          html += '<div style="padding:5px 8px;background:var(--surface2);font-size:8px;color:var(--muted);text-align:center;">REPS</div>';
+          html += '<div style="padding:5px 8px;background:var(--surface2);font-size:8px;color:var(--accent);text-align:center;">CHARGE</div>';
+          (e.sets||[]).forEach(function(set, si2) {
+            var isBest = set.weight && set.weight === bestW;
+            html += '<div style="padding:6px 8px;border-top:1px solid var(--border);color:var(--muted);">' + (si2+1) + '</div>';
+            html += '<div style="padding:6px 8px;border-top:1px solid var(--border);text-align:center;">' + (set.reps||'—') + '</div>';
+            html += '<div style="padding:6px 8px;border-top:1px solid var(--border);text-align:center;color:' + (isBest?'#51cf66':'var(--text)') + ';font-weight:' + (isBest?'bold':'normal') + ';">' + (set.weight ? set.weight+'kg' : '—') + '</div>';
+          });
+          html += '</div></div>';
+        });
+        // Bouton supprimer
+        html += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">';
+        html += '<button data-jid="' + s.id + '" onclick="journalDeleteSession(this.dataset.jid)" style="background:none;border:1px solid var(--border);border-radius:4px;padding:6px 12px;font-family:DM Mono,monospace;font-size:8px;color:var(--muted);cursor:pointer;">🗑 Supprimer</button>';
+        html += '</div>';
+        html += '</div></div>';
+      });
+
+      // Section progression par exercice
+      html += '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:2px;color:var(--accent);padding:16px 0 8px;border-bottom:1px solid var(--border);margin-bottom:12px;">// PROGRESSION</div>';
+      // Regrouper par exercice
+      var byExo = {};
+      sessions.forEach(function(s) {
+        (s.entries||[]).forEach(function(e) {
+          if (!byExo[e.name]) byExo[e.name] = [];
+          var best = null;
+          (e.sets||[]).forEach(function(set){if(set.weight&&set.weight>(best||0))best=set.weight;});
+          if (best) byExo[e.name].push({ date: s.session_date, best: best });
+        });
+      });
+      Object.keys(byExo).forEach(function(name) {
+        var records = byExo[name].sort(function(a,b){return a.date.localeCompare(b.date);});
+        var allTime = Math.max.apply(null, records.map(function(r){return r.best;}));
+        var latest = records[records.length-1];
+        html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">';
+        html += '<div><div style="font-family:Bebas Neue,sans-serif;font-size:16px;">' + name + '</div>';
+        html += '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);margin-top:2px;">' + records.length + ' séance' + (records.length>1?'s':'') + '</div></div>';
+        html += '<div style="text-align:right;"><div style="font-family:Bebas Neue,sans-serif;font-size:22px;color:#51cf66;">' + allTime + 'kg</div>';
+        html += '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);">record</div></div>';
+        html += '</div>';
+      });
+      if (!Object.keys(byExo).length) {
+        html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);text-align:center;padding:10px 0;">Pas encore de données de progression.</div>';
+      }
+      el.innerHTML = html;
+    });
+}
+
+function journalToggleDetail(hdr) {
+  var det = hdr.nextElementSibling;
+  var chev = hdr.querySelector('.jchev');
+  if (!det) return;
+  var open = det.style.display !== 'none';
+  det.style.display = open ? 'none' : 'block';
+  if (chev) chev.style.transform = open ? '' : 'rotate(180deg)';
+  hdr.parentElement.style.borderColor = open ? 'var(--border)' : 'var(--accent)';
+}
+
+function journalDeleteSession(id) {
+  if (!confirm('Supprimer cette séance ?')) return;
+  if (!_sb || !_athProfile) return;
+  _sb.from('athlete_journal').delete().eq('id', id).eq('user_id', _athProfile.user_id)
+    .then(function(r) {
+      if (r.error) { alert('Erreur : ' + r.error.message); return; }
+      journalLoadHistory();
+    });
+}
+
 function athToggleHistDetail(detailId, cardEl) {
   var detail = document.getElementById(detailId);
   var chev   = document.getElementById('athchev_' + detailId);
@@ -12766,6 +13034,69 @@ setTimeout(() => {
     <div id="athHistoryContent"><div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);">Chargement...</div></div>
   </div>
 
+  <!-- JOURNAL -->
+  <div id="ath-page-journal" class="ath-page">
+    <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:4px;">// MUSCULATION</div>
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;margin-bottom:4px;line-height:1;">MON JOURNAL</div>
+    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:20px;">Trace tes séances de musculation et suis ta progression.</div>
+
+    <!-- Bouton nouvelle séance -->
+    <button onclick="journalNewSession()" style="width:100%;background:var(--accent);border:none;border-radius:10px;padding:16px;font-family:'Bebas Neue',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:20px;min-height:56px;">+ NOUVELLE SÉANCE MUSCU</button>
+
+    <!-- Formulaire nouvelle séance (caché par défaut) -->
+    <div id="journalForm" style="display:none;" class="ath-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div class="ath-card-title" style="margin-bottom:0;">Séance du <span id="journalFormDate"></span></div>
+        <button onclick="journalCancelForm()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);">✕</button>
+      </div>
+
+      <!-- Liste exercices ajoutés -->
+      <div id="journalEntries"></div>
+
+      <!-- Ajouter un exercice -->
+      <div style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:12px;">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:10px;">AJOUTER UN EXERCICE</div>
+
+        <!-- Sélecteur exercice -->
+        <select id="journalExoSelect" style="width:100%;margin-bottom:10px;font-size:14px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);outline:none;">
+          <option value="">-- Choisir un exercice --</option>
+          <option value="squat">🏋 Back Squat</option>
+          <option value="hipthrust">🔥 Hip Thrust</option>
+          <option value="deadlift">💀 Deadlift</option>
+          <option value="rdl">⬇️ RDL</option>
+          <option value="powerclean">⚡ Power Clean</option>
+          <option value="bench">💪 Bench Press</option>
+          <option value="legext">🖥️ Leg Extension</option>
+          <option value="other">✏️ Autre (libre)</option>
+        </select>
+
+        <!-- Nom libre si "autre" -->
+        <input id="journalExoCustom" type="text" placeholder="Nom de l'exercice..." style="display:none;width:100%;box-sizing:border-box;margin-bottom:10px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;">
+
+        <!-- Séries -->
+        <div id="journalSetsContainer">
+          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;">SÉRIES</div>
+          <div id="journalSetRows"></div>
+          <button onclick="journalAddSet()" style="background:none;border:1px dashed var(--border);border-radius:6px;padding:8px;width:100%;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);cursor:pointer;margin-top:6px;">+ Ajouter une série</button>
+        </div>
+
+        <button onclick="journalAddEntry()" style="width:100%;background:var(--surface);border:1px solid var(--accent);border-radius:8px;padding:12px;font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--accent);cursor:pointer;margin-top:10px;letter-spacing:1px;">✓ AJOUTER CET EXERCICE</button>
+      </div>
+
+      <!-- Note de séance -->
+      <div style="margin-bottom:12px;">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px;">NOTE DE SÉANCE (optionnel)</div>
+        <textarea id="journalNote" placeholder="Ressenti, observations..." style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;outline:none;resize:none;min-height:60px;"></textarea>
+      </div>
+
+      <button onclick="journalSaveSession()" id="journalSaveBtn" style="width:100%;background:var(--accent);border:none;border-radius:10px;padding:16px;font-family:'Bebas Neue',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:1px;min-height:56px;">💾 SAUVEGARDER LA SÉANCE</button>
+      <div id="journalSaveMsg" style="font-family:'DM Mono',monospace;font-size:9px;text-align:center;min-height:14px;margin-top:8px;"></div>
+    </div>
+
+    <!-- Historique journal -->
+    <div id="journalHistory"><div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-align:center;padding:20px 0;">Chargement...</div></div>
+  </div>
+
   <!-- PROFIL -->
   <div id="ath-page-profile" class="ath-page">
     <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:4px;">// PROFIL</div>
@@ -12875,6 +13206,7 @@ setTimeout(() => {
     <button class="ath-nav-btn active" id="ath-nav-feedback" onclick="athGoPage('feedback')"><span class="icon">📋</span>Feedback</button>
     <button class="ath-nav-btn" id="ath-nav-calc" onclick="athGoPage('calc')"><span class="icon">⏱</span>Calcul</button>
     <button class="ath-nav-btn" id="ath-nav-force" onclick="athGoPage('force')"><span class="icon">🏋</span>Force</button>
+    <button class="ath-nav-btn" id="ath-nav-journal" onclick="athGoPage('journal')"><span class="icon">📓</span>Journal</button>
     <button class="ath-nav-btn" id="ath-nav-history" onclick="athGoPage('history')"><span class="icon">📊</span>Séances</button>
     <button class="ath-nav-btn" id="ath-nav-profile" onclick="athGoPage('profile')"><span class="icon">👤</span>Profil</button>
   </nav>
