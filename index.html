@@ -11228,7 +11228,7 @@ function renderSleepRows() {
     html += '<div style="padding:12px 0;' + borderBot + '">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
         '<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">' +
-          ATH_DAYS_LABELS[i].toUpperCase() + (isRepos ? ' <span style="font-size:13px;">😴</span>' : '') +
+          ('NUIT ' + ATH_DAYS_LABELS[i].toUpperCase() + ' → ' + ATH_DAYS_LABELS[(i+1) % 7].toUpperCase()) + (isRepos ? ' <span style="font-size:13px;">😴</span>' : '') +
         '</div>' +
         (dur ? '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:'+durColor+';" id="sleep-dur-'+d+'">'+dur+'</div>'
               : '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);" id="sleep-dur-'+d+'">—</div>') +
