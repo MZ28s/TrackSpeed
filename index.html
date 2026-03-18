@@ -8743,6 +8743,17 @@ function sendSessionToAthletes() {
   var rows = selectedAthletes.map(function(pid) {
     var p = profiles.find(function(pr) { return pr.id === pid; });
     if (!p) return null;
+    // Calculer les refs de l'athlète pour les temps cibles
+    var pRefs = [];
+    if (p.records) {
+      var refDists = [50,60,100,200,400];
+      refDists.forEach(function(d) {
+        var t = p.records['pr'+d];
+        if (t) pRefs.push({ dRef: d, t: parseFloat(t) });
+      });
+      pRefs.sort(function(a,b){return a.dRef-b.dRef;});
+      if (pRefs.length > 2) pRefs = [pRefs[0], pRefs[pRefs.length-1]];
+    }
     var blocksWithTimes = sessionBlocks.map(function(b, bi) {
       var times = [];
       for (var r = 0; r < b.reps; r++) {
@@ -8750,7 +8761,13 @@ function sendSessionToAthletes() {
         var t = inp ? parseFloat(inp.value) : NaN;
         times.push(isNaN(t) ? null : t);
       }
-      return Object.assign({}, b, { times: times });
+      // Calculer tCible : temps à 100% × (pct/100)
+      var tCible = null;
+      if (pRefs.length > 0) {
+        var t100 = computeTarget(b.dist, pRefs);
+        tCible = Math.round(t100 * (b.pct/100) * 100) / 100;
+      }
+      return Object.assign({}, b, { times: times, tCible: tCible });
     });
     // Détecter si tous les temps sont null (séance à faire) ou remplis (séance faite)
     var hasTimes = blocksWithTimes.some(function(b) {
@@ -11329,10 +11346,10 @@ function renderAthHistory() {
             : '<span style="font-family:DM Mono,monospace;font-size:8px;background:rgba(245,200,0,.15);color:var(--accent);border-radius:4px;padding:2px 8px;">📋 À FAIRE</span>';
 
           // Carte
-          html += '<div id="' + cardId + '" data-detail="' + detailId + '" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;margin-bottom:10px;overflow:hidden;cursor:pointer;transition:border-color .15s;" onclick="athToggleHistDetail(this.dataset.detail, this)">';
+          html += '<div id="' + cardId + '" data-detail="' + detailId + '" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;margin-bottom:10px;overflow:hidden;transition:border-color .15s;">';
 
-          // En-tête
-          html += '<div style="padding:14px 16px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">';
+          // En-tête cliquable uniquement
+          html += '<div style="padding:14px 16px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;cursor:pointer;" onclick="athToggleHistDetail(this.parentElement.dataset.detail, this.parentElement)">';
           html += '<div style="flex:1;min-width:0;">';
           html += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--text);">' + (s.athlete_name || '—').toUpperCase() + '</div>';
           html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--accent);margin-top:3px;letter-spacing:1px;">' + blocsSummary + '</div>';
@@ -11402,12 +11419,17 @@ function renderAthHistory() {
               html += '<button data-sid="' + sessionId + '" data-bi="' + bi + '" data-rest="' + restMin + '" onclick="athStartChrono(this.dataset.sid,parseInt(this.dataset.bi),parseInt(this.dataset.rest))" style="background:var(--accent);border:none;border-radius:6px;padding:8px 14px;font-family:Bebas Neue,sans-serif;font-size:14px;color:#000;cursor:pointer;">&#9654; GO</button>';
               html += '<button data-sid="' + sessionId + '" data-bi="' + bi + '" onclick="athResetChrono(this.dataset.sid,parseInt(this.dataset.bi))" style="background:none;border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:14px;cursor:pointer;color:var(--muted);">&#8635;</button>';
               html += '</div></div></div>';
+              // Temps cible
+              var tCibleStr = b.tCible ? parseFloat(b.tCible).toFixed(2) + 's' : null;
+              if (tCibleStr) {
+                html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin:8px 0 4px;">CIBLE <span style="font-family:Bebas Neue,sans-serif;font-size:16px;color:var(--accent2);">' + tCibleStr + '</span> par répétition</div>';
+              }
               // Inputs temps
-              html += '<div style="display:grid;grid-template-columns:repeat(' + Math.min(reps, 4) + ',1fr);gap:8px;margin-top:10px;">';
+              html += '<div style="display:grid;grid-template-columns:repeat(' + Math.min(reps, 4) + ',1fr);gap:8px;margin-top:8px;">';
               for (var ri3 = 0; ri3 < reps; ri3++) {
                 html += '<div>';
                 html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);text-align:center;margin-bottom:4px;">R' + (ri3+1) + '</div>';
-                html += '<input class="ath-time-input" type="number" step="0.01" min="1" max="99" placeholder="—" id="at_' + sessionId + '_' + bi + '_' + ri3 + '">';
+                html += '<input class="ath-time-input" type="number" step="0.01" min="1" max="99" placeholder="' + (tCibleStr||'—') + '" id="at_' + sessionId + '_' + bi + '_' + ri3 + '" oninput="athColorInput(this,' + (b.tCible||0) + ')">';
                 html += '</div>';
               }
               html += '</div>';
@@ -11469,6 +11491,15 @@ function athResetChrono(sid, bi) {
   delete _athChronos[key];
   var disp = document.getElementById('acdisp_' + key);
   if (disp) { disp.textContent = '00:00'; disp.style.color = 'var(--accent)'; }
+}
+
+function athColorInput(inp, tCible) {
+  var t = parseFloat(inp.value);
+  if (isNaN(t) || !tCible) { inp.style.borderColor = 'var(--border)'; inp.style.color = 'var(--accent)'; return; }
+  var diff = t - tCible;
+  if (Math.abs(diff) <= 0.15) { inp.style.borderColor = '#22c55e'; inp.style.color = '#22c55e'; }
+  else if (diff < 0)           { inp.style.borderColor = 'var(--accent)'; inp.style.color = 'var(--accent)'; }
+  else                          { inp.style.borderColor = '#ef4444'; inp.style.color = '#ef4444'; }
 }
 
 function athSubmitTimesBtn(btn) {
