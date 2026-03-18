@@ -10371,16 +10371,16 @@ var _athMode      = false;
 var _athUser      = null;   // Supabase user de l'athlète
 var _sbAth        = null;   // client Supabase séparé pour l'athlète
 
-var ATH_DAYS        = ['dim','lun','mar','mer','jeu','ven','sam'];
-var ATH_DAYS_LABELS = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+var ATH_DAYS        = ['lun','mar','mer','jeu','ven','sam','dim'];
+var ATH_DAYS_LABELS = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
 var RPE_LABELS      = ['','Repos total','Très facile','Facile','Confortable','Modéré','Modéré+','Difficile','Très difficile','Dur','Maximum'];
 
 var _feedbackData = {
   rpe: 5,
-  days: { dim:{phys:3,mental:3,coucher:'',lever:''}, lun:{phys:3,mental:3,coucher:'',lever:''},
-          mar:{phys:3,mental:3,coucher:'',lever:''}, mer:{phys:3,mental:3,coucher:'',lever:''},
-          jeu:{phys:3,mental:3,coucher:'',lever:''}, ven:{phys:3,mental:3,coucher:'',lever:''},
-          sam:{phys:3,mental:3,coucher:'',lever:''} },
+  days: { lun:{phys:3,mental:3,coucher:'',lever:''}, mar:{phys:3,mental:3,coucher:'',lever:''},
+          mer:{phys:3,mental:3,coucher:'',lever:''}, jeu:{phys:3,mental:3,coucher:'',lever:''},
+          ven:{phys:3,mental:3,coucher:'',lever:''}, sam:{phys:3,mental:3,coucher:'',lever:''},
+          dim:{phys:3,mental:3,coucher:'',lever:''} },
   objective: '', comment: ''
 };
 
@@ -10803,8 +10803,8 @@ function requestPushPermission() {
 // ══  ATHLETE APP — ALL JS FUNCTIONS                      ══
 // ══════════════════════════════════════════════════════════
 
-var ATH_DAYS        = ['dim','lun','mar','mer','jeu','ven','sam'];
-var ATH_DAYS_LABELS = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+var ATH_DAYS        = ['lun','mar','mer','jeu','ven','sam','dim'];
+var ATH_DAYS_LABELS = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
 var RPE_LABELS      = ['','Repos total','Très facile','Facile','Confortable','Modéré','Modéré+','Difficile','Très difficile','Dur','Maximum'];
 var PHYS_SMILEYS    = ['','😩','😞','😐','😊','🔥'];
 var MENTAL_SMILEYS  = ['','😰','😕','😐','😌','🧠'];
@@ -11219,8 +11219,11 @@ function setDayScore(day, type, val) {
 function renderSleepRows() {
   var el = document.getElementById('sleepRows'); if (!el) return;
   var html = '';
-  ATH_DAYS.forEach(function(d, i) {
-    var day = _feedbackData.days[d];
+  // Nuits dans l'ordre dim→lun en premier (première nuit de la semaine)
+  var SLEEP_DAYS        = ['dim','lun','mar','mer','jeu','ven','sam'];
+  var SLEEP_DAYS_LABELS = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+  SLEEP_DAYS.forEach(function(d, i) {
+    var day = _feedbackData.days[d] || {};
     var isRepos = day.repos;
     var dur = calcSleepDuration(day.coucher, day.lever);
     var durColor = getSleepColor(dur);
@@ -11228,7 +11231,7 @@ function renderSleepRows() {
     html += '<div style="padding:12px 0;' + borderBot + '">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
         '<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">' +
-          ('NUIT ' + ATH_DAYS_LABELS[i].toUpperCase() + ' → ' + ATH_DAYS_LABELS[(i+1) % 7].toUpperCase()) + (isRepos ? ' <span style="font-size:13px;">😴</span>' : '') +
+          ('NUIT ' + SLEEP_DAYS_LABELS[i].toUpperCase() + ' → ' + SLEEP_DAYS_LABELS[(i+1) % 7].toUpperCase()) + (isRepos ? ' <span style="font-size:13px;">😴</span>' : '') +
         '</div>' +
         (dur ? '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:'+durColor+';" id="sleep-dur-'+d+'">'+dur+'</div>'
               : '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);" id="sleep-dur-'+d+'">—</div>') +
