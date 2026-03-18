@@ -11389,17 +11389,137 @@ function renderAthHistory() {
               if (best !== null) html += '<span style="font-family:Bebas Neue,sans-serif;font-size:14px;color:#51cf66;">' + best.toFixed(2) + 's</span>';
               html += '</td></tr></tbody></table></div>';
             } else if (!isDone) {
-              // Séance à faire : afficher temps cibles si disponibles
-              html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Séance planifiée — présente-toi !</div>';
+              // Séance à faire : chrono + saisie temps
+              html += '<div style="margin-top:8px;">';
+              var sessionId = s.id;
+              var restMin = b.rest || 0;
+              // Mini chrono
+              html += '<div class="ath-session-chrono" id="achron_' + sessionId + '_' + bi + '">';
+              html += '<div id="acdisp_' + sessionId + '_' + bi + '" class="ath-session-chrono-display">00:00</div>';
+              html += '<div style="flex:1;">';
+              html += '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);margin-bottom:6px;">RÉCUPÉRATION ' + restMin + 'min</div>';
+              html += '<div style="display:flex;gap:6px;">';
+              html += '<button data-sid="' + sessionId + '" data-bi="' + bi + '" data-rest="' + restMin + '" onclick="athStartChrono(this.dataset.sid,parseInt(this.dataset.bi),parseInt(this.dataset.rest))" style="background:var(--accent);border:none;border-radius:6px;padding:8px 14px;font-family:Bebas Neue,sans-serif;font-size:14px;color:#000;cursor:pointer;">&#9654; GO</button>';
+              html += '<button data-sid="' + sessionId + '" data-bi="' + bi + '" onclick="athResetChrono(this.dataset.sid,parseInt(this.dataset.bi))" style="background:none;border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:14px;cursor:pointer;color:var(--muted);">&#8635;</button>';
+              html += '</div></div></div>';
+              // Inputs temps
+              html += '<div style="display:grid;grid-template-columns:repeat(' + Math.min(reps, 4) + ',1fr);gap:8px;margin-top:10px;">';
+              for (var ri3 = 0; ri3 < reps; ri3++) {
+                html += '<div>';
+                html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);text-align:center;margin-bottom:4px;">R' + (ri3+1) + '</div>';
+                html += '<input class="ath-time-input" type="number" step="0.01" min="1" max="99" placeholder="—" id="at_' + sessionId + '_' + bi + '_' + ri3 + '">';
+                html += '</div>';
+              }
+              html += '</div>';
+              html += '</div>';
             }
             html += '</div>';
           });
+
+          // Bouton envoi si séance à faire
+          if (!isDone) {
+            var sid2 = s.id;
+            var snb2 = blocks.length;
+            var sreps2 = blocks.map(function(b2){return Array.isArray(b2.reps)?b2.reps.length:(parseInt(b2.reps)||0);});
+            html += '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);" id="asend_' + sid2 + '">';
+            html += '<button class="ath-submit-session-btn" data-sid="' + sid2 + '" data-nb="' + snb2 + '" data-reps=\'' + JSON.stringify(sreps2) + '\' onclick="athSubmitTimesBtn(this)" style="width:100%;background:var(--accent);border:none;border-radius:10px;padding:16px;font-family:Bebas Neue,sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:1px;min-height:56px;">&#128228; ENVOYER MES TEMPS AU COACH</button>';
+            html += '<div id="asendmsg_' + sid2 + '" style="font-family:DM Mono,monospace;font-size:9px;text-align:center;min-height:14px;margin-top:8px;"></div>';
+            html += '</div>';
+          }
 
           html += '</div></div></div>';
         });
       });
 
       el.innerHTML = html;
+    });
+}
+
+// ── Chrono inline athlète ──
+var _athChronos = {};
+
+function athStartChrono(sid, bi, minutes) {
+  var key = sid + '_' + bi;
+  if (_athChronos[key] && _athChronos[key].interval) clearInterval(_athChronos[key].interval);
+  var remaining = (minutes || 0) * 60;
+  _athChronos[key] = { remaining: remaining };
+  function tick() {
+    if (!_athChronos[key]) return;
+    _athChronos[key].remaining--;
+    remaining = _athChronos[key].remaining;
+    var disp = document.getElementById('acdisp_' + key);
+    if (disp) {
+      var m = Math.floor(Math.max(0, remaining) / 60);
+      var s = Math.max(0, remaining) % 60;
+      disp.textContent = String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+      disp.style.color = remaining <= 10 ? '#22c55e' : remaining <= 30 ? '#f59e0b' : 'var(--accent)';
+    }
+    if (remaining <= 0) {
+      clearInterval(_athChronos[key].interval);
+      if (navigator.vibrate) navigator.vibrate([200,100,200]);
+    }
+  }
+  _athChronos[key].interval = setInterval(tick, 1000);
+  tick();
+}
+
+function athResetChrono(sid, bi) {
+  var key = sid + '_' + bi;
+  if (_athChronos[key] && _athChronos[key].interval) clearInterval(_athChronos[key].interval);
+  delete _athChronos[key];
+  var disp = document.getElementById('acdisp_' + key);
+  if (disp) { disp.textContent = '00:00'; disp.style.color = 'var(--accent)'; }
+}
+
+function athSubmitTimesBtn(btn) {
+  var sid = btn.dataset.sid;
+  var nb  = parseInt(btn.dataset.nb);
+  var reps = JSON.parse(btn.dataset.reps);
+  athSubmitTimes(sid, nb, reps);
+}
+
+function athSubmitTimes(sessionId, nbBlocks, repsPerBlock) {
+  if (!_sb || !_athProfile) return;
+  var btn = document.querySelector('#asend_' + sessionId + ' button');
+  var msg = document.getElementById('asendmsg_' + sessionId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Envoi...'; }
+  var newTimes = [];
+  for (var bi = 0; bi < nbBlocks; bi++) {
+    var times = [];
+    var reps = repsPerBlock[bi] || 0;
+    for (var ri = 0; ri < reps; ri++) {
+      var inp = document.getElementById('at_' + sessionId + '_' + bi + '_' + ri);
+      var t = inp ? parseFloat(inp.value) : NaN;
+      times.push(isNaN(t) ? null : t);
+    }
+    newTimes.push(times);
+  }
+  var hasAny = newTimes.some(function(bt){return bt.some(function(t){return t!==null;});});
+  if (!hasAny) {
+    if (btn) { btn.disabled = false; btn.textContent = '📤 ENVOYER MES TEMPS AU COACH'; }
+    if (msg) { msg.textContent = 'Entre au moins un temps.'; msg.style.color = '#f59e0b'; }
+    return;
+  }
+  _sb.from('coach_sessions').select('blocks').eq('id', sessionId).maybeSingle()
+    .then(function(r) {
+      if (r.error || !r.data) {
+        if (btn) { btn.disabled = false; btn.textContent = '📤 ENVOYER MES TEMPS AU COACH'; }
+        if (msg) { msg.textContent = 'Erreur : séance introuvable.'; msg.style.color = '#ef4444'; }
+        return;
+      }
+      var blocks = r.data.blocks || [];
+      blocks.forEach(function(b, bi) { if (newTimes[bi]) b.times = newTimes[bi]; });
+      _sb.from('coach_sessions').update({ blocks: blocks, type: 'done' }).eq('id', sessionId)
+        .then(function(r2) {
+          if (r2.error) {
+            if (btn) { btn.disabled = false; btn.textContent = '📤 ENVOYER MES TEMPS AU COACH'; }
+            if (msg) { msg.textContent = 'Erreur : ' + r2.error.message; msg.style.color = '#ef4444'; }
+            return;
+          }
+          if (msg) { msg.textContent = '✅ Temps envoyés !'; msg.style.color = '#22c55e'; }
+          if (btn) { btn.textContent = '✅ Envoyé !'; }
+          setTimeout(function() { renderAthHistory(); }, 1500);
+        });
     });
 }
 
