@@ -1435,12 +1435,20 @@ function sbApplySettings(s) {
 
 function sbPullAll() {
   sbSyncBadgeSet('⟳ sync…', '#F5C800', false);
-  return Promise.all([
+  var pullsBase = Promise.all([
     sbPull('profiles_data'),
     sbPull('history_data'),
     sbPull('planif_data'),
     sbPull('settings_data')
-  ]).then(function(rs) {
+  ]);
+  var pullCoachSessions = (_sb && _sbUser)
+    ? _sb.from('coach_sessions').select('*').eq('coach_uid', _sbUser.id)
+         .order('session_date', { ascending: false }).then(function(r) { return r.error ? [] : (r.data || []); })
+    : Promise.resolve([]);
+
+  return Promise.all([pullsBase, pullCoachSessions]).then(function(results) {
+    var rs = results[0];
+    var coachSessions = results[1];
     var changed = false;
     if (rs[0] !== null) {
       profiles = rs[0];
@@ -1458,6 +1466,37 @@ function sbPullAll() {
       changed = true;
     }
     sbApplySettings(rs[3]);
+    // Merger les séances athletes (type=done) dans historyData
+    if (coachSessions.length) {
+      coachSessions.filter(function(s) { return s.type === 'done'; }).forEach(function(s) {
+        // Trouver le profil par nom
+        var p = profiles.find(function(pr) {
+          var pn = (pr.name||'').toLowerCase();
+          var sn = (s.athlete_name||'').toLowerCase();
+          return pn === sn || pn.includes(sn) || sn.includes(pn);
+        });
+        if (!p) return;
+        // Vérifier si déjà présent (eviter doublons)
+        var pid = p.id;
+        if (!historyData[pid]) historyData[pid] = [];
+        var exists = historyData[pid].some(function(h) {
+          return h._csId === s.id;
+        });
+        if (!exists) {
+          var session = {
+            _csId: s.id,
+            date: s.session_date,
+            conditions: s.conditions,
+            blocks: s.blocks,
+            athlete: s.athlete_name,
+            note: s.note
+          };
+          historyData[pid].unshift(session);
+          changed = true;
+        }
+      });
+      if (changed) localStorage.setItem('sc_history', JSON.stringify(historyData));
+    }
     renderProfiles(); renderHome();
     loginHide(); sbUpdateNavBar();
     sbSyncBadgeSet('✓ sync', '#22c55e', true);
@@ -11549,9 +11588,29 @@ function athSubmitTimes(sessionId, nbBlocks, repsPerBlock) {
           }
           if (msg) { msg.textContent = '✅ Temps envoyés !'; msg.style.color = '#22c55e'; }
           if (btn) { btn.textContent = '✅ Envoyé !'; }
-          setTimeout(function() { renderAthHistory(); }, 1500);
+          setTimeout(function() { _athCurrentTab = 'done'; athSwitchTab('done'); }, 1500);
         });
     });
+}
+
+var _athCurrentTab = 'planned';
+
+function athSwitchTab(tab) {
+  _athCurrentTab = tab;
+  var btnP = document.getElementById('athTabPlanned');
+  var btnD = document.getElementById('athTabDone');
+  if (btnP) { btnP.style.background = tab==='planned'?'var(--accent)':'var(--surface2)'; btnP.style.color = tab==='planned'?'#000':'var(--muted)'; }
+  if (btnD) { btnD.style.background = tab==='done'?'var(--accent)':'var(--surface2)'; btnD.style.color = tab==='done'?'#000':'var(--muted)'; }
+  renderAthHistory();
+}
+
+function athDeleteSession(sessionId) {
+  if (!confirm('Supprimer cette séance ?')) return;
+  if (!_sb) return;
+  _sb.from('coach_sessions').delete().eq('id', sessionId).then(function(r) {
+    if (r.error) { alert('Erreur : ' + r.error.message); return; }
+    renderAthHistory();
+  });
 }
 
 function athToggleHistDetail(detailId, cardEl) {
@@ -12448,7 +12507,18 @@ setTimeout(() => {
   <!-- HISTORIQUE -->
   <div id="ath-page-history" class="ath-page">
     <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:4px;">// HISTORIQUE</div>
-    <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;margin-bottom:20px;line-height:1;">MES SÉANCES</div>
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;margin-bottom:16px;line-height:1;">MES SÉANCES</div>
+    <!-- Onglets -->
+    <div style="display:flex;gap:0;margin-bottom:16px;border:1px solid var(--border);border-radius:6px;overflow:hidden;">
+      <button id="athTabPlanned" onclick="athSwitchTab('planned')"
+        style="flex:1;padding:12px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;border:none;cursor:pointer;transition:all .15s;background:var(--accent);color:#000;">
+        📋 À FAIRE
+      </button>
+      <button id="athTabDone" onclick="athSwitchTab('done')"
+        style="flex:1;padding:12px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;border:none;cursor:pointer;transition:all .15s;background:var(--surface2);color:var(--muted);">
+        ✓ RÉALISÉES
+      </button>
+    </div>
     <div id="athHistoryContent"><div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);">Chargement...</div></div>
   </div>
 
