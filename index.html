@@ -10817,6 +10817,7 @@ function athGoPage(name) {
   var btn  = document.getElementById('ath-nav-' + name);
   if (page) page.classList.add('active');
   if (btn)  btn.classList.add('active');
+  if (name === 'home')     { renderAthHome(); }
   if (name === 'history') renderAthHistory();
   if (name === 'profile') {
     if (_sb && _athProfile) {
@@ -10853,6 +10854,7 @@ function enterAthleteMode(profile) {
     athRenderExoSelector();
     athUpdateForceTable();
     renderAthProfileInfo();
+    athGoPage('home');
   }, 50);
 }
 
@@ -12200,6 +12202,122 @@ function journalDeleteSession(id) {
     });
 }
 
+// ═══════════════════════════════════════════
+// ACCUEIL ATHLÈTE
+// ═══════════════════════════════════════════
+function renderAthHome() {
+  if (!_athProfile) return;
+
+  // Salutation + date
+  var greeting = document.getElementById('athHomeGreeting');
+  var dateEl   = document.getElementById('athHomeDate');
+  if (greeting) {
+    var h = new Date().getHours();
+    var salut = h < 12 ? 'BONJOUR' : h < 18 ? 'BONJOUR' : 'BONSOIR';
+    greeting.textContent = salut + ', ' + (_athProfile.name || 'ATHLÈTE').toUpperCase() + ' !';
+  }
+  if (dateEl) {
+    var now = new Date();
+    var days = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+    var months = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+    dateEl.textContent = days[now.getDay()] + ' ' + now.getDate() + ' ' + months[now.getMonth()] + ' ' + now.getFullYear();
+  }
+
+  _renderAthHomeFeedbackCard();
+  _renderAthHomeSessions();
+  _renderAthHomeStats();
+}
+
+function _renderAthHomeFeedbackCard() {
+  var el = document.getElementById('athHomeFeedbackCard');
+  if (!el) return;
+
+  // Vérifier si feedback de la semaine déjà soumis
+  if (!_sb || !_athProfile) return;
+  var wid = getISOWeekId();
+  _sb.from('athlete_feedback').select('id').eq('athlete_uid', _athProfile.user_id).eq('week_id', wid).maybeSingle()
+    .then(function(r) {
+      var submitted = !!(r.data);
+      var badge = document.getElementById('athFeedbackBadge');
+
+      if (submitted) {
+        if (badge) badge.style.display = 'none';
+        el.innerHTML = '<div data-pg="feedback" style="background:rgba(34,197,94,.1);border:1px solid #22c55e;border-radius:12px;padding:16px;display:flex;align-items:center;gap:14px;cursor:pointer;" onclick="athGoPage(this.dataset.pg)">'
+          + '<div style="font-size:28px;">✅</div>'
+          + '<div><div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:#22c55e;">FEEDBACK ENVOYÉ</div>'
+          + '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:2px;">' + getISOWeekLabel() + '</div></div>'
+          + '</div>';
+      } else {
+        if (badge) badge.style.display = 'block';
+        el.innerHTML = '<div data-pg="feedback" style="background:rgba(239,68,68,.1);border:2px solid #ef4444;border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:space-between;gap:14px;cursor:pointer;" onclick="athGoPage(this.dataset.pg)">'
+          + '<div style="display:flex;align-items:center;gap:14px;">'
+          + '<div style="font-size:28px;">📋</div>'
+          + '<div><div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:#ef4444;">FEEDBACK À ENVOYER</div>'
+          + '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:2px;">Rappel : envoie ton bilan de semaine</div>'
+          + '</div>'
+          + '<div style="font-family:Bebas Neue,sans-serif;font-size:24px;color:#ef4444;">→</div>'
+          + '</div>';
+      }
+    });
+}
+
+function _renderAthHomeSessions() {
+  var el = document.getElementById('athHomeSessions');
+  if (!el || !_sb || !_athProfile || !_athCoachUid) {
+    if (el) el.innerHTML = '';
+    return;
+  }
+  var athName = (_athProfile.name || '').toLowerCase();
+  _sb.from('coach_sessions').select('*')
+    .eq('coach_uid', _athCoachUid)
+    .eq('type', 'planned')
+    .order('session_date', { ascending: false })
+    .limit(10)
+    .then(function(r) {
+      var sessions = (r.data || []).filter(function(s) {
+        var sn = (s.athlete_name||'').toLowerCase();
+        return sn === athName || sn.includes(athName) || athName.includes(sn);
+      });
+      if (!sessions.length) { el.innerHTML = ''; return; }
+      var html = '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:10px;">// SÉANCES À FAIRE</div>';
+      sessions.forEach(function(s) {
+        var blocks = s.blocks || [];
+        var blocsSummary = blocks.map(function(b){ return (b.reps||'?')+'×'+(b.dist||'?')+'m'; }).join('  ');
+        var d = new Date((s.session_date||'')+'T12:00:00');
+        var days=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+        var months=['jan.','fév.','mar.','avr.','mai','juin','juil.','aoû.','sep.','oct.','nov.','déc.'];
+        var dateStr = days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()];
+        html += '<div data-pg="history" onclick="athGoPage(this.dataset.pg)" style="background:var(--surface);border:2px solid var(--accent);border-radius:12px;padding:14px 16px;margin-bottom:10px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;">';
+        html += '<div><div style="font-family:Bebas Neue,sans-serif;font-size:16px;color:var(--text);">' + dateStr.toUpperCase() + '</div>';
+        html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--accent);margin-top:3px;">' + blocsSummary + '</div>';
+        if (s.conditions) html += '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);margin-top:2px;">📍 '+s.conditions+'</div>';
+        html += '</div>';
+        html += '<div style="font-family:Bebas Neue,sans-serif;font-size:28px;color:var(--accent);">→</div>';
+        html += '</div>';
+      });
+      el.innerHTML = html;
+    });
+}
+
+function _renderAthHomeStats() {
+  var el = document.getElementById('athHomeStats');
+  if (!el || !_athProfile) return;
+  var rm = _athProfile.rm1 || {};
+  var rms = Object.entries(rm).filter(function(e){ return e[1]; });
+  if (!rms.length) { el.innerHTML = ''; return; }
+  var LABELS = { squat:'Squat', hipthrust:'Hip Thrust', deadlift:'Deadlift', rdl:'RDL', powerclean:'Power Clean', bench:'Bench Press', legext:'Leg Ext' };
+  var html = '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:10px;">// MES 1RM</div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
+  rms.forEach(function(e) {
+    html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;">';
+    html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">' + (LABELS[e[0]]||e[0]) + '</div>';
+    html += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--accent2);">' + e[1] + '<span style="font-size:11px;color:var(--muted);">kg</span></div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
 function athToggleHistDetail(detailId, cardEl) {
   var detail = document.getElementById(detailId);
   var chev   = document.getElementById('athchev_' + detailId);
@@ -12953,8 +13071,24 @@ setTimeout(() => {
     </div>
   </div>
 
+  <!-- ACCUEIL -->
+  <div id="ath-page-home" class="ath-page active">
+    <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:4px;">// TABLEAU DE BORD</div>
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;margin-bottom:6px;line-height:1;" id="athHomeGreeting">BONJOUR</div>
+    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:24px;" id="athHomeDate"></div>
+
+    <!-- Carte feedback semaine -->
+    <div id="athHomeFeedbackCard" style="margin-bottom:16px;"></div>
+
+    <!-- Séances à faire -->
+    <div id="athHomeSessions" style="margin-bottom:16px;"></div>
+
+    <!-- Stats rapides -->
+    <div id="athHomeStats" style="margin-bottom:16px;"></div>
+  </div>
+
   <!-- FEEDBACK -->
-  <div id="ath-page-feedback" class="ath-page active">
+  <div id="ath-page-feedback" class="ath-page">
     <div style="margin-bottom:20px;">
       <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--accent);">// FEEDBACK</div>
       <div id="athFeedbackTitle" style="font-family:'Bebas Neue',sans-serif;font-size:34px;line-height:1.1;margin-top:4px;">SEMAINE —</div>
@@ -13298,8 +13432,8 @@ setTimeout(() => {
   </div>
 
   <nav class="ath-nav">
-    <button class="ath-nav-btn active" id="ath-nav-feedback" onclick="athGoPage('feedback')"><span class="icon">📋</span>Feedback</button>
-    <button class="ath-nav-btn" id="ath-nav-calc" onclick="athGoPage('calc')"><span class="icon">⏱</span>Calcul</button>
+    <button class="ath-nav-btn active" id="ath-nav-home" onclick="athGoPage('home')"><span class="icon">🏠</span>Accueil</button>
+    <button class="ath-nav-btn" id="ath-nav-feedback" onclick="athGoPage('feedback')" style="position:relative;"><span class="icon">📋</span>Feedback<span id="athFeedbackBadge" style="display:none;position:absolute;top:6px;right:calc(50% - 22px);width:8px;height:8px;background:#ef4444;border-radius:50%;"></span></button>
     <button class="ath-nav-btn" id="ath-nav-force" onclick="athGoPage('force')"><span class="icon">🏋</span>Force</button>
     <button class="ath-nav-btn" id="ath-nav-history" onclick="athGoPage('history')"><span class="icon">📊</span>Séances</button>
     <button class="ath-nav-btn" id="ath-nav-profile" onclick="athGoPage('profile')"><span class="icon">👤</span>Profil</button>
