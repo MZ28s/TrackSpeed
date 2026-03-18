@@ -1469,31 +1469,43 @@ function sbPullAll() {
     // Merger les séances athletes (type=done) dans historyData
     if (coachSessions.length) {
       coachSessions.filter(function(s) { return s.type === 'done'; }).forEach(function(s) {
-        // Trouver le profil par nom
         var p = profiles.find(function(pr) {
           var pn = (pr.name||'').toLowerCase();
           var sn = (s.athlete_name||'').toLowerCase();
           return pn === sn || pn.includes(sn) || sn.includes(pn);
         });
         if (!p) return;
-        // Vérifier si déjà présent (eviter doublons)
         var pid = p.id;
         if (!historyData[pid]) historyData[pid] = [];
-        var exists = historyData[pid].some(function(h) {
-          return h._csId === s.id;
+
+        // Chercher un doublon : même _csId OU même date+athlète sans _csId
+        var existingIdx = -1;
+        historyData[pid].forEach(function(h, idx) {
+          if (h._csId === s.id) { existingIdx = idx; return; }
+          // Doublon sans _csId : même date et même athlète
+          var sDate = (s.session_date || '').slice(0, 10);
+          var hDate = (h.date || '').slice(0, 10);
+          var sAth  = (s.athlete_name || '').toLowerCase();
+          var hAth  = (h.athlete || '').toLowerCase();
+          if (hDate === sDate && hAth === sAth && !h._csId) { existingIdx = idx; }
         });
-        if (!exists) {
-          var session = {
-            _csId: s.id,
-            date: s.session_date,
-            conditions: s.conditions,
-            blocks: s.blocks,
-            athlete: s.athlete_name,
-            note: s.note
-          };
+
+        var session = {
+          _csId: s.id,
+          date: s.session_date,
+          conditions: s.conditions,
+          blocks: s.blocks,
+          athlete: s.athlete_name,
+          note: s.note
+        };
+
+        if (existingIdx >= 0) {
+          // Remplacer l'entrée existante (met à jour avec les temps)
+          historyData[pid][existingIdx] = session;
+        } else {
           historyData[pid].unshift(session);
-          changed = true;
         }
+        changed = true;
       });
       if (changed) localStorage.setItem('sc_history', JSON.stringify(historyData));
     }
