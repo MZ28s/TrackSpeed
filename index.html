@@ -10762,27 +10762,33 @@ function submitFeedback() {
     comment:      document.getElementById('athComment').value,
     created_at:   new Date().toISOString()
   };
-  // Upsert : crée ou met à jour selon week_id + athlete_uid
-  _sb.from('athlete_feedback').upsert(data, { onConflict: 'athlete_uid,week_id' }).then(function(r) {
-    if (r.error) {
-      if (msg) { msg.textContent = 'Erreur : ' + r.error.message; msg.style.color = '#ef4444'; }
-      if (btn) { btn.textContent = '📤 ENVOYER AU COACH'; btn.disabled = false; }
-      return;
-    }
-    if (btn) { btn.textContent = '✅ Envoyé !'; btn.style.background = '#22c55e'; }
-    if (msg) { msg.textContent = 'Mis à jour chez le coach.'; msg.style.color = '#22c55e'; }
-    notifyCoachFeedback(data);
-    // Supprimer le brouillon
-    if (_sb && _athProfile) {
-      _sb.from('athlete_feedback_drafts').delete()
-        .eq('user_id', _athProfile.user_id).eq('week_id', getISOWeekId()).then(function(){});
-    }
-    // Rafraîchir l'historique
-    _editingFeedbackWeekId = null;
-    var title = document.getElementById('athFeedbackTitle');
-    if (title) title.textContent = 'SEMAINE ' + getISOWeekLabel();
-    setTimeout(function() { athLoadFeedbackHistory(); }, 500);
-  });
+  // Vérifier si un feedback existe déjà pour cette semaine → UPDATE sinon INSERT
+  var targetWeekId = _editingFeedbackWeekId || getISOWeekId();
+  _sb.from('athlete_feedback').select('id')
+    .eq('athlete_uid', _athProfile.user_id).eq('week_id', targetWeekId).maybeSingle()
+    .then(function(existing) {
+      var dbOp = (existing.data && existing.data.id)
+        ? _sb.from('athlete_feedback').update(data).eq('id', existing.data.id)
+        : _sb.from('athlete_feedback').insert(data);
+      dbOp.then(function(r) {
+        if (r.error) {
+          if (msg) { msg.textContent = 'Erreur : ' + r.error.message; msg.style.color = '#ef4444'; }
+          if (btn) { btn.textContent = '📤 ENVOYER AU COACH'; btn.disabled = false; }
+          return;
+        }
+        if (btn) { btn.textContent = '✅ Envoyé !'; btn.style.background = '#22c55e'; }
+        if (msg) { msg.textContent = 'Mis à jour chez le coach.'; msg.style.color = '#22c55e'; }
+        notifyCoachFeedback(data);
+        if (_sb && _athProfile) {
+          _sb.from('athlete_feedback_drafts').delete()
+            .eq('user_id', _athProfile.user_id).eq('week_id', getISOWeekId()).then(function(){});
+        }
+        _editingFeedbackWeekId = null;
+        var title = document.getElementById('athFeedbackTitle');
+        if (title) title.textContent = 'SEMAINE ' + getISOWeekLabel();
+        setTimeout(function() { athLoadFeedbackHistory(); }, 500);
+      });
+    });
 }
 
 function athFeedbackTab(tab) {
