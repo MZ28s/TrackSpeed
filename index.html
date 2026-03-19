@@ -10429,6 +10429,7 @@ var RPE_LABELS      = ['','Repos total','Très facile','Facile','Confortable','M
 
 var _feedbackData = {
   rpe: 5,
+  goal_status: null,
   days: { lun:{phys:3,mental:3,coucher:'',lever:''}, mar:{phys:3,mental:3,coucher:'',lever:''},
           mer:{phys:3,mental:3,coucher:'',lever:''}, jeu:{phys:3,mental:3,coucher:'',lever:''},
           ven:{phys:3,mental:3,coucher:'',lever:''}, sam:{phys:3,mental:3,coucher:'',lever:''},
@@ -10752,25 +10753,137 @@ function submitFeedback() {
     athlete_uid:  _athProfile.user_id,
     athlete_name: _athProfile.name,
     coach_uid:    _athCoachUid,
-    week_id:      getISOWeekId(),
+    week_id:      _editingFeedbackWeekId || getISOWeekId(),
     week_label:   getISOWeekLabel(),
     rpe:          _feedbackData.rpe,
     days:         _feedbackData.days,
+    goal_status:  _feedbackData.goal_status || null,
     objective:    document.getElementById('athObjective').value,
     comment:      document.getElementById('athComment').value,
     created_at:   new Date().toISOString()
   };
-  _sb.from('athlete_feedback').insert(data).then(function(r) {
+  // Upsert : crée ou met à jour selon week_id + athlete_uid
+  _sb.from('athlete_feedback').upsert(data, { onConflict: 'athlete_uid,week_id' }).then(function(r) {
     if (r.error) {
       if (msg) { msg.textContent = 'Erreur : ' + r.error.message; msg.style.color = '#ef4444'; }
       if (btn) { btn.textContent = '📤 ENVOYER AU COACH'; btn.disabled = false; }
       return;
     }
-    if (btn) { btn.textContent = '✅ Feedback envoyé !'; btn.style.background = '#22c55e'; }
-    if (msg) { msg.textContent = 'Ton coach a été notifié.'; msg.style.color = '#22c55e'; }
+    if (btn) { btn.textContent = '✅ Envoyé !'; btn.style.background = '#22c55e'; }
+    if (msg) { msg.textContent = 'Mis à jour chez le coach.'; msg.style.color = '#22c55e'; }
     notifyCoachFeedback(data);
+    // Supprimer le brouillon
+    if (_sb && _athProfile) {
+      _sb.from('athlete_feedback_drafts').delete()
+        .eq('user_id', _athProfile.user_id).eq('week_id', getISOWeekId()).then(function(){});
+    }
+    // Rafraîchir l'historique
+    _editingFeedbackWeekId = null;
+    var title = document.getElementById('athFeedbackTitle');
+    if (title) title.textContent = 'SEMAINE ' + getISOWeekLabel();
+    setTimeout(function() { athLoadFeedbackHistory(); }, 500);
   });
 }
+
+function athToggleFbDetail(hdr) {
+  var det = hdr.nextElementSibling;
+  if (!det) return;
+  det.style.display = det.style.display === 'none' ? 'block' : 'none';
+}
+
+function setGoalStatus(status) {
+  _feedbackData.goal_status = (_feedbackData.goal_status === status) ? null : status;
+  updateGoalStatusUI();
+  autoSaveDraft();
+}
+
+function updateGoalStatusUI() {
+  var statuses = { achieved: '#22c55e', partial: '#f59e0b', failed: '#ef4444' };
+  var labels   = { achieved: '✅<br>ATTEINT', partial: '⚡<br>PARTIEL', failed: '❌<br>NON ATTEINT' };
+  Object.keys(statuses).forEach(function(s) {
+    var btn = document.getElementById('goalBtn_' + s);
+    if (!btn) return;
+    var active = _feedbackData.goal_status === s;
+    btn.style.borderColor  = active ? statuses[s] : 'var(--border)';
+    btn.style.background   = active ? statuses[s] + '22' : 'var(--surface2)';
+    btn.style.color        = active ? statuses[s] : 'var(--muted)';
+    btn.innerHTML          = labels[s];
+  });
+}
+
+function athLoadFeedbackHistory() {
+  var el = document.getElementById('athFeedbackHistoryList');
+  if (!el || !_sb || !_athProfile) return;
+  el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);text-align:center;padding:8px 0;">Chargement...</div>';
+  _sb.from('athlete_feedback').select('*')
+    .eq('athlete_uid', _athProfile.user_id)
+    .order('week_id', { ascending: false })
+    .limit(20)
+    .then(function(r) {
+      if (r.error || !r.data || !r.data.length) {
+        el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);text-align:center;padding:8px 0;">Aucun feedback envoyé.</div>';
+        return;
+      }
+      var currentWid = getISOWeekId();
+      var html = '';
+      var GOAL_LABELS = { achieved:'✅ Atteint', partial:'⚡ Partiellement', failed:'❌ Non atteint' };
+      var GOAL_COLORS = { achieved:'#22c55e', partial:'#f59e0b', failed:'#ef4444' };
+      r.data.forEach(function(fb) {
+        var isCurrent = fb.week_id === currentWid;
+        var rpeColor = fb.rpe <= 4 ? '#22c55e' : fb.rpe <= 7 ? '#f59e0b' : '#ef4444';
+        var detId = 'fbhist_' + fb.week_id;
+        html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden;">';
+        // Header
+        html += '<div style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="athToggleFbDetail(this)">';
+        html += '<div>';
+        html += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--text);">' + (fb.week_label || fb.week_id) + (isCurrent ? ' <span style="font-family:DM Mono,monospace;font-size:8px;color:var(--accent);">← CETTE SEMAINE</span>' : '') + '</div>';
+        if (fb.goal_status) html += '<div style="font-family:DM Mono,monospace;font-size:8px;color:' + (GOAL_COLORS[fb.goal_status]||'var(--muted)') + ';margin-top:2px;">' + (GOAL_LABELS[fb.goal_status]||'') + '</div>';
+        html += '</div>';
+        html += '<span style="font-family:Bebas Neue,sans-serif;font-size:20px;color:' + rpeColor + ';">RPE ' + fb.rpe + '</span>';
+        html += '</div>';
+        // Detail (hidden by default except current)
+        html += '<div style="display:' + (isCurrent?'block':'none') + ';border-top:1px solid var(--border);padding:12px 14px;">';
+        if (fb.objective) html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-bottom:6px;">🎯 ' + fb.objective + '</div>';
+        if (fb.comment)   html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-bottom:10px;">💬 ' + fb.comment + '</div>';
+        // Bouton modifier
+        html += '<button data-fbid="' + fb.id + '" data-weekid="' + fb.week_id + '" onclick="athEditFeedback(this.dataset.fbid, this.dataset.weekid)" style="width:100%;background:none;border:1px solid var(--accent);border-radius:8px;padding:10px;font-family:Bebas Neue,sans-serif;font-size:16px;color:var(--accent);cursor:pointer;letter-spacing:1px;">✏️ MODIFIER CE FEEDBACK</button>';
+        html += '</div></div>';
+      });
+      el.innerHTML = html;
+    });
+}
+
+function athEditFeedback(fbId, weekId) {
+  if (!_sb) return;
+  _sb.from('athlete_feedback').select('*').eq('id', fbId).maybeSingle().then(function(r) {
+    if (!r.data) return;
+    var fb = r.data;
+    // Charger dans _feedbackData
+    _feedbackData = {
+      rpe: fb.rpe || 5,
+      days: fb.days || {},
+      goal_status: fb.goal_status || null,
+      objective: fb.objective || '',
+      comment: fb.comment || ''
+    };
+    // Forcer le week_id courant à celui du feedback pour l'upsert
+    _editingFeedbackWeekId = weekId;
+    // Mettre à jour l'UI
+    renderDailyRpe(); renderDailyForm(); renderSleepRows(); updateRpeAvg(); updateSleepAvg();
+    updateGoalStatusUI();
+    var obj = document.getElementById('athObjective'); if (obj) obj.value = fb.objective || '';
+    var com = document.getElementById('athComment');   if (com) com.value = fb.comment || '';
+    var title = document.getElementById('athFeedbackTitle');
+    if (title) title.textContent = 'MODIFIER — ' + (fb.week_label || weekId);
+    var submitBtn = document.getElementById('athSubmitBtn');
+    if (submitBtn) { submitBtn.textContent = '📤 METTRE À JOUR'; submitBtn.style.background = ''; submitBtn.disabled = false; }
+    // Scroll en haut
+    var page = document.getElementById('ath-page-feedback');
+    if (page) page.scrollTop = 0;
+  });
+}
+
+var _editingFeedbackWeekId = null;
 
 function notifyCoachFeedback(feedbackData) {
   if (!feedbackData.coach_uid) return;
@@ -10888,7 +11001,7 @@ function athGoPage(name) {
         .then(function(r) { if (r.data) { _athProfile = r.data; _athCoachUid = r.data.coach_uid || null; } renderAthProfileInfo(); });
     } else { renderAthProfileInfo(); }
   }
-  if (name === 'feedback') { renderDailyRpe(); renderDailyForm(); renderSleepRows(); }
+  if (name === 'feedback') { renderDailyRpe(); renderDailyForm(); renderSleepRows(); athLoadFeedbackHistory(); }
   if (name === 'calc')     { athCalculate(); }
   if (name === 'force')    { athRenderExoSelector(); athUpdateForceTable(); journalLoadHistory(); }
 }
@@ -11138,6 +11251,8 @@ function initFeedbackForm() {
         var obj = document.getElementById('athObjective'); var com = document.getElementById('athComment');
         if (obj) obj.value = _feedbackData.objective || '';
         if (com) com.value = _feedbackData.comment || '';
+        _feedbackData.goal_status = r.data.data.goal_status || null;
+        updateGoalStatusUI();
         renderDailyRpe(); renderDailyForm(); renderSleepRows(); updateRpeAvg(); updateSleepAvg();
       });
     return; // async - suite dans le callback .then()
@@ -13410,7 +13525,22 @@ setTimeout(() => {
       </div>
     </div>
     <div class="ath-card">
-      <div class="ath-card-title">Objectif semaine prochaine</div>
+      <div class="ath-card-title">Objectif de la semaine passée</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
+        <button id="goalBtn_achieved" onclick="setGoalStatus('achieved')"
+          style="padding:12px 6px;border:2px solid var(--border);border-radius:10px;background:var(--surface2);cursor:pointer;font-family:'DM Mono',monospace;font-size:8px;letter-spacing:.5px;color:var(--muted);transition:all .15s;min-height:56px;line-height:1.4;">
+          ✅<br>ATTEINT
+        </button>
+        <button id="goalBtn_partial" onclick="setGoalStatus('partial')"
+          style="padding:12px 6px;border:2px solid var(--border);border-radius:10px;background:var(--surface2);cursor:pointer;font-family:'DM Mono',monospace;font-size:8px;letter-spacing:.5px;color:var(--muted);transition:all .15s;min-height:56px;line-height:1.4;">
+          ⚡<br>PARTIEL
+        </button>
+        <button id="goalBtn_failed" onclick="setGoalStatus('failed')"
+          style="padding:12px 6px;border:2px solid var(--border);border-radius:10px;background:var(--surface2);cursor:pointer;font-family:'DM Mono',monospace;font-size:8px;letter-spacing:.5px;color:var(--muted);transition:all .15s;min-height:56px;line-height:1.4;">
+          ❌<br>NON ATTEINT
+        </button>
+      </div>
+      <div class="ath-card-title" style="margin-top:4px;">Objectif semaine prochaine</div>
       <textarea class="ath-textarea" id="athObjective" placeholder="Ex : Améliorer mon départ..."></textarea>
     </div>
     <div class="ath-card">
@@ -13422,6 +13552,10 @@ setTimeout(() => {
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;"><div style="flex:1;height:1px;background:var(--border);"></div><span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);">ou</span><div style="flex:1;height:1px;background:var(--border);"></div></div>
     <button class="ath-submit-btn" id="athSubmitBtn" onclick="submitFeedback()">📤 ENVOYER AU COACH</button>
     <div id="athSubmitMsg" style="text-align:center;font-family:'DM Mono',monospace;font-size:9px;color:#22c55e;min-height:14px;margin-bottom:16px;"></div>
+
+    <!-- Historique feedbacks -->
+    <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--accent);padding:12px 0 8px;border-top:1px solid var(--border);margin-top:8px;">// HISTORIQUE</div>
+    <div id="athFeedbackHistoryList"><div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-align:center;padding:12px 0;">Chargement...</div></div>
   </div>
 
   <!-- CALCUL -->
