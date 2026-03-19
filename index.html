@@ -13688,7 +13688,11 @@ setTimeout(() => {
       <button onclick="journalNewSession()" style="width:100%;background:var(--accent);border:none;border-radius:10px;padding:16px;font-family:'Bebas Neue',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:20px;min-height:56px;">+ NOUVELLE SÉANCE</button>
       <div id="journalForm" style="display:none;" class="ath-card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-          <div class="ath-card-title" style="margin-bottom:0;">Séance du <span id="journalFormDate"></span></div>
+          <div class="ath-card-title" style="margin-bottom:0;display:flex;align-items:center;gap:8px;">Séance du
+            <input type="date" id="journalFormDate"
+              onchange="_journalSessionDate=this.value"
+              style="background:none;border:none;border-bottom:2px solid var(--accent);color:var(--accent);font-family:'Bebas Neue',sans-serif;font-size:16px;cursor:pointer;outline:none;padding:2px 4px;">
+          </div>
           <button onclick="journalCancelForm()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);">✕</button>
         </div>
         <div id="journalEntries"></div>
