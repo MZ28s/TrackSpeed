@@ -11589,48 +11589,53 @@ function renderAthHistory() {
               html += '<button data-sid="' + s.id + '" data-nb="' + blocks.length + '" data-reps=\'' + JSON.stringify(blocks.map(function(b2){return Array.isArray(b2.reps)?b2.reps.length:(parseInt(b2.reps)||0);})) + '\' onclick="athEditTimes(this)" style="margin-top:8px;background:none;border:1px solid var(--border);border-radius:4px;padding:6px 12px;font-family:DM Mono,monospace;font-size:8px;color:var(--muted);cursor:pointer;">✏️ Modifier mes temps</button>';
               html += '<div id="athedit_' + s.id + '" style="display:none;margin-top:10px;"></div>';
             } else if (!isDone) {
-              // Séance à faire : chrono + saisie temps
-              html += '<div style="margin-top:8px;">';
               var sessionId = s.id;
               var restMin = b.rest || 0;
               var restSec = Math.round((restMin % 1) * 60);
               var restMinInt = Math.floor(restMin);
               var chronoKey = sessionId + '_' + bi;
-              // Chrono récupération style coach
-              html += '<div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:12px;">';
-              html += '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:10px;">RÉCUPÉRATION — BLOC ' + (bi+1) + '</div>';
-              // Affichage temps
+              var tCibleStr = b.tCible ? parseFloat(b.tCible).toFixed(2) + 's' : null;
+              var tCibleVal = b.tCible || 0;
+
+              // ── En-tête bloc lisible ──
+              html += '<div style="margin-top:12px;">';
+              html += '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;color:var(--text);margin-bottom:4px;">' + reps + ' × ' + (b.dist||'?') + 'm</div>';
+              html += '<div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">';
+              html += '<span style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">@ ' + (b.pct||'?') + '%</span>';
+              if (tCibleStr) html += '<span style="font-family:DM Mono,monospace;font-size:10px;">CIBLE <span style="font-family:Bebas Neue,sans-serif;font-size:16px;color:var(--accent2);">' + tCibleStr + '</span></span>';
+              html += '</div>';
+
+              // ── Grille reps : bouton chrono + input ──
+              html += '<div style="display:grid;grid-template-columns:repeat(' + Math.min(reps, 2) + ',1fr);gap:10px;margin-bottom:14px;">';
+              for (var ri3 = 0; ri3 < reps; ri3++) {
+                html += '<div style="background:var(--surface2);border-radius:10px;padding:12px;">';
+                // Label rep
+                html += '<div style="font-family:Bebas Neue,sans-serif;font-size:14px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;">REP ' + (ri3+1) + (tCibleStr ? ' — ' + tCibleStr : '') + '</div>';
+                // Bouton lancer chrono pour cette rep
+                html += '<button data-ckey="' + chronoKey + '" onclick="athChronoStart(this.dataset.ckey)" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:Bebas Neue,sans-serif;font-size:16px;color:var(--accent);cursor:pointer;letter-spacing:1px;margin-bottom:8px;min-height:44px;">&#9654; RÉCUP ' + restMinInt + (restSec ? ':'+String(restSec).padStart(2,'0') : '') + ' MIN</button>';
+                // Input temps
+                html += '<input class="ath-time-input" type="number" step="0.01" min="1" max="99" placeholder="' + (tCibleStr||'—') + '" id="at_' + sessionId + '_' + bi + '_' + ri3 + '" oninput="athColorInput(this,' + tCibleVal + ')" style="font-size:22px;text-align:center;">';
+                html += '</div>';
+              }
+              html += '</div>';
+
+              // ── Chrono récupération bloc ──
+              html += '<div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:4px;">';
+              html += '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:8px;">⏱ CHRONO RÉCUPÉRATION</div>';
               html += '<div id="acdisp_' + chronoKey + '" style="font-family:Bebas Neue,sans-serif;font-size:52px;color:var(--accent);text-align:center;line-height:1;margin-bottom:8px;letter-spacing:2px;">00:00</div>';
-              // Barre de progression
               html += '<div style="width:100%;height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:12px;">';
               html += '<div id="acbar_' + chronoKey + '" style="height:100%;background:linear-gradient(to right,var(--accent),#f59e0b);width:100%;border-radius:2px;transition:width .5s linear;"></div>';
               html += '</div>';
-              // Inputs durée modifiables
               html += '<div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:12px;">';
-              html += '<input id="acmin_' + chronoKey + '" type="number" min="0" max="59" value="' + (restMinInt||'') + '" placeholder="2" data-ckey="' + chronoKey + '" onclick="event.stopPropagation()" onchange="athChronoSetDuration(this.dataset.ckey)" style="width:52px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;font-family:Bebas Neue,sans-serif;font-size:20px;color:var(--text);text-align:center;outline:none;">';
-              html += '<span style="font-family:Bebas Neue,sans-serif;font-size:24px;color:var(--muted);">:</span>';
-              html += '<input id="acsec_' + chronoKey + '" type="number" min="0" max="59" value="' + (restSec ? String(restSec).padStart(2,'0') : '') + '" placeholder="00" data-ckey="' + chronoKey + '" onclick="event.stopPropagation()" onchange="athChronoSetDuration(this.dataset.ckey)" style="width:52px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;font-family:Bebas Neue,sans-serif;font-size:20px;color:var(--text);text-align:center;outline:none;">';
-              html += '<span style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);">min : sec</span>';
+              html += '<input id="acmin_' + chronoKey + '" type="number" min="0" max="59" value="' + (restMinInt||'') + '" placeholder="2" data-ckey="' + chronoKey + '" onclick="event.stopPropagation()" onchange="athChronoSetDuration(this.dataset.ckey)" style="width:56px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;font-family:Bebas Neue,sans-serif;font-size:22px;color:var(--text);text-align:center;outline:none;">';
+              html += '<span style="font-family:Bebas Neue,sans-serif;font-size:28px;color:var(--muted);">:</span>';
+              html += '<input id="acsec_' + chronoKey + '" type="number" min="0" max="59" value="' + (restSec ? String(restSec).padStart(2,'0') : '') + '" placeholder="00" data-ckey="' + chronoKey + '" onclick="event.stopPropagation()" onchange="athChronoSetDuration(this.dataset.ckey)" style="width:56px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;font-family:Bebas Neue,sans-serif;font-size:22px;color:var(--text);text-align:center;outline:none;">';
+              html += '<span style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">min : sec</span>';
               html += '</div>';
-              // Boutons
               html += '<div style="display:flex;gap:8px;">';
-              html += '<button id="acbtn_' + chronoKey + '" data-key="' + chronoKey + '" onclick="athChronoToggle(this.dataset.key)" style="flex:1;background:var(--accent);border:none;border-radius:8px;padding:14px;font-family:Bebas Neue,sans-serif;font-size:20px;color:#000;cursor:pointer;min-height:52px;">&#9654;</button>';
-              html += '<button data-key="' + chronoKey + '" onclick="athChronoReset(this.dataset.key)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:14px 16px;font-size:20px;cursor:pointer;color:var(--muted);min-height:52px;">&#8635;</button>';
+              html += '<button id="acbtn_' + chronoKey + '" data-key="' + chronoKey + '" onclick="athChronoToggle(this.dataset.key)" style="flex:1;background:var(--accent);border:none;border-radius:8px;padding:14px;font-family:Bebas Neue,sans-serif;font-size:22px;color:#000;cursor:pointer;min-height:56px;">&#9654;</button>';
+              html += '<button data-key="' + chronoKey + '" onclick="athChronoReset(this.dataset.key)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:14px 16px;font-size:22px;cursor:pointer;color:var(--muted);min-height:56px;">&#8635;</button>';
               html += '</div>';
-              html += '</div>';
-              // Temps cible
-              var tCibleStr = b.tCible ? parseFloat(b.tCible).toFixed(2) + 's' : null;
-              if (tCibleStr) {
-                html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin:8px 0 4px;">CIBLE <span style="font-family:Bebas Neue,sans-serif;font-size:16px;color:var(--accent2);">' + tCibleStr + '</span> par répétition</div>';
-              }
-              // Inputs temps
-              html += '<div style="display:grid;grid-template-columns:repeat(' + Math.min(reps, 4) + ',1fr);gap:8px;margin-top:8px;">';
-              for (var ri3 = 0; ri3 < reps; ri3++) {
-                html += '<div>';
-                html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);text-align:center;margin-bottom:4px;">R' + (ri3+1) + '</div>';
-                html += '<input class="ath-time-input" type="number" step="0.01" min="1" max="99" placeholder="' + (tCibleStr||'—') + '" id="at_' + sessionId + '_' + bi + '_' + ri3 + '" oninput="athColorInput(this,' + (b.tCible||0) + ')">';
-                html += '</div>';
-              }
               html += '</div>';
               html += '</div>';
             }
