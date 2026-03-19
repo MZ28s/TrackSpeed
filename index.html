@@ -12982,6 +12982,7 @@ function _doRenderCoachFeedbacks() {
   _sb.from('athlete_feedback')
     .select('*')
     .eq('coach_uid', _sbUser.id)
+    .neq('coach_hidden', true)
     .order('created_at', { ascending: false })
     .then(function(r) {
       if (r.error) {
@@ -13070,23 +13071,15 @@ function fbToggleWeek(gid) {
 
 function deleteFeedback(fbId, event) {
   if (event) event.stopPropagation();
-  if (!confirm('Supprimer ce feedback ? Cette action est irréversible.')) return;
+  if (!confirm('Masquer ce feedback ? Il restera visible pour l\'athlète.')) return;
   if (!_sb || !_sbUser) { alert('Non connecté.'); return; }
-  // Filtre sur coach_uid ET sur id pour satisfaire les policies RLS Supabase
+  // Masquer côté coach uniquement — ne pas supprimer pour l'athlète
   _sb.from('athlete_feedback')
-    .delete()
+    .update({ coach_hidden: true })
     .eq('id', fbId)
     .eq('coach_uid', _sbUser.id)
     .then(function(r) {
-      if (r.error) {
-        // Si erreur avec coach_uid, essayer sans (feedbacks sans coach_uid)
-        _sb.from('athlete_feedback').delete().eq('id', fbId)
-          .then(function(r2) {
-            if (r2.error) { alert('Erreur : ' + (r2.error ? r2.error.message : 'inconnue')); return; }
-            _fbLocalDeleteId(fbId);
-          });
-        return;
-      }
+      if (r.error) { alert('Erreur : ' + r.error.message); return; }
       _fbLocalDeleteId(fbId);
     });
 }
