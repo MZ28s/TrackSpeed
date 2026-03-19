@@ -12940,15 +12940,16 @@ setTimeout(() => {
 
 
 <!-- ══ PAGE DE CONNEXION ══ -->
-<div id="loginScreen" style="position:fixed;inset:0;z-index:99999;background:#0a0a0b;display:block;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:max(20px, env(safe-area-inset-top)) 20px max(40px, env(safe-area-inset-bottom)) 20px;">
+<div id="loginScreen" style="position:fixed;inset:0;z-index:99999;background:#0a0a0b;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;align-items:center;">
 
+  <div style="width:100%;max-width:420px;padding:max(24px,env(safe-area-inset-top)) 20px max(60px,env(safe-area-inset-bottom));box-sizing:border-box;flex-shrink:0;">
   <!-- Logo -->
-  <div style="text-align:center;margin-bottom:20px;margin-top:12px;max-width:400px;margin-left:auto;margin-right:auto;">
+  <div style="text-align:center;margin-bottom:24px;">
     <div style="font-family:'Bebas Neue',sans-serif;font-size:52px;color:#F5C800;letter-spacing:4px;line-height:1;">TRACKSPEED</div>
     <div style="font-family:'DM Mono',monospace;font-size:9px;color:#6b6b7a;letter-spacing:3px;margin-top:4px;">OUTIL DE COACHING SPRINT</div>
   </div>
 
-  <div style="background:#111114;border:1px solid #1e1e24;border-radius:12px;width:100%;max-width:400px;overflow:visible;margin-left:auto;margin-right:auto;margin-bottom:40px;">
+  <div style="background:#111114;border:1px solid #1e1e24;border-radius:12px;width:100%;overflow:hidden;">
 
     <!-- Onglets CONNEXION / INSCRIPTION -->
     <div style="display:flex;border-bottom:1px solid #1e1e24;">
@@ -13554,6 +13555,7 @@ setTimeout(() => {
     <button class="ath-nav-btn" id="ath-nav-history" onclick="athGoPage('history')"><span class="icon">📊</span>Séances</button>
     <button class="ath-nav-btn" id="ath-nav-profile" onclick="athGoPage('profile')"><span class="icon">👤</span>Profil</button>
   </nav>
+  </div><!-- /content-wrapper -->
 </div>
 
 </body>
