@@ -11514,36 +11514,6 @@ function loadCurrentWeekFeedback() {
     });
 }
 
-function submitFeedback() {
-  if (!_sb || !_athProfile) return;
-  var btn=document.getElementById('athSubmitBtn'); var msg=document.getElementById('athSubmitMsg');
-  if(btn){btn.textContent='Envoi...';btn.disabled=true;}
-  var rpeVals = ATH_DAYS.map(function(d){return _feedbackData.days[d].rpe;}).filter(function(v){return v!==null;});
-  var rpeAvg = rpeVals.length ? Math.round(rpeVals.reduce(function(a,b){return a+b;},0)/rpeVals.length) : null;
-  var data = {
-    athlete_uid: _athProfile.user_id, athlete_name: _athProfile.name,
-    week_id: getISOWeekId(), week_label: getISOWeekLabel(),
-    rpe: rpeAvg, days: _feedbackData.days,
-    objective: (document.getElementById('athObjective').value||''),
-    comment:   (document.getElementById('athComment').value||''),
-    created_at: new Date().toISOString()
-  };
-  if (_athCoachUid) data.coach_uid = _athCoachUid;
-  if (_athProfile && _athProfile.id) data.profile_id = _athProfile.id;
-  _sb.from('athlete_feedback').insert(data).then(function(r) {
-    if (r.error) {
-      if(msg){msg.textContent='Erreur : '+r.error.message;msg.style.color='#ef4444';}
-      if(btn){btn.textContent='📤 ENVOYER AU COACH';btn.disabled=false;} return;
-    }
-    if(btn){btn.textContent='✅ Envoyé !';btn.classList.add('sent');btn.disabled=true;}
-    if(msg)msg.textContent='Ton coach a été notifié.';
-    // Supprimer le brouillon Supabase après envoi
-    if (_sb && _athProfile) {
-      _sb.from('athlete_feedback_drafts').delete()
-        .eq('user_id', _athProfile.user_id).eq('week_id', getISOWeekId()).then(function(){});
-    }
-  });
-}
 
 // ── Calcul athlète (miroir coach) ─────────────────────────
 var _athCalcMode='100', _athCalcMethod='interp', _athCalcPct=100, _athCurrentExo='squat';
