@@ -12940,15 +12940,15 @@ setTimeout(() => {
 
 
 <!-- ══ PAGE DE CONNEXION ══ -->
-<div id="loginScreen" style="position:fixed;inset:0;z-index:99999;background:#0a0a0b;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:20px;padding-top:max(20px, env(safe-area-inset-top));overflow-y:auto;-webkit-overflow-scrolling:touch;">
+<div id="loginScreen" style="position:fixed;inset:0;z-index:99999;background:#0a0a0b;display:block;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:max(20px, env(safe-area-inset-top)) 20px max(40px, env(safe-area-inset-bottom)) 20px;">
 
   <!-- Logo -->
-  <div style="text-align:center;margin-bottom:20px;margin-top:12px;">
+  <div style="text-align:center;margin-bottom:20px;margin-top:12px;max-width:400px;margin-left:auto;margin-right:auto;">
     <div style="font-family:'Bebas Neue',sans-serif;font-size:52px;color:#F5C800;letter-spacing:4px;line-height:1;">TRACKSPEED</div>
     <div style="font-family:'DM Mono',monospace;font-size:9px;color:#6b6b7a;letter-spacing:3px;margin-top:4px;">OUTIL DE COACHING SPRINT</div>
   </div>
 
-  <div style="background:#111114;border:1px solid #1e1e24;border-radius:12px;width:100%;max-width:400px;overflow:hidden;">
+  <div style="background:#111114;border:1px solid #1e1e24;border-radius:12px;width:100%;max-width:400px;overflow:visible;margin-left:auto;margin-right:auto;margin-bottom:40px;">
 
     <!-- Onglets CONNEXION / INSCRIPTION -->
     <div style="display:flex;border-bottom:1px solid #1e1e24;">
