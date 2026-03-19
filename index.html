@@ -10633,8 +10633,11 @@ function showLinkAthleteModal(profileId) {
         return;
       }
       modal.remove();
-      sbPullAll().then(function() { renderProfiles(); renderHome(); });
-      setTimeout(function() { alert('✅ ' + msg); }, 200);
+      // Petit délai pour laisser le push se propager avant le pull
+      setTimeout(function() {
+        sbPullAll().then(function() { renderProfiles(); renderHome(); });
+      }, 800);
+      setTimeout(function() { alert('✅ ' + msg); }, 300);
     });
   };
   var closeBtn = document.createElement('button');
@@ -13189,10 +13192,14 @@ function linkAthleteById(athId, profileId, callback) {
             profiles.push(newProfile);
           }
 
-          // Étape 5 : pousser vers Supabase immédiatement
-          saveProfiles();
-
-          callback(true, athName + ' ajouté au groupe !');
+          // Étape 5 : pousser vers Supabase et attendre la confirmation avant callback
+          sbPush('profiles_data', profiles).then(function(r) {
+            if (!r || !r.ok) {
+              callback(false, 'Erreur sauvegarde profil : ' + (r ? r.reason : 'inconnue'));
+              return;
+            }
+            callback(true, athName + ' ajouté au groupe !');
+          });
         });
     });
 }
