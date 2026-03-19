@@ -1452,7 +1452,7 @@ function sbPullAll() {
 
   // Pull des PR athlètes liés pour synchroniser les records
   var pullAthProfiles = (_sb && _sbUser)
-    ? _sb.from('athlete_profiles').select('name,records').eq('coach_uid', _sbUser.id)
+    ? _sb.from('athlete_profiles').select('name,records,rm1').eq('coach_uid', _sbUser.id)
          .then(function(r) { return r.error ? [] : (r.data || []); })
     : Promise.resolve([]);
 
@@ -1466,16 +1466,15 @@ function sbPullAll() {
       // profiles → Supabase via sbSyncAll
       changed = true;
     }
-    // Merger les PR des athlètes liés dans les profils coach
+    // Merger les PR ET rm1 des athlètes liés dans les profils coach
     if (athProfiles && athProfiles.length && profiles && profiles.length) {
       var prMerged = false;
       athProfiles.forEach(function(ap) {
-        if (!ap.records) return;
         var apName = (ap.name || '').toLowerCase();
         profiles.forEach(function(p) {
           if ((p.name || '').toLowerCase() === apName) {
-            p.records = ap.records;
-            prMerged = true;
+            if (ap.records) { p.records = ap.records; prMerged = true; }
+            if (ap.rm1)     { p.rm1     = ap.rm1;     prMerged = true; }
           }
         });
       });
@@ -11036,7 +11035,7 @@ function athSaveRecords() {
   _sb.from('athlete_profiles').update({ records: r }).eq('user_id', _athProfile.user_id)
     .then(function() {
       var el = document.getElementById('athRecordsSaved');
-      if (el) { el.textContent = '✓ Sauvegardé'; setTimeout(function() { el.textContent = ''; }, 2000); }
+      if (el) { el.textContent = '✅ PR sauvegardés — visibles chez le coach au prochain sync'; setTimeout(function() { el.textContent = ''; }, 3000); }
     });
 
   // PR synchronisés côté coach au prochain pull via athlete_profiles
@@ -11055,7 +11054,7 @@ function athSaveRm1() {
   
   _sb.from('athlete_profiles').update({ rm1: rm }).eq('user_id', _athProfile.user_id).then(function() {
     var el = document.getElementById('athRm1Saved');
-    if (el) { el.textContent = '✓ Sauvegardé'; setTimeout(function() { el.textContent = ''; }, 2000); }
+    if (el) { el.textContent = '✅ 1RM sauvegardés — visibles chez le coach au prochain sync'; setTimeout(function() { el.textContent = ''; }, 3000); }
   });
 }
 
