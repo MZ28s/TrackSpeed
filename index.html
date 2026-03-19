@@ -12541,6 +12541,7 @@ function _renderHomeAlerts() {
     .select('athlete_name,week_id')
     .eq('coach_uid', _sbUser.id)
     .eq('week_id', currentWid)
+    .neq('coach_hidden', true)
     .then(function(res) {
       var sent = new Set((res.data||[]).map(function(f){ return (f.athlete_name||'').toLowerCase(); }));
       var missing = profiles.filter(function(p){ return !sent.has((p.name||'').toLowerCase()); });
@@ -12568,6 +12569,7 @@ function _renderHomeRPE() {
     .select('athlete_name,rpe,days,goal_status')
     .eq('coach_uid', _sbUser.id)
     .eq('week_id', currentWid)
+    .neq('coach_hidden', true)
     .then(function(res) {
       var feedbacks = res.data || [];
       if (!feedbacks.length) { el.innerHTML = ''; return; }
@@ -12616,6 +12618,7 @@ function _renderHomeFeedbacks() {
   _sb.from('athlete_feedback')
     .select('id,athlete_name,week_label,week_id,rpe,created_at')
     .eq('coach_uid', _sbUser.id)
+    .neq('coach_hidden', true)
     .order('created_at', { ascending: false })
     .limit(5)
     .then(function(res) {
