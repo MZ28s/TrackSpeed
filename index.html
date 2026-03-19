@@ -639,9 +639,12 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
 
   <!-- Liste des profils EN PREMIER -->
   <div class="card" style="margin-bottom:10px;">
-    <div class="card-title">// Mon groupe</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div class="card-title" style="margin:0;">// Mon groupe</div>
+      <button onclick="showLinkAthleteModal(null)" style="background:var(--accent);border:none;border-radius:6px;padding:8px 16px;font-family:'Bebas Neue',sans-serif;font-size:14px;color:#000;cursor:pointer;letter-spacing:1px;">+ CODE ATHLÈTE</button>
+    </div>
     <div class="profile-list" id="profileList">
-      <div class="empty-state" style="padding:24px"><span class="empty-icon">👤</span>Aucun athlète</div>
+      <div class="empty-state" style="padding:24px"><span class="empty-icon">👤</span>Aucun athlète — entre le code d'un athlète pour l'ajouter</div>
     </div>
   </div>
 
@@ -1453,7 +1456,11 @@ function sbPullAll() {
   // Pull des PR athlètes liés pour synchroniser les records
   var pullAthProfiles = (_sb && _sbUser)
     ? _sb.from('athlete_profiles').select('name,records,rm1').eq('coach_uid', _sbUser.id)
-         .then(function(r) { return r.error ? [] : (r.data || []); })
+         .then(function(r) {
+           if (r.error) { console.warn('pullAthProfiles error:', r.error.message); return []; }
+           console.log('pullAthProfiles:', (r.data||[]).length, 'athlètes liés');
+           return r.data || [];
+         })
     : Promise.resolve([]);
 
   return Promise.all([pullsBase, pullCoachSessions, pullAthProfiles]).then(function(results) {
@@ -1467,18 +1474,34 @@ function sbPullAll() {
       changed = true;
     }
     // Merger les PR ET rm1 des athlètes liés dans les profils coach
+    // Les noms athlete_profiles peuvent être "Matteo Zecca" vs "Matteo" dans profiles
     if (athProfiles && athProfiles.length && profiles && profiles.length) {
       var prMerged = false;
       athProfiles.forEach(function(ap) {
-        var apName = (ap.name || '').toLowerCase();
+        // Découper le nom en mots pour comparer le premier mot (prénom)
+        var apWords = (ap.name || '').trim().toLowerCase().split(/\s+/);
+        var apFirst = apWords[0]; // "matteo"
         profiles.forEach(function(p) {
-          if ((p.name || '').toLowerCase() === apName) {
-            if (ap.records) { p.records = ap.records; prMerged = true; }
-            if (ap.rm1)     { p.rm1     = ap.rm1;     prMerged = true; }
+          var pWords = (p.name || '').trim().toLowerCase().split(/\s+/);
+          var pFirst = pWords[0]; // "matteo"
+          // Match si : même nom complet, OU premier mot identique, OU l'un contient l'autre
+          var match = apFirst && pFirst && (
+            apFirst === pFirst ||
+            (ap.name||'').trim().toLowerCase() === (p.name||'').trim().toLowerCase() ||
+            (ap.name||'').trim().toLowerCase().includes((p.name||'').trim().toLowerCase()) ||
+            (p.name||'').trim().toLowerCase().includes((ap.name||'').trim().toLowerCase())
+          );
+          if (match) {
+            if (ap.records && Object.keys(ap.records).length) { p.records = ap.records; prMerged = true; }
+            if (ap.rm1    && Object.keys(ap.rm1).length)     { p.rm1     = ap.rm1;     prMerged = true; }
           }
         });
       });
-      if (prMerged) changed = true;
+      if (prMerged) {
+        changed = true;
+        // Pousser la mise à jour vers Supabase immédiatement
+        sbPush('profiles_data', profiles);
+      }
     }
     if (rs[1] !== null) {
       historyData = rs[1];
@@ -10585,23 +10608,32 @@ function showLinkAthleteModal(profileId) {
   modal.id = 'linkAthModal';
   modal.style.cssText = 'position:fixed;inset:0;z-index:99997;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;padding:20px;';
   var inner = document.createElement('div');
-  inner.style.cssText = 'background:var(--surface);border:1px solid var(--accent);border-radius:12px;padding:32px;max-width:360px;width:100%;text-align:center;';
+  inner.style.cssText = 'background:var(--surface);border:1px solid var(--accent);border-radius:12px;padding:28px 24px;max-width:380px;width:100%;text-align:center;';
   inner.innerHTML =
-    '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:2px;color:var(--muted);margin-bottom:16px;">LIER UN COMPTE ATHLÈTE</div>' +
-    '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-bottom:20px;line-height:1.6;">Entre l&#39;ID que l&#39;athlète t&#39;a communiqué<br>(ex : ATH-4X7K)</div>' +
-    '<input id="linkAthIdInput" type="text" placeholder="ATH-XXXX" maxlength="8" ' +
-    'style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:14px;color:var(--text);font-family:Bebas Neue,sans-serif;font-size:24px;letter-spacing:3px;text-align:center;outline:none;margin-bottom:20px;">';
+    '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;letter-spacing:2px;margin-bottom:6px;">AJOUTER UN ATHLÈTE</div>' +
+    '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-bottom:20px;line-height:1.6;">Entre le code communiqué par l&#39;athl&#232;te.<br>Son profil complet (PR, 1RM) sera importé automatiquement.</div>' +
+    '<input id="linkAthIdInput" type="text" placeholder="ATH-XXXX" maxlength="10" autocapitalize="characters" ' +
+    'style="width:100%;box-sizing:border-box;background:var(--surface2);border:2px solid var(--accent);border-radius:8px;padding:16px;color:var(--text);font-family:Bebas Neue,sans-serif;font-size:28px;letter-spacing:4px;text-align:center;outline:none;margin-bottom:16px;">' +
+    '<div id="linkAthMsg" style="font-family:DM Mono,monospace;font-size:9px;min-height:14px;margin-bottom:12px;"></div>';
   var confirmBtn = document.createElement('button');
-  confirmBtn.textContent = 'LIER L\'ATHLÈTE';
-  confirmBtn.style.cssText = 'width:100%;background:var(--accent);border:none;border-radius:6px;padding:12px;font-family:Bebas Neue,sans-serif;font-size:18px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:10px;';
+  confirmBtn.textContent = '+ IMPORTER LE PROFIL';
+  confirmBtn.style.cssText = 'width:100%;background:var(--accent);border:none;border-radius:8px;padding:14px;font-family:Bebas Neue,sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:10px;min-height:52px;';
   confirmBtn.onclick = function() {
     var id = document.getElementById('linkAthIdInput').value;
     if (!id) return;
+    var msgEl = document.getElementById('linkAthMsg');
     var idClean = (id || '').trim().toUpperCase();
-    modal.remove();
-    linkAthleteById(idClean, profileId, function(ok, msg) {
-      alert(ok ? '✅ ' + msg : '❌ ' + msg);
-      if (ok) { sbPullAll().then(function() { renderProfiles(); renderHome(); }); }
+    if (msgEl) { msgEl.textContent = 'Recherche...'; msgEl.style.color = 'var(--muted)'; }
+    confirmBtn.disabled = true;
+    linkAthleteById(idClean, null, function(ok, msg) {
+      if (!ok) {
+        if (msgEl) { msgEl.textContent = '❌ ' + msg; msgEl.style.color = '#ef4444'; }
+        confirmBtn.disabled = false;
+        return;
+      }
+      modal.remove();
+      sbPullAll().then(function() { renderProfiles(); renderHome(); });
+      setTimeout(function() { alert('✅ ' + msg); }, 200);
     });
   };
   var closeBtn = document.createElement('button');
@@ -10612,9 +10644,11 @@ function showLinkAthleteModal(profileId) {
   inner.appendChild(closeBtn);
   modal.appendChild(inner);
   document.body.appendChild(modal);
-  setTimeout(function() { var inp = document.getElementById('linkAthIdInput'); if (inp) inp.focus(); }, 100);
+  setTimeout(function() {
+    var inp = document.getElementById('linkAthIdInput');
+    if (inp) { inp.focus(); inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') confirmBtn.click(); }); }
+  }, 100);
 }
-
 // ── Navigation athlète ───────────────────────────────────
 function athGoPage(name) {
   document.querySelectorAll('.ath-page').forEach(function(p) { p.classList.remove('active'); });
@@ -12964,14 +12998,53 @@ function tryAthleteAutoLogin() {
 
 // ── Liaison coach ↔ athlète ──────────────────────────────
 function showLinkAthleteModal(profileId) {
-  var id = prompt('Entre l\'identifiant ATH-XXXX de l\'athl\u00e8te :');
-  if (!id) return;
-  linkAthleteById(id.trim().toUpperCase(), profileId, function(ok, msg) {
-    alert(ok ? '✅ ' + msg : '❌ ' + msg);
-    if (ok) { sbPullAll(); }
-  });
+  var existing = document.getElementById('linkAthModal');
+  if (existing) existing.remove();
+  var modal = document.createElement('div');
+  modal.id = 'linkAthModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99997;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;padding:20px;';
+  var inner = document.createElement('div');
+  inner.style.cssText = 'background:var(--surface);border:1px solid var(--accent);border-radius:12px;padding:28px 24px;max-width:380px;width:100%;text-align:center;';
+  inner.innerHTML =
+    '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;letter-spacing:2px;margin-bottom:6px;">AJOUTER UN ATHLÈTE</div>' +
+    '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-bottom:20px;line-height:1.6;">Entre le code communiqué par l&#39;athl&#232;te.<br>Son profil complet (PR, 1RM) sera importé automatiquement.</div>' +
+    '<input id="linkAthIdInput" type="text" placeholder="ATH-XXXX" maxlength="10" autocapitalize="characters" ' +
+    'style="width:100%;box-sizing:border-box;background:var(--surface2);border:2px solid var(--accent);border-radius:8px;padding:16px;color:var(--text);font-family:Bebas Neue,sans-serif;font-size:28px;letter-spacing:4px;text-align:center;outline:none;margin-bottom:16px;">' +
+    '<div id="linkAthMsg" style="font-family:DM Mono,monospace;font-size:9px;min-height:14px;margin-bottom:12px;"></div>';
+  var confirmBtn = document.createElement('button');
+  confirmBtn.textContent = '+ IMPORTER LE PROFIL';
+  confirmBtn.style.cssText = 'width:100%;background:var(--accent);border:none;border-radius:8px;padding:14px;font-family:Bebas Neue,sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:10px;min-height:52px;';
+  confirmBtn.onclick = function() {
+    var id = document.getElementById('linkAthIdInput').value;
+    if (!id) return;
+    var msgEl = document.getElementById('linkAthMsg');
+    var idClean = (id || '').trim().toUpperCase();
+    if (msgEl) { msgEl.textContent = 'Recherche...'; msgEl.style.color = 'var(--muted)'; }
+    confirmBtn.disabled = true;
+    linkAthleteById(idClean, null, function(ok, msg) {
+      if (!ok) {
+        if (msgEl) { msgEl.textContent = '❌ ' + msg; msgEl.style.color = '#ef4444'; }
+        confirmBtn.disabled = false;
+        return;
+      }
+      modal.remove();
+      sbPullAll().then(function() { renderProfiles(); renderHome(); });
+      setTimeout(function() { alert('✅ ' + msg); }, 200);
+    });
+  };
+  var closeBtn = document.createElement('button');
+  closeBtn.textContent = 'Annuler';
+  closeBtn.style.cssText = 'width:100%;background:none;border:1px solid var(--border);border-radius:6px;padding:10px;font-family:DM Mono,monospace;font-size:9px;color:var(--muted);cursor:pointer;';
+  closeBtn.onclick = function() { modal.remove(); };
+  inner.appendChild(confirmBtn);
+  inner.appendChild(closeBtn);
+  modal.appendChild(inner);
+  document.body.appendChild(modal);
+  setTimeout(function() {
+    var inp = document.getElementById('linkAthIdInput');
+    if (inp) { inp.focus(); inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') confirmBtn.click(); }); }
+  }, 100);
 }
-
 function linkAthleteById(athId, profileId, callback) {
   if (!_sb || !_sbUser) { callback(false, 'Non connecté'); return; }
   _sb.from('athlete_profiles').select('*').eq('ath_id', athId).maybeSingle()
