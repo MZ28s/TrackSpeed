@@ -12157,12 +12157,7 @@ function journalNewSession() {
   _journalSets = [{ reps: '', weight: '', unit: 'kg' }];
   _journalSessionDate = new Date().toISOString().slice(0, 10);
   var dateEl = document.getElementById('journalFormDate');
-  if (dateEl) {
-    var d = new Date(_journalSessionDate + 'T12:00:00');
-    var days = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
-    var months = ['jan.','fév.','mar.','avr.','mai','juin','juil.','aoû.','sep.','oct.','nov.','déc.'];
-    dateEl.textContent = days[d.getDay()] + ' ' + d.getDate() + ' ' + months[d.getMonth()];
-  }
+  if (dateEl) { dateEl.value = _journalSessionDate; }
   var form = document.getElementById('journalForm');
   if (form) form.style.display = 'block';
   _journalEntries = [];
@@ -12306,7 +12301,7 @@ function journalSaveSession() {
   var note = (document.getElementById('journalNote') || {}).value || '';
   var payload = {
     user_id: _athProfile.user_id,
-    session_date: _journalSessionDate,
+    session_date: (document.getElementById('journalFormDate')||{}).value || _journalSessionDate,
     entries: _journalEntries,
     note: note,
     updated_at: new Date().toISOString()
@@ -12456,12 +12451,7 @@ function journalEditSession(id) {
     _journalSessionDate = s.session_date;
     _journalEditId = id; // mode édition
     var dateEl = document.getElementById('journalFormDate');
-    if (dateEl) {
-      var d = new Date((s.session_date||'')+'T12:00:00');
-      var days=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
-      var months=['jan.','fév.','mar.','avr.','mai','juin','juil.','aoû.','sep.','oct.','nov.','déc.'];
-      dateEl.textContent = days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()];
-    }
+    if (dateEl) { dateEl.value = s.session_date || _journalSessionDate; }
     // Mettre à jour le bouton sauvegarder
     var saveBtn = document.getElementById('journalSaveBtn');
     if (saveBtn) saveBtn.textContent = '💾 METTRE À JOUR LA SÉANCE';
