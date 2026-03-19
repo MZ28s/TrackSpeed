@@ -798,9 +798,6 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
   </div>
 
 
-
-
-
 </div>
 
 <!-- ══ PAGE HISTORIQUE ══ -->
@@ -1150,8 +1147,6 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
 </div>
 
 
-
-
 <!-- ══ PAGE SAISON ══ -->
 <div class="page" id="page-saison">
   <div class="page-header">
@@ -1254,7 +1249,6 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
   </div>
 
 
-
 </div><!-- end page-saison -->
 
 
@@ -1320,7 +1314,6 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
 </div>
 
 <!-- ══ NAV ══ -->
-
 
 
 <!-- ══ PAGE FEEDBACKS COACH ══ -->
@@ -1401,18 +1394,22 @@ function esc(str) {
     .replace(/'/g, '&#39;');
 }
 
+var _sbActivePushes = 0; // compteur de push en cours
+
 function sbPush(table, data) {
   if (!_sbUser || !_sb) return Promise.resolve({ ok: false, reason: 'not_logged_in' });
   var payload = { user_id: _sbUser.id, data: data, updated_at: new Date().toISOString() };
-  // upsert = INSERT or UPDATE on conflict (user_id must be unique in each table)
+  _sbActivePushes++;
   return _sb.from(table).upsert(payload, { onConflict: 'user_id' })
     .then(function(r) {
+      _sbActivePushes = Math.max(0, _sbActivePushes - 1);
       if (r.error) {
         console.error('sbPush upsert [' + table + ']:', r.error.message);
         return { ok: false, reason: r.error.message };
       }
       return { ok: true };
     }).catch(function(e) {
+      _sbActivePushes = Math.max(0, _sbActivePushes - 1);
       console.error('sbPush exception [' + table + ']:', e);
       return { ok: false, reason: e.message };
     });
@@ -1452,6 +1449,10 @@ function sbApplySettings(s) {
 }
 
 function sbPullAll() {
+  // Ne pas pull si un push est en cours (évite race condition)
+  if (_sbActivePushes > 0) {
+    return Promise.resolve(false);
+  }
   sbSyncBadgeSet('⟳ sync…', '#F5C800', false);
   var pullsBase = Promise.all([
     sbPull('profiles_data'),
@@ -1866,8 +1867,6 @@ function loginSubmit() {
   }
 }
 
-function loginSkip() { /* disabled — account required */ }
-
 
 function loginShowProfile() {
   if (_sbUser) {
@@ -1900,7 +1899,6 @@ let lightTheme = false;
 if (lightTheme) document.body.classList.add('light-theme');
 
 // ── NAVIGATION ──
-
 
 
 // ════════════════════════════════════════════════════════
@@ -2240,7 +2238,6 @@ function formatDateFR(d) {
   var mois  = ['jan','fév','mar','avr','mai','juin','juil','aoû','sep','oct','nov','déc'];
   return jours[d.getDay()] + ' ' + d.getDate() + ' ' + mois[d.getMonth()];
 }
-
 
 
 // Générer les semaines d'une plage de dates
@@ -4601,7 +4598,6 @@ function updateSemModalComp(planifId, semNum, semYear, ci, field, val) {
 }
 
 
-
 // ════════════════════════════════════════════════════════════════
 // ══  RECHERCHE WORLD ATHLETICS — Widget flottant  ════════════════
 // ════════════════════════════════════════════════════════════════
@@ -5770,14 +5766,6 @@ function loadSession(i) {
 // ── GRAPHIQUE PROGRESSION SAISON ──────────────────────────────────
 let progDist = 100; // distance sélectionnée
 
-function switchProgDist(d) {
-  progDist = d;
-  document.querySelectorAll('.prog-dist-btn').forEach(b => {
-    const active = parseInt(b.dataset.d) === d;
-    b.classList.toggle('active', active);
-  });
-  renderProgChart();
-}
 
 function renderProgChart() { /* obsolète — remplacé par renderSaison */ }
 
@@ -6987,19 +6975,6 @@ function coachDeleteGroup(key) {
     delete window[key];
     renderHistoryInline();
     renderHome();
-  });
-}
-
-function coachDeleteSession(csId) {
-  if (!confirm('Supprimer cette séance ?')) return;
-  if (!_sb) return;
-  _sb.from('coach_sessions').delete().eq('id', csId).then(function(r) {
-    if (r.error) { alert('Erreur : '+r.error.message); return; }
-    // Retirer du cache local
-    if (window._coachSessionsCache) {
-      window._coachSessionsCache = window._coachSessionsCache.filter(function(s){return s.id!==csId;});
-    }
-    renderHistoryInline();
   });
 }
 
@@ -8779,14 +8754,7 @@ function _chronoDragEnd() {
 }
 
 // ── Ouvrir / fermer ──
-function openChrono(seconds) {
-  const el = document.getElementById('chronoOverlay');
-  // Réinitialiser position au coin bas-droit à chaque ouverture
-  el.style.left = ''; el.style.top = ''; el.style.right = '16px'; el.style.bottom = '16px';
-  if (seconds) chronoSetDuration(seconds);
-  el.classList.remove('hidden');
-  chronoUpdateDisplay();
-}
+
 
 // Ouvrir depuis la séance — lit sessionBlocks et pré-configure la pause
 function openChronoFromSession(blocIndex) {
@@ -10417,7 +10385,6 @@ function deleteCompetResult(pid, saison, idxInFiltered) {
 }
 
 
-
 // ════════════════════════════════════════════════════════
 // ══  MODE ATHLÈTE — AUTH SUPABASE                      ══
 // ════════════════════════════════════════════════════════
@@ -10512,12 +10479,11 @@ function athSyncThemeBtn() {
 }
 
 
-
 // ── Profil info athlète — ID + statut coach ───────────────
 
 
 // ── loginSwitchTab gère le 3ème panel ───────────────────
-function showAthleteLoginScreen() { loginShow(); loginSwitchTab('athlete'); }
+
 function athleteLoginBack()       { loginSwitchTab('login'); }
 
 // ── Panel login athlète ──────────────────────────────────
@@ -10557,9 +10523,6 @@ function makeStarBtns(day, type) {
 }
 
 
-
-
-
 function rpeTrackClick(e) {
   var track = document.getElementById('rpeTrack');
   var rect = track.getBoundingClientRect();
@@ -10576,7 +10539,6 @@ function updateRpeDisplay(val) {
   if (display) display.textContent = val;
   if (desc) desc.textContent = RPE_LABELS[val] || '';
 }
-
 
 
 function submitFeedback() {
@@ -10754,80 +10716,6 @@ function notifyCoachFeedback(feedbackData) {
   }).catch(function(e) { console.warn('Notify coach:', e); });
 }
 
-function renderAthFeedbackHistory() {
-  var el = document.getElementById('athFeedbackHistory');
-  if (!el || !_sb || !_athProfile) return;
-  el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Chargement...</div>';
-  _sb.from('athlete_feedback').select('*').eq('athlete_uid', _athProfile.user_id)
-    .order('created_at', { ascending: false }).limit(20)
-    .then(function(r) {
-      if (r.error || !r.data || !r.data.length) {
-        el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Aucun feedback envoyé.</div>';
-        return;
-      }
-      var html = '';
-      r.data.forEach(function(fb) {
-        var rpeColor = fb.rpe <= 4 ? '#22c55e' : fb.rpe <= 7 ? '#f59e0b' : '#ef4444';
-        html += '<div class="fb-chip">' +
-          '<div class="fb-chip-header">' +
-            '<span style="font-family:Bebas Neue,sans-serif;font-size:18px;">' + (fb.week_label || fb.week_id) + '</span>' +
-            '<span style="font-family:DM Mono,monospace;font-size:8px;color:' + rpeColor + ';">RPE ' + fb.rpe + '/10</span>' +
-          '</div>' +
-          (fb.objective ? '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:4px;">🎯 ' + fb.objective + '</div>' : '') +
-          (fb.comment   ? '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:4px;">💬 ' + fb.comment + '</div>' : '') +
-        '</div>';
-      });
-      el.innerHTML = html;
-    });
-}
-
-function renderAthCalc() {
-  var el = document.getElementById('athCalcContent');
-  if (!el || !_athProfile) return;
-  var p = _athProfile; var r = p.records || {};
-  var refs = [];
-  if (r.pr100) refs.push({t:r.pr100,dRef:100}); if (r.pr200) refs.push({t:r.pr200,dRef:200});
-  if (r.pr80)  refs.push({t:r.pr80,  dRef:80});  if (r.pr60)  refs.push({t:r.pr60, dRef:60});   if (r.pr400) refs.push({t:r.pr400,dRef:400});
-  if (r.pr50)  refs.push({t:r.pr50, dRef:50});
-  if (!refs.length) { el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Aucun record dans ton profil.</div>'; return; }
-  var pcts = [60,70,75,80,85,90,95,100]; var dists = [30,40,50,60,80,100,120,150,200,300,400];
-  var html = '';
-  pcts.forEach(function(pct) {
-    html += '<div class="card" style="margin-bottom:12px;"><div class="card-title">// @ ' + pct + '%</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">';
-    dists.forEach(function(d) {
-      try {
-        var t = computeTarget(d,refs)/(pct/100); var spd = d/t;
-        html += '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 12px;min-width:80px;">' +
-          '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);">' + d + 'm</div>' +
-          '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:var(--accent);">' + t.toFixed(2) + 's</div>' +
-          '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);">' + spd.toFixed(1) + 'm/s</div></div>';
-      } catch(e) {}
-    });
-    html += '</div></div>';
-  });
-  el.innerHTML = html;
-}
-
-function renderAthForce() {
-  var el = document.getElementById('athForceContent');
-  if (!el || !_athProfile) return;
-  var rm1 = _athProfile.rm1 || {};
-  var exos = [{id:'squat',label:'Back Squat',icon:'🏋'},{id:'hipthrust',label:'Hip Thrust',icon:'🔥'},{id:'deadlift',label:'Deadlift',icon:'💀'},{id:'rdl',label:'RDL',icon:'⬇️'},{id:'powerclean',label:'Power Clean',icon:'⚡'},{id:'bench',label:'Bench Press',icon:'💪'},{id:'legext',label:'Leg Extension',icon:'🖥️'}];
-  var pcts = [50,60,70,75,80,85,90,95,100]; var html = '';
-  exos.forEach(function(exo) {
-    var rm = rm1[exo.id]; if (!rm) return;
-    html += '<div class="card" style="margin-bottom:12px;"><div class="card-title">' + exo.icon + ' ' + exo.label + ' — 1RM : <span style="color:var(--accent);">' + rm + 'kg</span></div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">';
-    pcts.forEach(function(pct) {
-      var kg = (rm*pct/100).toFixed(1);
-      html += '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 12px;min-width:72px;">' +
-        '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);">' + pct + '%</div>' +
-        '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;">' + kg + '</div>' +
-        '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);">kg</div></div>';
-    });
-    html += '</div></div>';
-  });
-  el.innerHTML = html || '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">Aucun 1RM dans ton profil.</div>';
-}
 
 function requestPushPermission() {
   if (!('Notification' in window)) return;
@@ -10847,6 +10735,7 @@ var MENTAL_SMILEYS  = ['','😰','😕','😐','😌','🧠'];
 
 // ── Nav ───────────────────────────────────────────────────
 function athGoPage(name) {
+  if (!_athMode || !_athProfile) return; // sécurité : ne pas naviguer sans profil chargé
   document.querySelectorAll('.ath-page').forEach(function(p) { p.classList.remove('active'); });
   document.querySelectorAll('.ath-nav-btn').forEach(function(b) { b.classList.remove('active'); });
   var page = document.getElementById('ath-page-' + name);
@@ -11068,9 +10957,7 @@ function athSaveRm1() {
 // ── RPE par jour ─────────────────────────────────────────
 var _feedbackData = { days: {}, objective: '', comment: '' };
 
-function feedbackDraftKey() {
-  return 'ath_feedback_draft_' + getISOWeekId() + '_' + (_athProfile ? _athProfile.user_id : 'unknown');
-}
+
 function saveFeedbackDraft() {
   var obj = document.getElementById('athObjective'); var com = document.getElementById('athComment');
   if (obj) _feedbackData.objective = obj.value;
@@ -11091,7 +10978,7 @@ function autoSaveDraft() {
             { onConflict: 'user_id,week_id' })
     .then(function(r) { if (r.error) console.error('draft:', r.error.message); });
 }
-function loadFeedbackDraft() { return null; } // remplacé par Supabase
+ // remplacé par Supabase
 
 function initFeedbackForm() {
   var emptyDay = function() { return { rpe: null, phys: null, mental: null, coucher: '', lever: '', repos: false, compet: false }; };
@@ -11687,6 +11574,10 @@ var _athChronos = {};
 // ── Chrono récupération athlète (identique coach) ──
 var _athChronoState = {}; // key → { total, remain, running, timer }
 
+// Compat wrappers pour ancien code
+function athStartChrono(sid, bi, minutes) { athChronoStart(sid + '_' + bi); }
+function athResetChrono(sid, bi) { athChronoReset(sid + '_' + bi); }
+
 function athChronoSetDuration(key) {
   var m = parseInt(document.getElementById('acmin_' + key).value) || 0;
   var s = parseInt(document.getElementById('acsec_' + key).value) || 0;
@@ -11790,8 +11681,7 @@ function athChronoUpdateDisplay(key) {
 }
 
 // Compat ancienne API (au cas où)
-function athStartChrono(sid, bi, minutes) { athChronoStart(sid + '_' + bi); }
-function athResetChrono(sid, bi) { athChronoReset(sid + '_' + bi); }
+
 
 function athEditTimes(btn) {
   var sid  = btn.dataset.sid;
@@ -11980,12 +11870,6 @@ function forceTab(tab) {
   }
 }
 
-function journalInit() {
-  _journalEntries = [];
-  _journalSets = [{ reps: '', weight: '', unit: 'kg' }];
-  var form = document.getElementById('journalForm');
-  if (form) form.style.display = 'none';
-}
 
 function journalNewSession() {
   _journalEntries = [];
@@ -12531,7 +12415,7 @@ function coachFeedbackCard(fb) {
 }
 
 // Lu/non-lu
-function getFeedbackReadKey() { return 'coach_fb_read_'+(_sbUser?_sbUser.id:'default'); }
+
 var _readSetCache = null;
 function getReadSet() { return _readSetCache || new Set(); }
 function _loadReadSet(cb) {
@@ -12566,31 +12450,6 @@ function coachMarkRead(fbId, el) {
   }
 }
 
-function coachWeekGroup(week, isReadGroup) {
-  var groupId='wg_'+week.id.replace(/[^a-zA-Z0-9]/g,'_');
-  var badgesHtml='';
-  if(!isReadGroup){
-    var parts=week.items.map(function(fb){
-      var col=!fb.rpe?'var(--muted)':fb.rpe<=3?'#22c55e':fb.rpe<=5?'#86efac':fb.rpe<=7?'#f59e0b':fb.rpe<=8?'#ef4444':'#991b1b';
-      return '<div style="display:flex;align-items:center;gap:4px;">' +
-        '<div style="width:6px;height:6px;border-radius:50%;background:var(--accent);"></div>' +
-        '<span style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);">'+(fb.athlete_name||'?').split(' ')[0]+'</span>' +
-        (fb.rpe?'<span style="font-family:Bebas Neue,sans-serif;font-size:12px;color:'+col+';">'+fb.rpe+'</span>':'') +
-        '</div>';
-    });
-    badgesHtml='<div style="display:flex;gap:4px;">'+parts.join('<span style="color:var(--border);margin:0 2px;">·</span>')+'</div>';
-  }
-  var hdrOnclick='toggleWeekGroup('+JSON.stringify(groupId)+')';
-  var html='<div style="margin-bottom:16px;">';
-  html+='<div onclick="'+hdrOnclick+'" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:6px;cursor:pointer;margin-bottom:2px;user-select:none;" id="hdr_'+groupId+'">';
-  html+='<span id="arr_'+groupId+'" style="font-size:10px;color:var(--muted);transition:transform .2s;">'+(isReadGroup?'▶':'▼')+'</span>';
-  html+='<div style="flex:1;"><span style="font-family:Bebas Neue,sans-serif;font-size:16px;letter-spacing:1px;">'+week.label+'</span><span style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);margin-left:10px;">'+week.items.length+' athlète'+(week.items.length>1?'s':'')+'</span></div>';
-  html+=badgesHtml+'</div>';
-  html+='<div id="'+groupId+'" style="display:'+(isReadGroup?'none':'block')+'">';
-  week.items.forEach(function(fb){html+=coachFeedbackCard(fb);});
-  html+='</div></div>';
-  return html;
-}
 
 function toggleWeekGroup(groupId) {
   var el=document.getElementById(groupId); var arr=document.getElementById('arr_'+groupId);
@@ -12919,7 +12778,7 @@ function _fbLocalDeleteId(fbId) {
 }
 
 function athleteCodeSubmit()   {}
-function generateAthleteCode() {}
+
 function tryAthleteAutoLogin() {
   // Géré par sbInit -> routeAfterAuth maintenant
 }
@@ -12980,8 +12839,8 @@ function linkAthleteById(athId, profileId, callback) {
   // Note : la RLS athlete_profiles requiert une policy "public" pour SELECT par ath_id
   _sb.from('athlete_profiles').select('*').eq('ath_id', athId).maybeSingle()
     .then(function(r) {
-      if (r.error) { callback(false, 'Erreur : ' + r.error.message); return; }
-      if (!r.data)  { callback(false, 'Code introuvable : ' + athId); return; }
+      if (r.error) { callback(false, 'Erreur : ' + r.error.message + ' (vérifier RLS athlete_profiles)'); return; }
+      if (!r.data)  { callback(false, 'Code introuvable : ' + athId + ' — l\'athlète doit d\'abord créer son compte'); return; }
       var ath = r.data;
       if (ath.coach_uid && ath.coach_uid !== _sbUser.id) {
         callback(false, 'Cet athlète est déjà lié à un autre coach'); return;
@@ -13078,7 +12937,6 @@ setTimeout(() => {
   // Force session pending chargé depuis Supabase dans sbPullAll → voir showPendingForceSession()
 }, 200);
 </script>
-
 
 
 <!-- ══ PAGE DE CONNEXION ══ -->
@@ -13269,7 +13127,6 @@ setTimeout(() => {
     <button onclick="sbSignOut()" style="width:100%;background:none;border:1px solid rgba(239,68,68,0.3);border-radius:4px;padding:8px;font-family:'DM Mono',monospace;font-size:8px;color:#ef4444;cursor:pointer;letter-spacing:1px;">SE DÉCONNECTER</button>
   </div>
 </div>
-
 
 
 <!-- ══════════════════════════════════════════ -->
