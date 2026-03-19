@@ -11457,6 +11457,7 @@ function renderAthHistory() {
   _sb.from('coach_sessions')
     .select('*')
     .eq('coach_uid', _athCoachUid)
+    .neq('athlete_hidden', true)
     .order('session_date', { ascending: false })
     .limit(50)
     .then(function(r) {
@@ -11915,9 +11916,22 @@ function athSwitchTab(tab) {
 function athDeleteSession(sessionId) {
   if (!confirm('Supprimer cette séance ?')) return;
   if (!_sb) return;
-  _sb.from('coach_sessions').delete().eq('id', sessionId).then(function(r) {
-    if (r.error) { alert('Erreur : ' + r.error.message); return; }
-    renderAthHistory();
+  // Si déjà envoyée au coach (type=done) : masquer seulement, ne pas supprimer
+  _sb.from('coach_sessions').select('type').eq('id', sessionId).maybeSingle().then(function(r) {
+    if (!r.data) return;
+    if (r.data.type === 'done') {
+      // Marquer comme masquée côté athlète — le coach garde ses temps
+      _sb.from('coach_sessions').update({ athlete_hidden: true }).eq('id', sessionId).then(function(r2) {
+        if (r2.error) { alert('Erreur : ' + r2.error.message); return; }
+        renderAthHistory();
+      });
+    } else {
+      // Séance pas encore envoyée → suppression totale
+      _sb.from('coach_sessions').delete().eq('id', sessionId).then(function(r2) {
+        if (r2.error) { alert('Erreur : ' + r2.error.message); return; }
+        renderAthHistory();
+      });
+    }
   });
 }
 
@@ -12390,6 +12404,7 @@ function _renderAthHomeSessions() {
   _sb.from('coach_sessions').select('*')
     .eq('coach_uid', _athCoachUid)
     .eq('type', 'planned')
+    .neq('athlete_hidden', true)
     .order('session_date', { ascending: false })
     .limit(10)
     .then(function(r) {
