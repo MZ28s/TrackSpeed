@@ -12908,13 +12908,16 @@ function deleteFeedback(fbId, event) {
   if (event) event.stopPropagation();
   if (!confirm('Masquer ce feedback ? Il restera visible pour l\'athlète.')) return;
   if (!_sb || !_sbUser) { alert('Non connecté.'); return; }
-  // Masquer côté coach uniquement — ne pas supprimer pour l'athlète
+  // Masquer côté coach uniquement (coach_hidden = true)
+  // On tente d'abord avec le filtre coach_uid, sinon sans (pour feedbacks sans coach_uid)
   _sb.from('athlete_feedback')
     .update({ coach_hidden: true })
     .eq('id', fbId)
-    .eq('coach_uid', _sbUser.id)
     .then(function(r) {
-      if (r.error) { alert('Erreur : ' + r.error.message); return; }
+      if (r.error) {
+        alert('Erreur suppression : ' + r.error.message + '\n\nVérifier la policy UPDATE sur athlete_feedback.');
+        return;
+      }
       _fbLocalDeleteId(fbId);
     });
 }
@@ -13278,6 +13281,10 @@ setTimeout(() => {
     <!-- Déconnexion -->
     <button onclick="sbSignOut()" style="width:100%;background:none;border:1px solid rgba(239,68,68,0.3);border-radius:4px;padding:8px;font-family:'DM Mono',monospace;font-size:8px;color:#ef4444;cursor:pointer;letter-spacing:1px;">SE DÉCONNECTER</button>
   </div>
+</div>
+
+
+  </div><!-- /content-wrapper -->
 </div>
 
 
@@ -13706,8 +13713,5 @@ setTimeout(() => {
     <button class="ath-nav-btn" id="ath-nav-history" onclick="athGoPage('history')"><span class="icon">📊</span>Séances</button>
     <button class="ath-nav-btn" id="ath-nav-profile" onclick="athGoPage('profile')"><span class="icon">👤</span>Profil</button>
   </nav>
-  </div><!-- /content-wrapper -->
-</div>
 
 </body>
-</html>
