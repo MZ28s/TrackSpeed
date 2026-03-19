@@ -13162,15 +13162,59 @@ function showLinkAthleteModal(profileId) {
 }
 function linkAthleteById(athId, profileId, callback) {
   if (!_sb || !_sbUser) { callback(false, 'Non connecté'); return; }
+
+  // Étape 1 : trouver le profil athlète par son code
+  // Note : la RLS athlete_profiles requiert une policy "public" pour SELECT par ath_id
   _sb.from('athlete_profiles').select('*').eq('ath_id', athId).maybeSingle()
     .then(function(r) {
-      if (r.error || !r.data) { callback(false, 'Athlète introuvable : ' + athId); return; }
+      if (r.error) { callback(false, 'Erreur : ' + r.error.message); return; }
+      if (!r.data)  { callback(false, 'Code introuvable : ' + athId); return; }
       var ath = r.data;
-      if (ath.coach_uid && ath.coach_uid !== _sbUser.id) { callback(false, 'Cet athlète est déjà lié à un autre coach'); return; }
+      if (ath.coach_uid && ath.coach_uid !== _sbUser.id) {
+        callback(false, 'Cet athlète est déjà lié à un autre coach'); return;
+      }
+
+      // Étape 2 : marquer coach_uid sur le profil athlète
       _sb.from('athlete_profiles').update({ coach_uid: _sbUser.id }).eq('ath_id', athId)
         .then(function(r2) {
           if (r2.error) { callback(false, r2.error.message); return; }
-          callback(true, (ath.name || athId) + ' lié avec succès !');
+
+          // Étape 3 : construire le nom à partir de first_name/last_name ou name
+          var athName = '';
+          if (ath.first_name || ath.last_name) {
+            athName = ((ath.first_name || '') + ' ' + (ath.last_name || '')).trim();
+          }
+          if (!athName) athName = ath.name || athId;
+
+          // Étape 4 : importer dans profiles coach (créer ou mettre à jour)
+          var existingIdx = profiles.findIndex(function(p) {
+            var pFirst = (p.name || '').trim().toLowerCase().split(/\s+/)[0];
+            var aFirst = athName.trim().toLowerCase().split(/\s+/)[0];
+            return pFirst && aFirst && pFirst === aFirst;
+          });
+
+          var newProfile = {
+            id:           existingIdx >= 0 ? profiles[existingIdx].id : Date.now().toString(),
+            name:         athName,
+            spec:         ath.spec || '—',
+            genre:        ath.genre || '',
+            categorie:    ath.categorie || '',
+            records:      ath.records || {},
+            rm1:          ath.rm1 || {},
+            competResults: (existingIdx >= 0 && profiles[existingIdx].competResults) || [],
+            _athId:       athId
+          };
+
+          if (existingIdx >= 0) {
+            profiles[existingIdx] = newProfile;
+          } else {
+            profiles.push(newProfile);
+          }
+
+          // Étape 5 : pousser vers Supabase immédiatement
+          saveProfiles();
+
+          callback(true, athName + ' ajouté au groupe !');
         });
     });
 }
