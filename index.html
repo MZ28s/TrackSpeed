@@ -1450,14 +1450,36 @@ function sbPullAll() {
          .order('session_date', { ascending: false }).then(function(r) { return r.error ? [] : (r.data || []); })
     : Promise.resolve([]);
 
-  return Promise.all([pullsBase, pullCoachSessions]).then(function(results) {
+  // Pull des PR athlètes liés pour synchroniser les records
+  var pullAthProfiles = (_sb && _sbUser)
+    ? _sb.from('athlete_profiles').select('name,records').eq('coach_uid', _sbUser.id)
+         .then(function(r) { return r.error ? [] : (r.data || []); })
+    : Promise.resolve([]);
+
+  return Promise.all([pullsBase, pullCoachSessions, pullAthProfiles]).then(function(results) {
     var rs = results[0];
     var coachSessions = results[1];
+    var athProfiles = results[2];
     var changed = false;
     if (rs[0] !== null) {
       profiles = rs[0];
       // profiles → Supabase via sbSyncAll
       changed = true;
+    }
+    // Merger les PR des athlètes liés dans les profils coach
+    if (athProfiles && athProfiles.length && profiles && profiles.length) {
+      var prMerged = false;
+      athProfiles.forEach(function(ap) {
+        if (!ap.records) return;
+        var apName = (ap.name || '').toLowerCase();
+        profiles.forEach(function(p) {
+          if ((p.name || '').toLowerCase() === apName) {
+            p.records = ap.records;
+            prMerged = true;
+          }
+        });
+      });
+      if (prMerged) changed = true;
     }
     if (rs[1] !== null) {
       historyData = rs[1];
@@ -11017,27 +11039,8 @@ function athSaveRecords() {
       if (el) { el.textContent = '✓ Sauvegardé'; setTimeout(function() { el.textContent = ''; }, 2000); }
     });
 
-  // Synchroniser avec le profil coach si lié
-  if (!_athProfile.coach_uid) return;
-  var athName = (_athProfile.name || '').toLowerCase();
-  _sb.from('profiles_data').select('data').eq('user_id', _athProfile.coach_uid).maybeSingle()
-    .then(function(res) {
-      if (!res.data || !res.data.data) return;
-      var coachProfiles = res.data.data;
-      if (!Array.isArray(coachProfiles)) return;
-      var updated = false;
-      coachProfiles.forEach(function(p) {
-        if ((p.name || '').toLowerCase() === athName) {
-          p.records = r;
-          updated = true;
-        }
-      });
-      if (!updated) return;
-      _sb.from('profiles_data').update({ data: coachProfiles }).eq('user_id', _athProfile.coach_uid)
-        .then(function(r2) {
-          if (!r2.error) console.log('PR synced to coach profiles');
-        });
-    });
+  // PR synchronisés côté coach au prochain pull via athlete_profiles
+  // (la RLS empêche l'athlète d'écrire directement dans profiles_data du coach)
 }
 
 function athSaveRm1() {
