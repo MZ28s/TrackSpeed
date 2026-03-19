@@ -6900,8 +6900,32 @@ function _renderHistoryFromCS(container, sessions) {
       var detailId = 'hcs_'+dateKey.replace(/-/g,'')+'_'+gi;
       var blocsSummary = grp.blocks.map(function(b){return (b.reps||'?')+'×'+(b.dist||'?')+'m';}).join('  ');
       var athStr = grp.athletes.map(function(a){return a.name;}).join(', ');
-      var allT = []; grp.athletes.forEach(function(a){(a.times||[]).forEach(function(b){(b.times||[]).forEach(function(t){if(t!==null&&!isNaN(t))allT.push(t);});});});
+      var allT = []; var allCibles = []; var fatigueMax = 0;
+      grp.athletes.forEach(function(a){
+        (a.times||[]).forEach(function(b){
+          var bt = (b.times||[]).filter(function(t){return t!==null&&!isNaN(t);});
+          bt.forEach(function(t){allT.push(t);});
+          if (b.tCible && bt.length) {
+            var avgBt = bt.reduce(function(s,v){return s+v;},0)/bt.length;
+            allCibles.push({avg:avgBt,cible:b.tCible});
+          }
+          if (bt.length >= 2) {
+            var fat = ((bt[bt.length-1]-bt[0])/bt[0]*100);
+            if (fat > fatigueMax) fatigueMax = fat;
+          }
+        });
+      });
       var bestTime = allT.length ? Math.min.apply(null,allT).toFixed(2)+'s' : '';
+      // Badge synthèse
+      var badgeHtml = '';
+      if (allCibles.length) {
+        var totalEcart = allCibles.reduce(function(s,x){return s+((x.avg-x.cible)/x.cible*100);},0)/allCibles.length;
+        var ecartBadgeCol = totalEcart <= -2 ? '#22c55e' : totalEcart <= 2 ? '#6b6b7a' : totalEcart <= 5 ? '#f59e0b' : '#ef4444';
+        var ecartBadgeTxt = (totalEcart>0?'+':'')+totalEcart.toFixed(1)+'%';
+        badgeHtml += '<span style="font-family:DM Mono,monospace;font-size:8px;background:'+ecartBadgeCol+'22;border:1px solid '+ecartBadgeCol+'66;border-radius:4px;padding:2px 6px;color:'+ecartBadgeCol+';">'+ecartBadgeTxt+' vs cible</span> ';
+      }
+      if (fatigueMax > 5) badgeHtml += '<span style="font-family:DM Mono,monospace;font-size:8px;background:#ef444422;border:1px solid #ef444466;border-radius:4px;padding:2px 6px;color:#ef4444;">↓ fatigue</span>';
+      else if (fatigueMax > 2) badgeHtml += '<span style="font-family:DM Mono,monospace;font-size:8px;background:#f59e0b22;border:1px solid #f59e0b66;border-radius:4px;padding:2px 6px;color:#f59e0b;">↓ légère</span>';
 
       html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:4px;margin-bottom:10px;overflow:hidden;transition:border-color .15s;">';
       // En-tête cliquable
@@ -6909,6 +6933,7 @@ function _renderHistoryFromCS(container, sessions) {
       html += '<div style="flex:1;min-width:0;"><div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--text);">'+athStr+'</div>';
       html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--accent);margin-top:3px;">'+blocsSummary+'</div>';
       if (grp.conditions) html += '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);margin-top:2px;">📍 '+grp.conditions+'</div>';
+      if (badgeHtml) html += '<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">'+badgeHtml+'</div>';
       html += '</div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">';
       if (bestTime) html += '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;color:var(--accent2);">'+bestTime+'</div>';
       html += '<div style="font-size:12px;color:var(--muted);">▼</div></div></div>';
@@ -6926,9 +6951,13 @@ function _renderHistoryFromCS(container, sessions) {
         var reps = Array.isArray(b.reps)?b.reps.length:(parseInt(b.reps)||0);
         html += '<div style="margin-bottom:14px;"><div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:1px;color:var(--accent);margin-bottom:8px;">BLOC '+(bi+1)+' — '+reps+'×'+(b.dist||'?')+'m @ '+(b.pct||'?')+'%'+(b.rest>0?' · '+b.rest+'min récup':'')+'</div>';
         html += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:DM Mono,monospace;font-size:10px;min-width:200px;">';
+        var hasCible = grp.athletes.some(function(a){return (a.times||[])[bi] && (a.times||[])[bi].tCible;});
         html += '<thead><tr><th style="text-align:left;padding:5px 8px;font-size:8px;color:var(--muted);border-bottom:1px solid var(--border);position:sticky;left:0;background:var(--surface);">ATHLÈTE</th>';
         for(var r=0;r<reps;r++) html+='<th style="padding:5px 6px;font-size:8px;color:var(--muted);border-bottom:1px solid var(--border);text-align:center;min-width:54px;">R'+(r+1)+'</th>';
-        html += '<th style="padding:5px 6px;font-size:8px;color:var(--accent);border-bottom:1px solid var(--border);text-align:center;">MEILLEUR</th></tr></thead><tbody>';
+        html += '<th style="padding:5px 6px;font-size:8px;color:#51cf66;border-bottom:1px solid var(--border);text-align:center;">MEILLEUR</th>';
+        html += '<th style="padding:5px 6px;font-size:8px;color:var(--accent);border-bottom:1px solid var(--border);text-align:center;" title="Écart moyen vs temps cible">VS CIBLE</th>';
+        html += '<th style="padding:5px 6px;font-size:8px;color:var(--muted);border-bottom:1px solid var(--border);text-align:center;" title="Évolution R1 → dernière rep">FATIGUE</th>';
+        html += '</tr></thead><tbody>';
         grp.athletes.forEach(function(a) {
           var blockData = (a.times||[])[bi]||{};
           var timesArr = blockData.times || [];
@@ -6937,14 +6966,44 @@ function _renderHistoryFromCS(container, sessions) {
           html += '<tr><td style="padding:6px 8px;font-family:Bebas Neue,sans-serif;font-size:14px;color:var(--text);border-bottom:1px solid var(--border);position:sticky;left:0;background:var(--surface);white-space:nowrap;">'+a.name+'</td>';
           for(var r2=0;r2<reps;r2++){
             var t=timesArr[r2]; var hasVal=t!==null&&!isNaN(t); var isBest=hasVal&&parseFloat(t)===best;
+            // Coloration écart vs cible
+            var tCible = blockData.tCible || null;
+            var ecartColor = 'var(--text)';
+            if (hasVal && tCible) {
+              var ecart = ((parseFloat(t) - tCible) / tCible) * 100;
+              ecartColor = ecart <= -2 ? '#22c55e' : ecart <= 2 ? 'var(--text)' : ecart <= 5 ? '#f59e0b' : '#ef4444';
+            }
             html+='<td style="padding:6px 4px;border-bottom:1px solid var(--border);text-align:center;">';
-            if(hasVal) html+='<span style="font-family:DM Mono,monospace;font-size:11px;color:'+(isBest?'#51cf66':'var(--text)')+';">'+(isBest?'<strong>':'')+parseFloat(t).toFixed(2)+(isBest?'</strong>':'')+'</span>';
+            if(hasVal) html+='<span style="font-family:DM Mono,monospace;font-size:11px;color:'+(isBest?'#51cf66':ecartColor)+';">'+(isBest?'<strong>':'')+parseFloat(t).toFixed(2)+(isBest?'</strong>':'')+'</span>';
             else html+='<span style="color:var(--border);">—</span>';
             html+='</td>';
           }
+          // Meilleur + analyse
           html+='<td style="padding:6px 4px;border-bottom:1px solid var(--border);text-align:center;">';
           if(best!==null) html+='<span style="font-family:Bebas Neue,sans-serif;font-size:14px;color:#51cf66;">'+best.toFixed(2)+'s</span>';
-          html+='</td></tr>';
+          html+='</td>';
+          // Colonne écart vs cible moyen
+          var tCibleBlock = blockData.tCible || null;
+          if (tCibleBlock && validT.length) {
+            var avgT = validT.reduce(function(s,v){return s+v;},0)/validT.length;
+            var ecartPct = ((avgT - tCibleBlock) / tCibleBlock * 100);
+            var ecartStr = (ecartPct > 0 ? '+' : '') + ecartPct.toFixed(1) + '%';
+            var ecartCol = ecartPct <= -2 ? '#22c55e' : ecartPct <= 2 ? 'var(--muted)' : ecartPct <= 5 ? '#f59e0b' : '#ef4444';
+            html+='<td style="padding:6px 4px;border-bottom:1px solid var(--border);text-align:center;"><span style="font-family:DM Mono,monospace;font-size:9px;color:'+ecartCol+';">'+ecartStr+'</span></td>';
+          } else {
+            html+='<td style="padding:6px 4px;border-bottom:1px solid var(--border);"></td>';
+          }
+          // Tendance fatigue (R1→Rn)
+          if (validT.length >= 2) {
+            var first = validT[0]; var last = validT[validT.length-1];
+            var fatigue = ((last - first) / first * 100);
+            var fatigueStr = fatigue > 2 ? '↓ ' + fatigue.toFixed(1) + '%' : fatigue < -2 ? '↑' : '→';
+            var fatigueCol = fatigue > 5 ? '#ef4444' : fatigue > 2 ? '#f59e0b' : '#22c55e';
+            html+='<td style="padding:6px 4px;border-bottom:1px solid var(--border);text-align:center;"><span style="font-size:10px;color:'+fatigueCol+';" title="Évolution R1→Rn">'+fatigueStr+'</span></td>';
+          } else {
+            html+='<td style="padding:6px 4px;border-bottom:1px solid var(--border);"></td>';
+          }
+          html+='</tr>';
         });
         html += '</tbody></table></div></div>';
       });
