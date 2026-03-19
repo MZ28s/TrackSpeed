@@ -10762,14 +10762,13 @@ function submitFeedback() {
     comment:      document.getElementById('athComment').value,
     created_at:   new Date().toISOString()
   };
-  // Vérifier si un feedback existe déjà pour cette semaine → UPDATE sinon INSERT
+  // DELETE puis INSERT pour éviter tout conflit de contrainte UNIQUE
   var targetWeekId = _editingFeedbackWeekId || getISOWeekId();
-  _sb.from('athlete_feedback').select('id')
-    .eq('athlete_uid', _athProfile.user_id).eq('week_id', targetWeekId).maybeSingle()
-    .then(function(existing) {
-      var dbOp = (existing.data && existing.data.id)
-        ? _sb.from('athlete_feedback').update(data).eq('id', existing.data.id)
-        : _sb.from('athlete_feedback').insert(data);
+  data.week_id = targetWeekId; // s'assurer que le bon week_id est dans data
+  _sb.from('athlete_feedback').delete()
+    .eq('athlete_uid', _athProfile.user_id).eq('week_id', targetWeekId)
+    .then(function() {
+      var dbOp = _sb.from('athlete_feedback').insert(data);
       dbOp.then(function(r) {
         if (r.error) {
           if (msg) { msg.textContent = 'Erreur : ' + r.error.message; msg.style.color = '#ef4444'; }
