@@ -484,6 +484,12 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
     <!-- ══ PLANIFICATION ══ -->
     <div id="homePlanif" style="margin-bottom:16px;"></div>
 
+    <!-- ══ ALERTES ══ -->
+    <div id="homeAlerts" style="margin-bottom:16px;"></div>
+
+    <!-- ══ RPE GROUPE ══ -->
+    <div id="homeRPE" style="margin-bottom:16px;"></div>
+
     <!-- ══ FEEDBACKS RÉCENTS ══ -->
     <div id="homeFeedbacks" style="margin-bottom:16px;"></div>
 
@@ -5006,6 +5012,8 @@ function renderHome() {
   _renderHomeLastSession();
   _renderHomeStats();
   _renderHomePlanif();
+  _renderHomeAlerts();
+  _renderHomeRPE();
   _renderHomeFeedbacks();
   _renderHomeAthletes();
 }
@@ -7575,7 +7583,7 @@ function renderSession() {
     const tAtPct  = tTarget / (b.pct/100);
     const spd     = b.dist / tAtPct;
 
-    html += `<div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);
+    html += `<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);
       padding:10px 0 8px;${bi>0?'border-top:1px solid var(--border);':''}
       letter-spacing:2px;text-transform:uppercase;">
       Bloc ${bi+1} — ${b.reps}× ${b.dist}m @ ${b.pct}%${b.rest>0?' · récup '+b.rest+'min':''}
@@ -12459,6 +12467,90 @@ function toggleWeekGroup(groupId) {
 }
 
 // ── Home feedbacks (accueil) ──────────────────────────────
+
+// ══════════════════════════════════════════════════════
+// TABLEAU DE BORD ENRICHI
+// ══════════════════════════════════════════════════════
+
+function _renderHomeAlerts() {
+  var el = document.getElementById('homeAlerts');
+  if (!el || !_sb || !_sbUser || !profiles.length) { if(el) el.innerHTML=''; return; }
+
+  var currentWid = getISOWeekId();
+  // Charger les feedbacks de la semaine courante
+  _sb.from('athlete_feedback')
+    .select('athlete_name,week_id')
+    .eq('coach_uid', _sbUser.id)
+    .eq('week_id', currentWid)
+    .then(function(res) {
+      var sent = new Set((res.data||[]).map(function(f){ return (f.athlete_name||'').toLowerCase(); }));
+      var missing = profiles.filter(function(p){ return !sent.has((p.name||'').toLowerCase()); });
+      if (!missing.length) { el.innerHTML = ''; return; }
+
+      var html = '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:2px;color:#ef4444;margin-bottom:8px;display:flex;align-items:center;gap:6px;">⚠ FEEDBACKS MANQUANTS <span style="background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:8px;">' + missing.length + '</span></div>';
+      html += '<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:12px 14px;">';
+      html += '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+      missing.forEach(function(p) {
+        html += '<span style="font-family:Bebas Neue,sans-serif;font-size:14px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);border-radius:20px;padding:4px 12px;color:#ef4444;">' + p.name + '</span>';
+      });
+      html += '</div>';
+      html += '<div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);margin-top:8px;">Semaine ' + getISOWeekLabel() + ' — pas encore envoyé</div>';
+      html += '</div>';
+      el.innerHTML = html;
+    });
+}
+
+function _renderHomeRPE() {
+  var el = document.getElementById('homeRPE');
+  if (!el || !_sb || !_sbUser || !profiles.length) { if(el) el.innerHTML=''; return; }
+
+  var currentWid = getISOWeekId();
+  _sb.from('athlete_feedback')
+    .select('athlete_name,rpe,days,goal_status')
+    .eq('coach_uid', _sbUser.id)
+    .eq('week_id', currentWid)
+    .then(function(res) {
+      var feedbacks = res.data || [];
+      if (!feedbacks.length) { el.innerHTML = ''; return; }
+
+      // RPE moyen groupe
+      var rpeVals = feedbacks.map(function(f){ return f.rpe; }).filter(function(v){ return v !== null && !isNaN(v); });
+      var avgRpe = rpeVals.length ? (rpeVals.reduce(function(a,b){return a+b;},0)/rpeVals.length).toFixed(1) : null;
+      var rpeColor = !avgRpe ? 'var(--muted)' : avgRpe<=3?'#22c55e':avgRpe<=5?'#86efac':avgRpe<=7?'#f59e0b':avgRpe<=8?'#ef4444':'#991b1b';
+      var rpeLabel = !avgRpe ? '—' : avgRpe<=3?'Facile':avgRpe<=5?'Modéré':avgRpe<=7?'Intense':avgRpe<=8?'Difficile':'Maximum';
+
+      var GOAL_ICONS = { achieved:'✅', partial:'⚡', failed:'❌' };
+
+      var html = '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:2px;color:var(--accent);margin-bottom:10px;">// RPE SEMAINE ' + getISOWeekLabel() + '</div>';
+      html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;">';
+
+      // Moyenne groupe
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border);">';
+      html += '<div><div style="font-family:DM Mono,monospace;font-size:8px;color:var(--muted);">MOYENNE GROUPE</div><div style="font-family:DM Mono,monospace;font-size:9px;color:'+rpeColor+';margin-top:2px;">'+rpeLabel+'</div></div>';
+      html += '<div style="font-family:Bebas Neue,sans-serif;font-size:36px;color:'+rpeColor+';line-height:1;">' + (avgRpe||'—') + '</div>';
+      html += '</div>';
+
+      // Par athlète
+      html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+      feedbacks.forEach(function(fb) {
+        var rpe = fb.rpe;
+        var col = !rpe ? 'var(--muted)' : rpe<=3?'#22c55e':rpe<=5?'#86efac':rpe<=7?'#f59e0b':rpe<=8?'#ef4444':'#991b1b';
+        var barW = rpe ? Math.round(rpe/10*100) : 0;
+        var goalIcon = fb.goal_status ? (GOAL_ICONS[fb.goal_status]||'') : '';
+        html += '<div style="display:flex;align-items:center;gap:10px;">';
+        html += '<div style="font-family:Bebas Neue,sans-serif;font-size:14px;color:var(--text);width:80px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (fb.athlete_name||'?') + '</div>';
+        html += '<div style="flex:1;background:var(--surface2);border-radius:3px;height:6px;overflow:hidden;">';
+        html += '<div style="height:100%;width:'+barW+'%;background:'+col+';border-radius:3px;transition:width .4s;"></div>';
+        html += '</div>';
+        html += '<div style="font-family:Bebas Neue,sans-serif;font-size:16px;color:'+col+';width:24px;text-align:right;">' + (rpe||'—') + '</div>';
+        if (goalIcon) html += '<div style="font-size:14px;width:18px;">' + goalIcon + '</div>';
+        html += '</div>';
+      });
+      html += '</div></div>';
+      el.innerHTML = html;
+    });
+}
+
 function _renderHomeFeedbacks() {
   var el = document.getElementById('homeFeedbacks');
   if (!el || !_sb || !_sbUser) return;
