@@ -3530,6 +3530,9 @@ function renderPlanifListe() {
         + '<button onclick="activePlanifId=\'' + p.id + '\';switchPlanifTab(\'vue\');" '
           + 'style="background:none;border:1px solid var(--border);border-radius:3px;padding:5px 10px;'
           + 'font-family:\'DM Mono\',monospace;font-size:11px;color:var(--muted);cursor:pointer;white-space:nowrap;">👁 Vue</button>'
+        + '<button data-planifid="' + p.id + '" onclick="openPlanifAssignModal(this.dataset.planifid)" '
+          + 'style="background:rgba(245,200,0,.1);border:1px solid rgba(245,200,0,.4);border-radius:3px;padding:5px 10px;'
+          + 'font-family:\'DM Mono\',monospace;font-size:11px;color:var(--accent);cursor:pointer;white-space:nowrap;">👥 Attribuer</button>'
         + '<button onclick="_delPlanif(' + _planifDeleteIds.push(p.id) + '-1)" '
           + 'style="background:none;border:none;padding:5px 6px;color:var(--accent2);cursor:pointer;font-size:14px;">✕</button>'
         + '</div>';
@@ -12025,6 +12028,329 @@ function athDeleteCompetResult(idx) {
 }
 
 
+
+// ══════════════════════════════════════════════════════════════
+// PLANIF PARTAGÉE — COACH → ATHLÈTE
+// ══════════════════════════════════════════════════════════════
+
+var _athPlanif = null;        // planif attribuée à l'athlète
+var _athVacances = [];        // vacances déclarées par l'athlète
+var _athPlanifView = 'agenda'; // vue active
+
+// ─────────────────────────────────────────────────────────────
+// COACH : Modal attribution + vacances dans les vues
+// ─────────────────────────────────────────────────────────────
+
+function openPlanifAssignModal(planifId) {
+  var planif = planifData.find(function(p){ return p.id === planifId; });
+  if (!planif) return;
+
+  var modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:20px;';
+  var inner = document.createElement('div');
+  inner.style.cssText = 'background:var(--surface);border:1px solid var(--accent);border-radius:12px;padding:24px;max-width:380px;width:100%;max-height:80vh;overflow-y:auto;';
+
+  inner.innerHTML = '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;letter-spacing:2px;margin-bottom:4px;">ATTRIBUER LA PLANIF</div>'
+    +'<div style="font-family:DM Mono,monospace;font-size:12px;color:var(--muted);margin-bottom:16px;">'+planif.nom+'</div>';
+
+  if (!profiles.length) {
+    inner.innerHTML += '<div style="font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Aucun athlète dans le groupe.</div>';
+  } else {
+    inner.innerHTML += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:10px;">SÉLECTIONNE LES ATHLÈTES</div>';
+    var athList = document.createElement('div');
+    athList.style.cssText = 'display:flex;flex-direction:column;gap:8px;margin-bottom:16px;';
+    profiles.forEach(function(p) {
+      var isAssigned = (planif.athleteIds||[]).includes(p.id);
+      var row = document.createElement('label');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border:1px solid '+(isAssigned?'var(--accent)':'var(--border)')+';border-radius:8px;cursor:pointer;';
+      row.innerHTML = '<input type="checkbox" data-pid="'+p.id+'" data-pname="'+p.name+'" '+(isAssigned?'checked':'')+' style="accent-color:var(--accent);width:16px;height:16px;">'
+        +'<div><div style="font-family:DM Mono,monospace;font-size:12px;color:var(--text);">'+p.name+'</div>'
+        +'<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">'+p.spec+'</div></div>';
+      row.querySelector('input').addEventListener('change', function() {
+        row.style.borderColor = this.checked ? 'var(--accent)' : 'var(--border)';
+      });
+      athList.appendChild(row);
+    });
+    inner.appendChild(athList);
+  }
+
+  var msgEl = document.createElement('div');
+  msgEl.style.cssText = 'font-family:DM Mono,monospace;font-size:11px;min-height:14px;margin-bottom:10px;text-align:center;';
+  inner.appendChild(msgEl);
+
+  var saveBtn = document.createElement('button');
+  saveBtn.textContent = 'ATTRIBUER';
+  saveBtn.style.cssText = 'width:100%;background:var(--accent);border:none;border-radius:8px;padding:14px;font-family:Bebas Neue,sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:10px;min-height:52px;';
+  saveBtn.onclick = function() {
+    var checked = inner.querySelectorAll('input[type=checkbox]:checked');
+    var ids = [], names = [];
+    checked.forEach(function(chk){ ids.push(chk.dataset.pid); names.push(chk.dataset.pname); });
+    // Sauvegarder dans planifData
+    planif.athleteIds = ids;
+    sbScheduleSync();
+    // Écrire dans planif_assignments
+    if (_sb && _sbUser) {
+      // Supprimer les anciennes assignations
+      _sb.from('planif_assignments').delete().eq('planif_id', planifId).eq('coach_uid', _sbUser.id).then(function() {
+        if (!ids.length) { msgEl.textContent='Attribution mise à jour.'; msgEl.style.color='#22c55e'; setTimeout(function(){modal.remove();renderPlanifListe();},800); return; }
+        var rows = ids.map(function(aid, i) {
+          return { planif_id: planifId, coach_uid: _sbUser.id, athlete_uid: aid, athlete_name: names[i] };
+        });
+        _sb.from('planif_assignments').insert(rows).then(function(r) {
+          if (r.error) { msgEl.textContent='Erreur: '+r.error.message; msgEl.style.color='#ef4444'; return; }
+          msgEl.textContent='Planif attribuée à '+ids.length+' athlète'+(ids.length>1?'s':'')+'!';
+          msgEl.style.color='#22c55e';
+          setTimeout(function(){ modal.remove(); renderPlanifListe(); }, 800);
+        });
+      });
+    } else {
+      modal.remove(); renderPlanifListe();
+    }
+  };
+  var cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Annuler';
+  cancelBtn.style.cssText = 'width:100%;background:none;border:1px solid var(--border);border-radius:8px;padding:12px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);cursor:pointer;';
+  cancelBtn.onclick = function(){ modal.remove(); };
+  inner.appendChild(saveBtn);
+  inner.appendChild(cancelBtn);
+  modal.appendChild(inner);
+  modal.addEventListener('click', function(e){ if(e.target===modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+// Charger les vacances des athlètes pour une planif (côté coach)
+var _coachPlanifVacances = {};
+function loadCoachPlanifVacances(planifId, cb) {
+  if (!_sb || !_sbUser) { if(cb) cb([]); return; }
+  _sb.from('planif_vacances').select('*').eq('planif_id', planifId)
+    .then(function(r) {
+      var vacs = r.data || [];
+      _coachPlanifVacances[planifId] = vacs;
+      if (cb) cb(vacs);
+    });
+}
+
+// ─────────────────────────────────────────────────────────────
+// ATHLÈTE : chargement planif + vues + vacances
+// ─────────────────────────────────────────────────────────────
+
+function athLoadPlanif(cb) {
+  if (!_sb || !_athProfile) { if(cb) cb(); return; }
+  _sb.from('planif_assignments').select('planif_id,coach_uid').eq('athlete_uid', _athProfile.user_id).maybeSingle()
+    .then(function(r) {
+      if (!r.data) { _athPlanif = null; if(cb) cb(); return; }
+      var planifId  = r.data.planif_id;
+      var coachUid  = r.data.coach_uid;
+      // Charger les données de planif depuis planif_data du coach
+      _sb.from('planif_data').select('data').eq('user_id', coachUid).maybeSingle()
+        .then(function(pr) {
+          if (!pr.data || !pr.data.data) { _athPlanif = null; if(cb) cb(); return; }
+          var allPlanifs = pr.data.data;
+          _athPlanif = Array.isArray(allPlanifs) ? allPlanifs.find(function(p){ return p.id === planifId; }) : null;
+          // Charger mes vacances
+          _sb.from('planif_vacances').select('*').eq('planif_id', planifId).eq('athlete_uid', _athProfile.user_id)
+            .then(function(vr) {
+              _athVacances = vr.data || [];
+              if (cb) cb();
+            });
+        });
+    });
+}
+
+function athGoToPlanif() { athGoPage('planif'); }
+
+function athRenderPlanifPage() {
+  var el = document.getElementById('athPlanifContent');
+  if (!el) return;
+  if (!_athPlanif) {
+    el.innerHTML = '<div style="text-align:center;padding:40px 20px;">'
+      +'<div style="font-size:32px;margin-bottom:12px;">📅</div>'
+      +'<div style="font-family:DM Mono,monospace;font-size:12px;color:var(--muted);line-height:1.8;">Aucune planification attribuée par ton coach.</div>'
+      +'</div>';
+    return;
+  }
+
+  var p = _athPlanif;
+  var sem = getPlanifCurrentWeek(p);
+  var ph  = sem && sem.phase ? PLANIF_PHASES[sem.phase] : null;
+
+  // Onglets vue
+  var views = [{id:'agenda',label:'☰ AGENDA'},{id:'calendrier',label:'📅 CAL.'},{id:'frise',label:'〰 FRISE'},{id:'charge',label:'📊 CHARGE'}];
+  var tabHtml = '<div style="display:flex;gap:0;margin-bottom:14px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">';
+  views.forEach(function(v) {
+    var active = v.id === _athPlanifView;
+    tabHtml += '<button data-v="'+v.id+'" onclick="athSetPlanifView(this.dataset.v)" style="flex:1;padding:10px 4px;font-family:DM Mono,monospace;font-size:10px;letter-spacing:0.5px;border:none;cursor:pointer;background:'+(active?'var(--accent)':'var(--surface2)')+';color:'+(active?'#000':'var(--muted)')+';">'+v.label+'</button>';
+  });
+  tabHtml += '</div>';
+
+  // Infos semaine courante
+  var semHtml = '';
+  if (sem) {
+    semHtml = '<div class="ath-card" style="margin-bottom:12px;">';
+    semHtml += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+    semHtml += '<div><div style="font-family:Bebas Neue,sans-serif;font-size:26px;color:'+(ph?ph.color:'var(--accent)')+';">S'+sem.num+'</div>';
+    semHtml += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);">'+(ph?ph.label:'')+'</div></div>';
+    semHtml += '<div style="text-align:right;"><div style="font-family:Bebas Neue,sans-serif;font-size:22px;color:var(--text);">'+(sem.charge===0?'AF':sem.charge+'%')+'</div>';
+    semHtml += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);">CHARGE</div></div>';
+    semHtml += '</div></div>';
+  }
+
+  // Vue planif (lecture seule — réutilise renderPlanifVue)
+  var viewHtml = '<div id="athPlanifViewWrap" style="margin-bottom:14px;"></div>';
+
+  // Section vacances
+  var vacHtml = '<div class="ath-card">'
+    +'<div class="ath-card-title">Mes vacances</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">'
+    +'<div><label style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">DÉBUT</label>'
+    +'<input type="date" id="athVacStart" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:9px;color:var(--text);font-family:DM Mono,monospace;font-size:12px;outline:none;"></div>'
+    +'<div><label style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">FIN</label>'
+    +'<input type="date" id="athVacEnd" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:9px;color:var(--text);font-family:DM Mono,monospace;font-size:12px;outline:none;"></div>'
+    +'</div>'
+    +'<div style="margin-bottom:10px;"><label style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">LABEL (optionnel)</label>'
+    +'<input type="text" id="athVacLabel" maxlength="40" placeholder="Ex: Vacances scolaires" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:9px;color:var(--text);font-family:DM Mono,monospace;font-size:12px;outline:none;"></div>'
+    +'<button onclick="athAddVacances()" style="width:100%;background:var(--accent);border:none;border-radius:8px;padding:12px;font-family:Bebas Neue,sans-serif;font-size:18px;color:#000;cursor:pointer;letter-spacing:2px;min-height:48px;margin-bottom:8px;">+ AJOUTER</button>'
+    +'<div id="athVacMsg" style="font-family:DM Mono,monospace;font-size:11px;min-height:14px;text-align:center;color:var(--muted);margin-bottom:12px;"></div>'
+    +'<div id="athVacList"></div>'
+    +'</div>';
+
+  el.innerHTML = tabHtml + semHtml + viewHtml + vacHtml;
+  athRenderVacList();
+  athRenderPlanifView();
+}
+
+function athSetPlanifView(view) {
+  _athPlanifView = view;
+  // Mettre à jour les boutons
+  var el = document.getElementById('athPlanifContent');
+  if (el) el.querySelectorAll('button[data-v]').forEach(function(btn) {
+    var active = btn.dataset.v === view;
+    btn.style.background = active ? 'var(--accent)' : 'var(--surface2)';
+    btn.style.color = active ? '#000' : 'var(--muted)';
+  });
+  athRenderPlanifView();
+}
+
+function athRenderPlanifView() {
+  var wrap = document.getElementById('athPlanifViewWrap');
+  if (!wrap || !_athPlanif) return;
+
+  // Sauvegarder le contexte coach et injecter la planif athlète
+  var _savedPlanifData = planifData;
+  var _savedActivePlanifId = activePlanifId;
+  var _savedView = _currentPlanifView;
+  planifData = [_athPlanif];
+  activePlanifId = _athPlanif.id;
+  _currentPlanifView = _athPlanifView;
+
+  // Utiliser le renderer de la vue annuelle du coach
+  var tempDiv = document.createElement('div');
+  tempDiv.id = 'planifViewContent';
+  tempDiv.style.cssText = 'min-height:200px;';
+  wrap.innerHTML = '';
+  wrap.appendChild(tempDiv);
+  renderPlanifVue();
+
+  // Restaurer le contexte coach
+  planifData = _savedPlanifData;
+  activePlanifId = _savedActivePlanifId;
+  _currentPlanifView = _savedView;
+}
+
+function athAddVacances() {
+  if (!_athPlanif || !_sb || !_athProfile) return;
+  var start = (document.getElementById('athVacStart')||{}).value;
+  var end   = (document.getElementById('athVacEnd')||{}).value;
+  var label = ((document.getElementById('athVacLabel')||{}).value||'').trim();
+  var msgEl = document.getElementById('athVacMsg');
+  if (!start || !end) { if(msgEl){msgEl.textContent='Entre les dates.';msgEl.style.color='#ef4444';} return; }
+  if (start > end)    { if(msgEl){msgEl.textContent='La fin doit être après le début.';msgEl.style.color='#ef4444';} return; }
+
+  // Trouver le coach_uid depuis l'assignment
+  _sb.from('planif_assignments').select('coach_uid').eq('planif_id', _athPlanif.id).eq('athlete_uid', _athProfile.user_id).maybeSingle()
+    .then(function(r) {
+      var coachUid = r.data ? r.data.coach_uid : null;
+      var row = {
+        planif_id: _athPlanif.id,
+        coach_uid: coachUid,
+        athlete_uid: _athProfile.user_id,
+        athlete_name: _athProfile.name || '',
+        date_start: start, date_end: end,
+        label: label || 'Vacances'
+      };
+      _sb.from('planif_vacances').insert(row).then(function(res) {
+        if (res.error) { if(msgEl){msgEl.textContent='Erreur: '+res.error.message;msgEl.style.color='#ef4444';} return; }
+        if(msgEl){msgEl.textContent='Vacances ajoutées !';msgEl.style.color='#22c55e';}
+        _athVacances.push(Object.assign({}, row, {id: res.data&&res.data[0]?res.data[0].id:'local_'+Date.now()}));
+        document.getElementById('athVacStart').value='';
+        document.getElementById('athVacEnd').value='';
+        document.getElementById('athVacLabel').value='';
+        setTimeout(function(){if(msgEl)msgEl.textContent='';},2500);
+        athRenderVacList();
+      });
+    });
+}
+
+function athDeleteVacances(id) {
+  if (!_sb) return;
+  if (!confirm('Supprimer ces vacances ?')) return;
+  _sb.from('planif_vacances').delete().eq('id', id).then(function() {
+    _athVacances = _athVacances.filter(function(v){ return v.id !== id; });
+    athRenderVacList();
+  });
+}
+
+function athRenderVacList() {
+  var el = document.getElementById('athVacList');
+  if (!el) return;
+  if (!_athVacances.length) {
+    el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);text-align:center;padding:8px 0;">Aucune vacance déclarée.</div>';
+    return;
+  }
+  el.innerHTML = _athVacances.slice().sort(function(a,b){return a.date_start.localeCompare(b.date_start);}).map(function(v) {
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--surface2);border-radius:8px;margin-bottom:6px;">'
+      +'<div><div style="font-family:DM Mono,monospace;font-size:12px;color:var(--text);">'+v.label+'</div>'
+      +'<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">'+v.date_start+' → '+v.date_end+'</div></div>'
+      +'<button data-vid="'+v.id+'" onclick="athDeleteVacances(this.dataset.vid)" style="background:none;border:1px solid rgba(239,68,68,.3);border-radius:5px;padding:4px 8px;color:#ef4444;cursor:pointer;font-size:12px;">🗑</button>'
+      +'</div>';
+  }).join('');
+}
+
+// Card planif sur l'accueil athlète
+function _renderAthHomePlanifCard() {
+  var el = document.getElementById('athHomePlanifCard');
+  if (!el) return;
+  if (!_athPlanif) { el.innerHTML = ''; return; }
+  var p   = _athPlanif;
+  var sem = getPlanifCurrentWeek(p);
+  var ph  = sem && sem.phase ? PLANIF_PHASES[sem.phase] : null;
+  var html = '<div class="ath-card" onclick="athGoPage(&quot;planif&quot;)" style="cursor:pointer;border-color:'+(ph?ph.border:'var(--border)')+';">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">';
+  html += '<div style="font-family:DM Mono,monospace;font-size:11px;letter-spacing:2px;color:var(--accent);">// MA PLANIF</div>';
+  html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);letter-spacing:1px;">'+p.nom+'</div>';
+  html += '</div>';
+  if (sem) {
+    html += '<div style="display:flex;align-items:center;gap:12px;">';
+    html += '<div style="text-align:center;">';
+    html += '<div style="font-family:Bebas Neue,sans-serif;font-size:28px;color:'+(ph?ph.color:'var(--accent)')+';">S'+sem.num+'</div>';
+    if (ph) html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:'+ph.color+';">'+ph.short+'</div>';
+    html += '</div>';
+    html += '<div style="flex:1;">';
+    if (sem.charge !== null && sem.charge !== undefined) {
+      var chObj = PLANIF_CHARGES.find(function(x){return x.val===sem.charge;});
+      html += '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:'+(chObj?chObj.color:'var(--text)')+';">'+(sem.charge===0?'AF':sem.charge+'%')+'</div>';
+    }
+    if (sem.objectif) html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">'+sem.objectif+'</div>';
+    html += '</div>';
+    html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">Voir →</div>';
+    html += '</div>';
+  } else {
+    html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);">Planif en cours — Voir →</div>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
 // ── Navigation athlète ───────────────────────────────────
 
 
@@ -12272,6 +12598,7 @@ function athGoPage(name) {
   if (name === 'feedback') { renderDailyRpe(); renderDailyForm(); renderSleepRows(); athLoadFeedbackHistory(); }
   if (name === 'calc')     { athCalculate(); } // accessible via liens internes seulement
   if (name === 'force')    { athRenderExoSelector(); athUpdateForceTable(); journalLoadHistory(); }
+  if (name === 'planif')   { athRenderPlanifPage(); }
 }
 
 // ── enterAthleteMode ─────────────────────────────────────
@@ -12291,6 +12618,7 @@ function enterAthleteMode(profile) {
   if (nameEl)  nameEl.textContent  = (profile.name || 'Athlète').toUpperCase();
   if (weekEl)  weekEl.textContent  = getISOWeekLabel();
   if (titleEl) titleEl.textContent = 'SEMAINE ' + getISOWeekLabel();
+  athLoadPlanif(function(){ _renderAthHomePlanifCard(); });
   setTimeout(function() {
     athSyncThemeBtn();
     initFeedbackForm();
@@ -13967,6 +14295,7 @@ function renderAthHome() {
     dateEl.textContent = days[now.getDay()] + ' ' + now.getDate() + ' ' + months[now.getMonth()] + ' ' + now.getFullYear();
   }
 
+  _renderAthHomePlanifCard();
   _renderAthHomeFeedbackCard();
   _renderAthHomeSessions();
   _renderAthHomeStats();
@@ -15005,6 +15334,9 @@ setTimeout(() => {
     <!-- Séances à faire -->
     <div id="athHomeSessions" style="margin-bottom:16px;"></div>
 
+    <!-- Card planif semaine en cours -->
+    <div id="athHomePlanifCard" style="margin-bottom:16px;"></div>
+
     <!-- Stats rapides -->
     <div id="athHomeStats" style="margin-bottom:16px;"></div>
   </div>
@@ -15431,6 +15763,15 @@ setTimeout(() => {
     </div>
   </div>
 
+  <!-- ── PAGE PLANIF ATHLÈTE ── -->
+  <div id="ath-page-planif" class="ath-page">
+    <div style="font-family:'DM Mono',monospace;font-size:11px;letter-spacing:2px;color:var(--accent);margin-bottom:4px;">// Planification</div>
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;margin-bottom:16px;line-height:1;">MA PLANIF</div>
+    <div id="athPlanifContent">
+      <div style="text-align:center;padding:30px;font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);">Chargement...</div>
+    </div>
+  </div>
+
   <div id="ath-page-profile" class="ath-page">
     <div style="font-family:'DM Mono',monospace;font-size:11px;letter-spacing:2px;color:var(--accent);margin-bottom:4px;">// PROFIL</div>
     <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;margin-bottom:20px;line-height:1;">MON PROFIL</div>
@@ -15541,6 +15882,7 @@ setTimeout(() => {
     <button class="ath-nav-btn" id="ath-nav-feedback" onclick="athGoPage('feedback')" style="position:relative;"><span class="icon">📋</span>Feedback<span id="athFeedbackBadge" style="display:none;position:absolute;top:6px;right:calc(50% - 22px);width:8px;height:8px;background:#ef4444;border-radius:50%;"></span></button>
     <button class="ath-nav-btn" id="ath-nav-force" onclick="athGoPage('force')"><span class="icon">🏋</span>Force</button>
     <button class="ath-nav-btn" id="ath-nav-history" onclick="athGoPage('history')"><span class="icon">📊</span>Séances</button>
+    <button class="ath-nav-btn" id="ath-nav-planif" onclick="athGoPage('planif')"><span class="icon">📅</span>Planif</button>
     <button class="ath-nav-btn" id="ath-nav-compet" onclick="athGoPage('compet')"><span class="icon">🏆</span>Compét</button>
     <button class="ath-nav-btn" id="ath-nav-profile" onclick="athGoPage('profile')"><span class="icon">👤</span>Profil</button>
   </nav>
