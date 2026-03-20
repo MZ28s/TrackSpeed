@@ -1032,6 +1032,9 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
       <button class="btn" onclick="openShareModal()" style="border-color:var(--accent2);color:var(--accent2);">📤 Partager</button>
       <button class="btn" onclick="openPresentation()" id="btnPresentation" style="border-color:var(--muted);color:var(--muted);">📺</button>
     </div>
+    <button onclick="saveAsTemplate()" style="width:100%;background:var(--surface2);border:1px dashed var(--border);border-radius:8px;padding:12px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer;letter-spacing:1px;margin-top:8px;transition:all .2s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+      📋 SAUVEGARDER COMME SÉANCE
+    </button>
     <div id="sendSessionMsg" style="font-family:'DM Mono',monospace;font-size:12px;text-align:center;min-height:14px;margin-top:8px;"></div>
   </div>
 </div><!-- end stab-content-plan -->
@@ -1047,6 +1050,7 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
     <button class="lib-filter" data-filter="ev"    onclick="filterLib('ev')">🔥 End. Vitesse</button>
     <button class="lib-filter" data-filter="lacto" onclick="filterLib('lacto')">⚗️ Lacto</button>
     <button class="lib-filter" data-filter="vma"   onclick="filterLib('vma')">💨 VMA</button>
+    <button class="lib-filter" data-filter="custom" onclick="filterLib('custom')" id="libFilterCustom">📋 MES SÉANCES</button>
   </div>
 
   <div id="libList"></div>
@@ -1654,7 +1658,7 @@ function appRefresh() {
 
 function sbForcePull() {
   if (!_sbUser || !_sb) { sbSyncBadgeSet('non connecté', '#ef4444', true); return; }
-  sbPullAll().then(function() { renderProfiles(); renderHome(); });
+  sbPullAll().then(function() { renderProfiles(); renderHome(); loadCustomTemplates(); });
 }
 
 function sbForcePush() {
@@ -7234,6 +7238,142 @@ function filterLib(f) {
   renderLib();
 }
 
+
+// ══════════════════════════════════════════════════════
+// TEMPLATES DE SÉANCES PERSONNALISÉS
+// ══════════════════════════════════════════════════════
+
+var _customTemplates = [];
+
+function loadCustomTemplates(cb) {
+  if (!_sb || !_sbUser) { if(cb) cb(); return; }
+  sbPull('settings_data').then(function(data) {
+    if (data && data.customTemplates) _customTemplates = data.customTemplates;
+    if (cb) cb();
+  });
+}
+
+function saveCustomTemplates(cb) {
+  if (!_sb || !_sbUser) return;
+  sbPull('settings_data').then(function(data) {
+    var settings = data || {};
+    settings.customTemplates = _customTemplates;
+    sbPush('settings_data', settings).then(function() { if(cb) cb(); });
+  });
+}
+
+function renderCustomTemplates() {
+  var container = document.getElementById('libList');
+  if (!container) return;
+  if (!_customTemplates.length) {
+    container.innerHTML = '<div style="text-align:center;padding:40px 0;">'
+      + '<div style="font-size:32px;margin-bottom:12px;">💾</div>'
+      + '<div style="font-family:DM Mono,monospace;font-size:12px;color:var(--muted);line-height:1.8;">Aucune séance sauvegardée.<br>'
+      + 'Crée une séance et clique sur<br><strong style="color:var(--text);">SAUVEGARDER COMME SÉANCE</strong></div>'
+      + '</div>';
+    return;
+  }
+  var OBJ_COLORS = {vmax:'#C8181E',acc:'#F5A623',ev:'#F5C800',lacto:'#9B59B6',vma:'#7ED321',custom:'var(--accent)'};
+  var OBJ_LABELS = {vmax:'Vitesse Max',acc:'Accélération',ev:'End. Vitesse',lacto:'Lacto',vma:'VMA',custom:'Personnel'};
+  var html = '';
+  _customTemplates.forEach(function(tpl) {
+    var col = OBJ_COLORS[tpl.obj] || 'var(--accent)';
+    var label = OBJ_LABELS[tpl.obj] || tpl.obj;
+    var blocsStr = (tpl.blocs||[]).map(function(b){return (b.reps||'?')+'×'+(b.dist||'?')+'m @'+(b.pct||'?')+'%';}).join(' · ');
+    var totalM = (tpl.blocs||[]).reduce(function(s,b){return s+(b.dist||0)*(b.reps||0);},0);
+    html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">';
+    html += '<div style="flex:1;min-width:0;">';
+    html += '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:var(--text);line-height:1.1;">'+tpl.title+'</div>';
+    html += '<div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">';
+    html += '<span style="font-family:DM Mono,monospace;font-size:10px;background:'+col+'22;color:'+col+';border:1px solid '+col+'44;border-radius:4px;padding:2px 8px;">'+label+'</span>';
+    html += '<span style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">'+tpl.createdAt+'</span>';
+    html += '</div>';
+    html += '</div>';
+    html += '<div style="text-align:right;flex-shrink:0;margin-left:10px;">';
+    html += '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;color:'+col+';line-height:1;">'+totalM+'m</div>';
+    html += '</div></div>';
+    html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.6;">'+blocsStr+'</div>';
+    html += '<div style="display:grid;grid-template-columns:1fr auto;gap:8px;">';
+    html += '<button data-tplid="'+tpl.id+'" onclick="loadTemplate(this.dataset.tplid)" style="background:var(--accent);border:none;border-radius:8px;padding:12px;font-family:Bebas Neue,sans-serif;font-size:16px;color:#000;cursor:pointer;letter-spacing:1px;min-height:44px;">▶ CHARGER</button>';
+    html += '<button data-tplid="'+tpl.id+'" onclick="deleteTemplate(this.dataset.tplid)" style="background:none;border:1px solid rgba(239,68,68,.4);border-radius:8px;padding:12px 14px;font-family:DM Mono,monospace;font-size:12px;color:#ef4444;cursor:pointer;">🗑</button>';
+    html += '</div></div>';
+  });
+  container.innerHTML = html;
+}
+
+function saveAsTemplate() {
+  if (!sessionBlocks.length) { alert('Aucun bloc à sauvegarder.'); return; }
+  var modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:20px;';
+  var inner = document.createElement('div');
+  inner.style.cssText = 'background:var(--surface);border:1px solid var(--accent);border-radius:12px;padding:28px 24px;max-width:380px;width:100%;';
+  var blocsSummary = sessionBlocks.map(function(b){return (b.reps||'?')+'x'+(b.dist||'?')+'m';}).join(' . ');
+  inner.innerHTML =
+    '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;letter-spacing:2px;margin-bottom:6px;">SAUVEGARDER LA SÉANCE</div>'+
+    '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);margin-bottom:16px;">'+blocsSummary+'</div>'+
+    '<label style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:6px;">NOM DU TEMPLATE</label>'+
+    '<input id="tplNameInput" type="text" maxlength="50" placeholder="Ex: Vitesse 4x60m" '+
+    'style="width:100%;box-sizing:border-box;background:var(--surface2);border:2px solid var(--accent);border-radius:8px;padding:12px;color:var(--text);font-family:DM Mono,monospace;font-size:13px;outline:none;margin-bottom:12px;">'+
+    '<label style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:6px;">OBJECTIF</label>'+
+    '<select id="tplObjSelect" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;color:var(--text);font-family:DM Mono,monospace;font-size:12px;margin-bottom:16px;">'+
+    '<option value="vmax">Vitesse Max</option><option value="acc">Acceleration</option>'+
+    '<option value="ev">Endurance Vitesse</option><option value="lacto">Lacto</option>'+
+    '<option value="vma">VMA</option><option value="custom">Personnel</option>'+
+    '</select>'+
+    '<div id="tplSaveMsg" style="font-family:DM Mono,monospace;font-size:11px;min-height:14px;margin-bottom:10px;color:#ef4444;"></div>';
+  var saveBtn = document.createElement('button');
+  saveBtn.textContent = 'SAUVEGARDER';
+  saveBtn.style.cssText = 'width:100%;background:var(--accent);border:none;border-radius:8px;padding:14px;font-family:Bebas Neue,sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:10px;min-height:52px;';
+  saveBtn.onclick = function() {
+    var name = (document.getElementById('tplNameInput').value||'').trim();
+    var obj  = document.getElementById('tplObjSelect').value;
+    var msgEl = document.getElementById('tplSaveMsg');
+    if (!name) { if(msgEl) msgEl.textContent = 'Entre un nom.'; return; }
+    var tpl = {
+      id: 'tpl_'+Date.now(),
+      title: name, obj: obj,
+      blocs: sessionBlocks.map(function(b){return {reps:b.reps,dist:b.dist,pct:b.pct,rest:b.rest};}),
+      createdAt: new Date().toISOString().slice(0,10)
+    };
+    _customTemplates.unshift(tpl);
+    saveBtn.disabled = true; saveBtn.textContent = 'Sauvegarde...';
+    saveCustomTemplates(function() {
+      modal.remove();
+      // Feedback visuel
+      var fbEl = document.getElementById('sendSessionMsg');
+      if (fbEl) { fbEl.textContent = 'Séance "'+name+'" sauvegarde !'; fbEl.style.color='#22c55e'; setTimeout(function(){fbEl.textContent='';},3000); }
+    });
+  };
+  var cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Annuler';
+  cancelBtn.style.cssText = 'width:100%;background:none;border:1px solid var(--border);border-radius:8px;padding:12px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);cursor:pointer;';
+  cancelBtn.onclick = function() { modal.remove(); };
+  inner.appendChild(saveBtn);
+  inner.appendChild(cancelBtn);
+  modal.appendChild(inner);
+  document.body.appendChild(modal);
+  setTimeout(function(){ var inp=document.getElementById('tplNameInput'); if(inp) inp.focus(); },100);
+}
+
+function deleteTemplate(id) {
+  if (!confirm('Supprimer ce cette séance ?')) return;
+  _customTemplates = _customTemplates.filter(function(t){return t.id!==id;});
+  saveCustomTemplates(function(){ renderLib(); });
+}
+
+function loadTemplate(id) {
+  var tpl = _customTemplates.find(function(t){return t.id===id;});
+  if (!tpl) return;
+  if (sessionBlocks.length > 0 && !confirm('Remplacer la seance en cours ?')) return;
+  sessionBlocks = tpl.blocs.map(function(b){return Object.assign({},b,{objectif:tpl.obj});});
+  if (tpl.obj) selectObjectif(tpl.obj);
+  switchStab('plan');
+  renderSession();
+  updateDashboard();
+  document.getElementById('page-session').scrollTop = 0;
+}
+
 function renderLib() {
   const OBJ_META = {
     vmax:  { label:'Vitesse Max',       color:'#C8181E' },
@@ -7242,6 +7382,12 @@ function renderLib() {
     lacto: { label:'Tol. Lactique',     color:'#9B59B6' },
     vma:   { label:'VMA / Aérobie',     color:'#7ED321' },
   };
+
+  // Si filtre "custom" → afficher mes templates
+  if (currentLibFilter === 'custom') {
+    renderCustomTemplates();
+    return;
+  }
 
   const sessions = (currentLibFilter === 'all'
     ? SESSION_BANK
