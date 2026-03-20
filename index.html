@@ -7027,6 +7027,24 @@ function _renderHistoryFromCS(container, sessions) {
           html+='</td>';
           // Colonne écart vs cible moyen
           var tCibleBlock = blockData.tCible || null;
+          // Recalculer depuis les records du profil si absent
+          if (!tCibleBlock && b.dist && b.pct) {
+            var athProfile = profiles.find(function(pr){ return pr.name === a.name; });
+            if (athProfile && athProfile.records) {
+              var pRefs = [];
+              [50,60,80,100,200,400].forEach(function(d) {
+                var t = athProfile.records['pr'+d];
+                if (t) pRefs.push({dRef:d,t:parseFloat(t)});
+              });
+              pRefs.sort(function(x,y){return x.dRef-y.dRef;});
+              if (pRefs.length) {
+                var dist2 = b.dist;
+                var cl = pRefs.reduce(function(best,ref){return Math.abs(ref.dRef-dist2)<Math.abs(best.dRef-dist2)?ref:best;});
+                var t100b = computeTarget(dist2,[cl]);
+                if (t100b) tCibleBlock = Math.round(t100b/(b.pct/100)*100)/100;
+              }
+            }
+          }
           if (tCibleBlock && validT.length) {
             var avgT = validT.reduce(function(s,v){return s+v;},0)/validT.length;
             var ecartPct = ((avgT - tCibleBlock) / tCibleBlock * 100);
@@ -11779,6 +11797,21 @@ function renderAthHistory() {
                 var maxT = Math.max.apply(null, validT);
                 var minT = Math.min.apply(null, validT);
                 var tCible = b.tCible || null;
+                // Recalculer si absent : utiliser les PR de l'athlète
+                if (!tCible && _athProfile && _athProfile.records && b.dist && b.pct) {
+                  var athRefs = [];
+                  [50,60,80,100,200,400].forEach(function(d) {
+                    var t = _athProfile.records['pr'+d];
+                    if (t) athRefs.push({dRef:d, t:parseFloat(t)});
+                  });
+                  athRefs.sort(function(a,r){return a.dRef-r.dRef;});
+                  if (athRefs.length) {
+                    var dist = b.dist;
+                    var closest = athRefs.reduce(function(best,ref){return Math.abs(ref.dRef-dist)<Math.abs(best.dRef-dist)?ref:best;});
+                    var t100 = computeTarget(dist,[closest]);
+                    if (t100) tCible = Math.round(t100/(b.pct/100)*100)/100;
+                  }
+                }
                 html += '<div style="margin-top:14px;background:var(--surface2);border-radius:8px;padding:14px;">';
                 html += '<div style="font-family:DM Mono,monospace;font-size:7px;letter-spacing:1px;color:var(--muted);margin-bottom:10px;">PROGRESSION DES TEMPS — BLOC '+(bi+1)+'</div>';
                 // Barres verticales
