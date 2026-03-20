@@ -962,6 +962,11 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
       </button>
     </div>
 
+    <!-- ══ SAUVEGARDER COMME SÉANCE ══ -->
+    <button onclick="saveAsTemplate()" style="width:100%;background:var(--surface2);border:1px dashed var(--border);border-radius:8px;padding:13px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer;letter-spacing:1px;margin-bottom:16px;transition:all .2s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+      📋 SAUVEGARDER COMME SÉANCE
+    </button>
+
     <!-- ══ SAISIE MULTI-ATHLÈTES (toujours visible) ══ -->
     <div id="multiAthleteSection" style="margin-top:16px;border-top:2px solid var(--accent);padding-top:16px;">
 
@@ -1032,9 +1037,6 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
       <button class="btn" onclick="openShareModal()" style="border-color:var(--accent2);color:var(--accent2);">📤 Partager</button>
       <button class="btn" onclick="openPresentation()" id="btnPresentation" style="border-color:var(--muted);color:var(--muted);">📺</button>
     </div>
-    <button onclick="saveAsTemplate()" style="width:100%;background:var(--surface2);border:1px dashed var(--border);border-radius:8px;padding:12px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer;letter-spacing:1px;margin-top:8px;transition:all .2s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
-      📋 SAUVEGARDER COMME SÉANCE
-    </button>
     <div id="sendSessionMsg" style="font-family:'DM Mono',monospace;font-size:12px;text-align:center;min-height:14px;margin-top:8px;"></div>
   </div>
 </div><!-- end stab-content-plan -->
