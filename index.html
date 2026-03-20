@@ -11956,22 +11956,26 @@ function athRenderCompetChart() {
   el.innerHTML = '<canvas id="athCompetCanvas" style="display:block;width:100%;min-height:240px;"></canvas>';
 
   var series = [{ pts: pts.map(function(p){ return {date:p.date,time:p.time,compet:p.name||''}; }), name: _athProfile.name||'', color: '#F5C800' }];
-  var _savedGenre = saison_genre;
-  var _savedDist  = saisonDistActif;
-  saison_genre    = genre;
-  saisonDistActif = _athHistDist;
 
-  // Attendre que le canvas soit dans le DOM
-  // Injecter les RC filtrées par catégorie dans le canvas
-  _athRCKeysOverride = _athShowRC ? _getAthRCKeys() : [];
+  // Capturer les valeurs pour le callback async
+  var _distForChart  = _athHistDist;
+  var _genreForChart = genre;
+  var _rcKeys        = _athShowRC ? _getAthRCKeys() : [];
+
   requestAnimationFrame(function() {
     var canvas = document.getElementById('athCompetCanvas');
-    if (canvas) drawSaisonChart(canvas, series);
-    _athRCKeysOverride = null; // Remettre à null pour ne pas affecter le coach
+    if (!canvas) return;
+    // Injecter temporairement les bonnes valeurs dans drawSaisonChart
+    var _savedGenre = saison_genre;
+    var _savedDist  = saisonDistActif;
+    saison_genre    = _genreForChart;
+    saisonDistActif = _distForChart;
+    _athRCKeysOverride = _rcKeys;
+    drawSaisonChart(canvas, series);
+    _athRCKeysOverride = null;
+    saison_genre    = _savedGenre;
+    saisonDistActif = _savedDist;
   });
-
-  saison_genre    = _savedGenre;
-  saisonDistActif = _savedDist;
 
   // Déterminer les RC à afficher selon catégorie + genre
   var rcKeysForDisplay = _getAthRCKeys();
