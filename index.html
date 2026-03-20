@@ -12365,21 +12365,165 @@ var JOURNAL_EXO_LABELS = {
   rdl:'RDL', powerclean:'Power Clean', bench:'Bench Press', legext:'Leg Extension'
 };
 
+
+// ══════════════════════════════════════════════════════
+// ONGLET PROGRESSION — graphiques 1RM et RPE
+// ══════════════════════════════════════════════════════
+
+var _progSelectedExo = 'squat';
+
+function renderProgressionTab() {
+  _renderProgExoSelector();
+  _renderProg1RM(_progSelectedExo);
+  _renderProgRPE();
+}
+
+function _renderProgExoSelector() {
+  var el = document.getElementById('progExoSelector');
+  if (!el) return;
+  var exos = ['squat','hipthrust','deadlift','rdl','powerclean','bench','legext'];
+  var labels = {squat:'Squat',hipthrust:'Hip Thrust',deadlift:'Deadlift',rdl:'RDL',powerclean:'Power Clean',bench:'Bench',legext:'Leg Ext'};
+  el.innerHTML = exos.map(function(ex) {
+    var active = ex === _progSelectedExo;
+    return '<button data-exo="'+ex+'" onclick="_progSelectExo(this.dataset.exo)" style="padding:8px 14px;border-radius:20px;border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'+(active?'rgba(245,200,0,.15)':'var(--surface2)')+';font-family:DM Mono,monospace;font-size:11px;color:'+(active?'var(--accent)':'var(--muted)')+';cursor:pointer;">'+labels[ex]+'</button>';
+  }).join('');
+}
+
+function _progSelectExo(exo) {
+  _progSelectedExo = exo;
+  _renderProgExoSelector();
+  _renderProg1RM(exo);
+}
+
+function _renderProg1RM(exo) {
+  var el = document.getElementById('progChart1RM');
+  if (!el || !_sb || !_athProfile) return;
+  el.innerHTML = '<div style="text-align:center;padding:20px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Chargement...</div>';
+
+  _sb.from('athlete_journal').select('session_date,entries')
+    .eq('user_id', _athProfile.user_id)
+    .order('session_date', { ascending: true })
+    .limit(50)
+    .then(function(r) {
+      if (r.error || !r.data || !r.data.length) {
+        el.innerHTML = '<div style="text-align:center;padding:20px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Aucune séance dans le journal.</div>';
+        return;
+      }
+
+      // Extraire le meilleur poids par date pour cet exercice
+      var points = [];
+      r.data.forEach(function(s) {
+        var entries = s.entries || [];
+        var best = null;
+        entries.forEach(function(e) {
+          if ((e.exo||'').toLowerCase() === exo.toLowerCase()) {
+            (e.sets||[]).forEach(function(set) {
+              var w = parseFloat(set.weight);
+              if (!isNaN(w) && w > 0 && (!best || w > best)) best = w;
+            });
+          }
+        });
+        if (best) points.push({ date: s.session_date, weight: best });
+      });
+
+      if (!points.length) {
+        el.innerHTML = '<div style="text-align:center;padding:20px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Pas de données pour cet exercice.</div>';
+        return;
+      }
+
+      el.innerHTML = _buildBarChart(points, 'kg', 'var(--accent)');
+    });
+}
+
+function _renderProgRPE() {
+  var el = document.getElementById('progChartRPE');
+  if (!el || !_sb || !_athProfile) return;
+
+  _sb.from('athlete_feedback').select('week_label,week_id,rpe')
+    .eq('athlete_uid', _athProfile.user_id)
+    .order('week_id', { ascending: true })
+    .limit(20)
+    .then(function(r) {
+      if (r.error || !r.data || !r.data.length) {
+        el.innerHTML = '<div style="text-align:center;padding:20px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Aucun feedback envoyé.</div>';
+        return;
+      }
+      var points = r.data
+        .filter(function(fb) { return fb.rpe !== null && !isNaN(fb.rpe); })
+        .map(function(fb) { return { date: fb.week_label || fb.week_id, weight: fb.rpe }; });
+
+      if (!points.length) { el.innerHTML = '<div style="text-align:center;padding:20px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Aucune donnée RPE.</div>'; return; }
+
+      // Couleur adaptée au RPE
+      var rpeColors = points.map(function(p) {
+        return p.weight <= 4 ? '#22c55e' : p.weight <= 6 ? '#86efac' : p.weight <= 7 ? '#f59e0b' : '#ef4444';
+      });
+      el.innerHTML = _buildBarChart(points, '/10', null, rpeColors, 10);
+    });
+}
+
+function _buildBarChart(points, unit, color, colors, maxVal) {
+  var vals = points.map(function(p){return p.weight;});
+  var maxV = maxVal || Math.max.apply(null, vals) * 1.1;
+  var minV = Math.min.apply(null, vals);
+  var range = maxV - (minV * 0.9);
+  var chartH = 120;
+
+  var html = '<div style="overflow-x:auto;">';
+  html += '<div style="display:flex;align-items:flex-end;gap:4px;height:'+(chartH+40)+'px;padding:10px 0 0;min-width:'+(points.length*44)+'px;">';
+
+  points.forEach(function(p, i) {
+    var col = colors ? colors[i] : (color || 'var(--accent)');
+    var barH = Math.max(8, Math.round((p.weight - minV * 0.9) / range * chartH));
+    var isMax = p.weight === Math.max.apply(null, vals);
+    var isLast = i === points.length - 1;
+
+    html += '<div style="flex:0 0 40px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;">';
+    html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:'+(isMax?'var(--accent)':isLast?'var(--text)':'var(--muted)')+';font-weight:'+(isMax||isLast?'bold':'normal')+';">'+p.weight+(unit==='kg'?'':unit)+'</div>';
+    html += '<div style="width:32px;height:'+barH+'px;background:'+col+';border-radius:4px 4px 0 0;position:relative;">';
+    if (isMax) html += '<div style="position:absolute;top:-16px;left:50%;transform:translateX(-50%);font-size:10px;">🏆</div>';
+    html += '</div>';
+    // Label date court
+    var dateLabel = p.date.replace(/^\d{4}-/,'').replace(/-/,'/');
+    if (p.date.length > 10) dateLabel = p.date.slice(0,6); // week label
+    html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);white-space:nowrap;transform:rotate(-30deg);transform-origin:top left;margin-top:4px;margin-left:4px;width:36px;overflow:hidden;">'+dateLabel+'</div>';
+    html += '</div>';
+  });
+
+  html += '</div>';
+
+  // Valeur max + progression totale
+  var maxW = Math.max.apply(null, vals);
+  var firstW = vals[0]; var lastW = vals[vals.length-1];
+  var progPct = ((lastW - firstW) / firstW * 100).toFixed(1);
+  var progCol = parseFloat(progPct) >= 0 ? '#22c55e' : '#ef4444';
+  html += '<div style="display:flex;justify-content:space-between;padding:10px 4px 0;border-top:1px solid var(--border);margin-top:8px;">';
+  html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);">Max : <span style="color:var(--accent);font-size:13px;font-family:Bebas Neue,sans-serif;">'+maxW+(unit==='kg'?'kg':unit)+'</span></div>';
+  html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);">Progression : <span style="color:'+progCol+';font-size:13px;font-family:Bebas Neue,sans-serif;">'+(parseFloat(progPct)>0?'+':'')+progPct+'%</span></div>';
+  html += '</div></div>';
+  return html;
+}
+
 function forceTab(tab) {
-  var charges = document.getElementById('force-tab-charges');
-  var journal  = document.getElementById('force-tab-journal');
+  var charges    = document.getElementById('force-tab-charges');
+  var journal    = document.getElementById('force-tab-journal');
+  var progression = document.getElementById('force-tab-progression');
   var btnC = document.getElementById('forceTabCharges');
   var btnJ = document.getElementById('forceTabJournal');
-  if (!charges || !journal) return;
-  if (tab === 'charges') {
-    charges.style.display = 'block'; journal.style.display = 'none';
+  var btnP = document.getElementById('forceTabProgression');
+  [charges, journal, progression].forEach(function(el) { if(el) el.style.display='none'; });
+  [btnC, btnJ, btnP].forEach(function(b) { if(b){b.style.background='var(--surface2)';b.style.color='var(--muted)';} });
+  if (tab === 'charges' && charges) {
+    charges.style.display = 'block';
     if (btnC) { btnC.style.background='var(--accent)'; btnC.style.color='#000'; }
-    if (btnJ) { btnJ.style.background='var(--surface2)'; btnJ.style.color='var(--muted)'; }
-  } else {
-    charges.style.display = 'none'; journal.style.display = 'block';
-    if (btnC) { btnC.style.background='var(--surface2)'; btnC.style.color='var(--muted)'; }
+  } else if (tab === 'journal' && journal) {
+    journal.style.display = 'block';
     if (btnJ) { btnJ.style.background='var(--accent)'; btnJ.style.color='#000'; }
     journalLoadHistory();
+  } else if (tab === 'progression' && progression) {
+    progression.style.display = 'block';
+    if (btnP) { btnP.style.background='var(--accent)'; btnP.style.color='#000'; }
+    renderProgressionTab();
   }
 }
 
@@ -13962,15 +14106,19 @@ setTimeout(() => {
     <div style="font-family:'DM Mono',monospace;font-size:11px;letter-spacing:2px;color:var(--accent);margin-bottom:4px;">// Musculation sprint</div>
     <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;margin-bottom:14px;line-height:1;">FORCE</div>
 
-    <!-- Onglets CHARGES / JOURNAL -->
+    <!-- Onglets CHARGES / JOURNAL / PROGRESSION -->
     <div style="display:flex;gap:0;margin-bottom:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
       <button id="forceTabCharges" onclick="forceTab('charges')"
-        style="flex:1;padding:13px;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:1px;border:none;cursor:pointer;transition:all .15s;background:var(--accent);color:#000;">
+        style="flex:1;padding:13px;font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:1px;border:none;cursor:pointer;transition:all .15s;background:var(--accent);color:#000;">
         📊 CHARGES
       </button>
       <button id="forceTabJournal" onclick="forceTab('journal')"
-        style="flex:1;padding:13px;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:1px;border:none;cursor:pointer;transition:all .15s;background:var(--surface2);color:var(--muted);">
+        style="flex:1;padding:13px;font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:1px;border:none;cursor:pointer;transition:all .15s;background:var(--surface2);color:var(--muted);">
         📓 JOURNAL
+      </button>
+      <button id="forceTabProgression" onclick="forceTab('progression')"
+        style="flex:1;padding:13px;font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:1px;border:none;cursor:pointer;transition:all .15s;background:var(--surface2);color:var(--muted);">
+        📈 PROGRESSION
       </button>
     </div>
 
@@ -13993,6 +14141,19 @@ setTimeout(() => {
         <div class="card-title" id="ath-forceTableTitle">// Tableau des charges</div>
         <div id="ath-forceTableZones" style="margin-bottom:8px;"></div>
         <div id="ath-forceTableRows"><div class="empty-state"><span class="empty-icon">📊</span>Sélectionne un exercice</div></div>
+      </div>
+    </div>
+
+    <!-- ONGLET PROGRESSION -->
+    <div id="force-tab-progression" style="display:none;">
+      <div class="ath-card" style="margin-bottom:12px;">
+        <div class="ath-card-title">Progression 1RM</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;" id="progExoSelector"></div>
+        <div id="progChart1RM"><div style="text-align:center;padding:30px 0;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Sélectionne un exercice</div></div>
+      </div>
+      <div class="ath-card">
+        <div class="ath-card-title">RPE semaine par semaine</div>
+        <div id="progChartRPE"><div style="text-align:center;padding:20px 0;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Chargement...</div></div>
       </div>
     </div>
 
