@@ -12044,6 +12044,7 @@ var _athPlanifView = 'agenda'; // vue active
 function openPlanifAssignModal(planifId) {
   var planif = planifData.find(function(p){ return p.id === planifId; });
   if (!planif) return;
+  if (!_sb || !_sbUser) return;
 
   var modal = document.createElement('div');
   modal.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:20px;';
@@ -12051,71 +12052,85 @@ function openPlanifAssignModal(planifId) {
   inner.style.cssText = 'background:var(--surface);border:1px solid var(--accent);border-radius:12px;padding:24px;max-width:380px;width:100%;max-height:80vh;overflow-y:auto;';
 
   inner.innerHTML = '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;letter-spacing:2px;margin-bottom:4px;">ATTRIBUER LA PLANIF</div>'
-    +'<div style="font-family:DM Mono,monospace;font-size:12px;color:var(--muted);margin-bottom:16px;">'+planif.nom+'</div>';
+    +'<div style="font-family:DM Mono,monospace;font-size:12px;color:var(--muted);margin-bottom:16px;">'+planif.nom+'</div>'
+    +'<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);text-align:center;padding:8px 0;">Chargement des athlètes...</div>';
 
-  if (!profiles.length) {
-    inner.innerHTML += '<div style="font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Aucun athlète dans le groupe.</div>';
-  } else {
-    inner.innerHTML += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:10px;">SÉLECTIONNE LES ATHLÈTES</div>';
-    var athList = document.createElement('div');
-    athList.style.cssText = 'display:flex;flex-direction:column;gap:8px;margin-bottom:16px;';
-    profiles.forEach(function(p) {
-      var isAssigned = (planif.athleteIds||[]).includes(p.id);
-      var row = document.createElement('label');
-      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border:1px solid '+(isAssigned?'var(--accent)':'var(--border)')+';border-radius:8px;cursor:pointer;';
-      row.innerHTML = '<input type="checkbox" data-pid="'+p.id+'" data-pname="'+p.name+'" '+(isAssigned?'checked':'')+' style="accent-color:var(--accent);width:16px;height:16px;">'
-        +'<div><div style="font-family:DM Mono,monospace;font-size:12px;color:var(--text);">'+p.name+'</div>'
-        +'<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">'+p.spec+'</div></div>';
-      row.querySelector('input').addEventListener('change', function() {
-        row.style.borderColor = this.checked ? 'var(--accent)' : 'var(--border)';
-      });
-      athList.appendChild(row);
-    });
-    inner.appendChild(athList);
-  }
-
-  var msgEl = document.createElement('div');
-  msgEl.style.cssText = 'font-family:DM Mono,monospace;font-size:11px;min-height:14px;margin-bottom:10px;text-align:center;';
-  inner.appendChild(msgEl);
-
-  var saveBtn = document.createElement('button');
-  saveBtn.textContent = 'ATTRIBUER';
-  saveBtn.style.cssText = 'width:100%;background:var(--accent);border:none;border-radius:8px;padding:14px;font-family:Bebas Neue,sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:10px;min-height:52px;';
-  saveBtn.onclick = function() {
-    var checked = inner.querySelectorAll('input[type=checkbox]:checked');
-    var ids = [], names = [];
-    checked.forEach(function(chk){ ids.push(chk.dataset.pid); names.push(chk.dataset.pname); });
-    // Sauvegarder dans planifData
-    planif.athleteIds = ids;
-    sbScheduleSync();
-    // Écrire dans planif_assignments
-    if (_sb && _sbUser) {
-      // Supprimer les anciennes assignations
-      _sb.from('planif_assignments').delete().eq('planif_id', planifId).eq('coach_uid', _sbUser.id).then(function() {
-        if (!ids.length) { msgEl.textContent='Attribution mise à jour.'; msgEl.style.color='#22c55e'; setTimeout(function(){modal.remove();renderPlanifListe();},800); return; }
-        var rows = ids.map(function(aid, i) {
-          return { planif_id: planifId, coach_uid: _sbUser.id, athlete_uid: aid, athlete_name: names[i] };
-        });
-        _sb.from('planif_assignments').insert(rows).then(function(r) {
-          if (r.error) { msgEl.textContent='Erreur: '+r.error.message; msgEl.style.color='#ef4444'; return; }
-          msgEl.textContent='Planif attribuée à '+ids.length+' athlète'+(ids.length>1?'s':'')+'!';
-          msgEl.style.color='#22c55e';
-          setTimeout(function(){ modal.remove(); renderPlanifListe(); }, 800);
-        });
-      });
-    } else {
-      modal.remove(); renderPlanifListe();
-    }
-  };
-  var cancelBtn = document.createElement('button');
-  cancelBtn.textContent = 'Annuler';
-  cancelBtn.style.cssText = 'width:100%;background:none;border:1px solid var(--border);border-radius:8px;padding:12px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);cursor:pointer;';
-  cancelBtn.onclick = function(){ modal.remove(); };
-  inner.appendChild(saveBtn);
-  inner.appendChild(cancelBtn);
   modal.appendChild(inner);
   modal.addEventListener('click', function(e){ if(e.target===modal) modal.remove(); });
   document.body.appendChild(modal);
+
+  // Charger les athlete_profiles liés — ils contiennent le vrai user_id UUID
+  _sb.from('athlete_profiles').select('user_id,name,spec').eq('coach_uid', _sbUser.id)
+    .then(function(r) {
+      var athProfiles = r.data || [];
+
+      // Charger les assignations existantes pour cette planif
+      _sb.from('planif_assignments').select('athlete_uid').eq('planif_id', planifId).eq('coach_uid', _sbUser.id)
+        .then(function(ar) {
+          var assignedUids = (ar.data||[]).map(function(a){ return a.athlete_uid; });
+
+          inner.innerHTML = '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;letter-spacing:2px;margin-bottom:4px;">ATTRIBUER LA PLANIF</div>'
+            +'<div style="font-family:DM Mono,monospace;font-size:12px;color:var(--muted);margin-bottom:16px;">'+planif.nom+'</div>';
+
+          if (!athProfiles.length) {
+            inner.innerHTML += '<div style="font-family:DM Mono,monospace;font-size:12px;color:var(--muted);margin-bottom:12px;">Aucun athlète lié au groupe.<br><small>Les athlètes doivent se connecter et lier leur compte.</small></div>';
+          } else {
+            inner.innerHTML += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:10px;">SÉLECTIONNE LES ATHLÈTES</div>';
+            var athList = document.createElement('div');
+            athList.style.cssText = 'display:flex;flex-direction:column;gap:8px;margin-bottom:16px;';
+            athProfiles.forEach(function(ap) {
+              var isAssigned = assignedUids.includes(ap.user_id);
+              var row = document.createElement('label');
+              row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border:1px solid '+(isAssigned?'var(--accent)':'var(--border)')+';border-radius:8px;cursor:pointer;';
+              row.innerHTML = '<input type="checkbox" data-uid="'+ap.user_id+'" data-name="'+(ap.name||'')+'" '+(isAssigned?'checked':'')+' style="accent-color:var(--accent);width:16px;height:16px;">'
+                +'<div><div style="font-family:DM Mono,monospace;font-size:12px;color:var(--text);">'+(ap.name||ap.user_id)+'</div>'
+                +'<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">'+(ap.spec||'')+'</div></div>';
+              row.querySelector('input').addEventListener('change', function() {
+                row.style.borderColor = this.checked ? 'var(--accent)' : 'var(--border)';
+              });
+              athList.appendChild(row);
+            });
+            inner.appendChild(athList);
+          }
+
+          var msgEl = document.createElement('div');
+          msgEl.style.cssText = 'font-family:DM Mono,monospace;font-size:11px;min-height:14px;margin-bottom:10px;text-align:center;';
+          inner.appendChild(msgEl);
+
+          var saveBtn = document.createElement('button');
+          saveBtn.textContent = 'ATTRIBUER';
+          saveBtn.style.cssText = 'width:100%;background:var(--accent);border:none;border-radius:8px;padding:14px;font-family:Bebas Neue,sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:2px;margin-bottom:10px;min-height:52px;';
+          saveBtn.onclick = function() {
+            var checked = inner.querySelectorAll('input[type=checkbox]:checked');
+            var uids = [], names = [];
+            checked.forEach(function(chk){ uids.push(chk.dataset.uid); names.push(chk.dataset.name); });
+            saveBtn.disabled = true; saveBtn.textContent = 'Sauvegarde...';
+            _sb.from('planif_assignments').delete().eq('planif_id', planifId).eq('coach_uid', _sbUser.id)
+              .then(function() {
+                if (!uids.length) {
+                  msgEl.textContent = 'Attribution retirée.'; msgEl.style.color = '#22c55e';
+                  setTimeout(function(){ modal.remove(); renderPlanifListe(); }, 800);
+                  return;
+                }
+                var rows = uids.map(function(uid, i) {
+                  return { planif_id: planifId, coach_uid: _sbUser.id, athlete_uid: uid, athlete_name: names[i] };
+                });
+                _sb.from('planif_assignments').insert(rows).then(function(res) {
+                  if (res.error) { msgEl.textContent='Erreur: '+res.error.message; msgEl.style.color='#ef4444'; saveBtn.disabled=false; saveBtn.textContent='ATTRIBUER'; return; }
+                  msgEl.textContent = 'Planif attribuée à '+uids.length+' athlète'+(uids.length>1?'s':'')+'!';
+                  msgEl.style.color = '#22c55e';
+                  setTimeout(function(){ modal.remove(); renderPlanifListe(); }, 800);
+                });
+              });
+          };
+          var cancelBtn = document.createElement('button');
+          cancelBtn.textContent = 'Annuler';
+          cancelBtn.style.cssText = 'width:100%;background:none;border:1px solid var(--border);border-radius:8px;padding:12px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);cursor:pointer;';
+          cancelBtn.onclick = function(){ modal.remove(); };
+          inner.appendChild(saveBtn);
+          inner.appendChild(cancelBtn);
+        });
+    });
 }
 
 // Charger les vacances des athlètes pour une planif (côté coach)
