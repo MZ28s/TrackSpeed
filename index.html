@@ -11899,7 +11899,7 @@ function athRenderCompetChart() {
   // Build polyline points
   var polyPts = pts.map(function(p,i){ return xOf(i)+','+yOf(p.time); }).join(' ');
 
-  var svg = '<svg id="'+svgId+'" viewBox="0 0 '+W+' '+H+'" style="width:100%;display:block;" xmlns="http://www.w3.org/2000/svg">';
+  var svg = '<svg id="'+svgId+'" viewBox="0 0 '+W+' '+H+'" style="width:100%;max-width:480px;display:block;" xmlns="http://www.w3.org/2000/svg">';
 
   // Grille horizontale légère
   for (var gi = 0; gi <= 3; gi++) {
