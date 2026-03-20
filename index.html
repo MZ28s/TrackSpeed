@@ -7838,7 +7838,7 @@ function renderSession() {
   var saveRow = document.getElementById('sessionSaveRow');
   if (!currentRefs.length) {
     document.getElementById('sessionSummary').textContent = '';
-    document.getElementById('sessionList').innerHTML = '<div class="empty-state" style="padding:20px"><span class="empty-icon">⏱</span>Entrez un temps dans le calculateur pour voir les temps cibles</div>';
+    document.getElementById('sessionList').innerHTML = '';
     if (saveRow) saveRow.style.display = 'none';
     return;
   }
