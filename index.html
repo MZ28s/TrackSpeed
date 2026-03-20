@@ -10504,6 +10504,27 @@ function populateSaisonAthletes() {
 
 let saisonDistActif = 100;
 
+var _saisonType = 'outdoor';
+
+function setSaisonType(type) {
+  _saisonType = type;
+  var btnO = document.getElementById('saisonBtnOutdoor');
+  var btnI = document.getElementById('saisonBtnIndoor');
+  if (btnO) {
+    btnO.style.borderColor = type==='outdoor' ? 'var(--accent)' : 'var(--border)';
+    btnO.style.background  = type==='outdoor' ? 'rgba(245,200,0,.12)' : 'var(--surface2)';
+    btnO.style.color       = type==='outdoor' ? 'var(--accent)' : 'var(--muted)';
+    btnO.style.fontWeight  = type==='outdoor' ? '700' : '400';
+  }
+  if (btnI) {
+    btnI.style.borderColor = type==='indoor' ? 'var(--accent)' : 'var(--border)';
+    btnI.style.background  = type==='indoor' ? 'rgba(245,200,0,.12)' : 'var(--surface2)';
+    btnI.style.color       = type==='indoor' ? 'var(--accent)' : 'var(--muted)';
+    btnI.style.fontWeight  = type==='indoor' ? '700' : '400';
+  }
+  renderSaison();
+}
+
 function initSaison() {
   populateSaisonSelects();
   populateSaisonAthletes();
