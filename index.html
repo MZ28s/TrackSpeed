@@ -1492,7 +1492,7 @@ function sbPullAll() {
 
   // Pull des PR athlètes liés pour synchroniser les records
   var pullAthProfiles = (_sb && _sbUser)
-    ? _sb.from('athlete_profiles').select('name,records,rm1').eq('coach_uid', _sbUser.id)
+    ? _sb.from('athlete_profiles').select('name,records,rm1,compet_results').eq('coach_uid', _sbUser.id)
          .then(function(r) {
            if (r.error) { console.warn('pullAthProfiles error:', r.error.message); return []; }
 
@@ -1531,6 +1531,13 @@ function sbPullAll() {
           if (match) {
             if (ap.records && Object.keys(ap.records).length) { p.records = ap.records; prMerged = true; }
             if (ap.rm1    && Object.keys(ap.rm1).length)     { p.rm1     = ap.rm1;     prMerged = true; }
+            if (ap.compet_results && ap.compet_results.length) {
+              // Convertir format athlète → format coach (competResults)
+              p.competResults = ap.compet_results.map(function(r){
+                return { date:r.date, dist:r.dist, time:r.time, saison:r.saison };
+              });
+              prMerged = true;
+            }
           }
         });
       });
