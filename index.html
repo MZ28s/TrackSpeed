@@ -3223,7 +3223,8 @@ function athRenderCompetCalendar() {
         var next = _athCalEvents.find(function(e){ return e.date >= now.toISOString().slice(0,10); });
         _athCalMonth = next ? next.date.slice(0,7) : now.toISOString().slice(0,7);
       }
-      _athDrawCalendar();
+      if (_athCalView === 'year') _athDrawYearCalendar();
+      else _athDrawCalendar();
     });
 }
 
@@ -3288,8 +3289,10 @@ function _athDrawCalendar() {
       if (distStr) meta.push(distStr);
       if (meta.length) html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+meta.join(' · ')+'</div>';
       html += '</div>';
-      // Countdown
-      html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:'+dCol+';flex-shrink:0;font-weight:700;">'+dLabel+'</div>';
+      html += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">';
+      html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:'+dCol+';font-weight:700;">'+dLabel+'</div>';
+      if (!isPast) html += '<button data-date="'+(ev._dateKey||ev.date)+'" data-name="'+ev.name+'" data-lieu="'+(ev.lieu||'')+'" onclick="event.stopPropagation();athAddToIOSCalendar(this.dataset)" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 6px;font-family:DM Mono,monospace;font-size:9px;color:var(--muted);cursor:pointer;">+Cal</button>';
+      html += '</div>';
       html += '</div>';
     });
   }
@@ -3311,6 +3314,71 @@ function _athDrawCalendar() {
     });
   }
 
+  el.innerHTML = html;
+}
+
+var _athCalView = 'month';
+
+function athCalSetView(view) {
+  _athCalView = view;
+  var btnM = document.getElementById('athCalViewMonth');
+  var btnY = document.getElementById('athCalViewYear');
+  if (btnM) { btnM.style.background=view==='month'?'var(--accent)':'var(--surface2)'; btnM.style.color=view==='month'?'#000':'var(--muted)'; btnM.style.fontWeight=view==='month'?'700':'400'; }
+  if (btnY) { btnY.style.background=view==='year'?'var(--accent)':'var(--surface2)'; btnY.style.color=view==='year'?'#000':'var(--muted)'; btnY.style.fontWeight=view==='year'?'700':'400'; }
+  if (view === 'month') _athDrawCalendar();
+  else _athDrawYearCalendar();
+}
+
+function _athDrawYearCalendar() {
+  var el = document.getElementById('athCompetCalendarList');
+  if (!el) return;
+  var MONTHS = ['Janvier','Fevrier','Mars','Avril','Mai','Juin','Juillet','Aout','Septembre','Octobre','Novembre','Decembre'];
+  var today = new Date().toISOString().slice(0,10);
+  var byMonth = {};
+  _athCalEvents.forEach(function(ev) {
+    var key = (ev._dateKey||ev.date||'').slice(0,7);
+    if (!key) return;
+    if (!byMonth[key]) byMonth[key] = [];
+    byMonth[key].push(ev);
+  });
+  var allMonths = Object.keys(byMonth).sort();
+  if (!allMonths.length) {
+    el.innerHTML = '<div style="text-align:center;padding:24px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Aucune competition planifiee.</div>';
+    return;
+  }
+  var html = '';
+  allMonths.forEach(function(monthKey) {
+    var yr = parseInt(monthKey.slice(0,4));
+    var mo = parseInt(monthKey.slice(5,7)) - 1;
+    var evs = byMonth[monthKey].slice().sort(function(a,b){ return (a._dateKey||'').localeCompare(b._dateKey||''); });
+    html += '<div style="margin-bottom:16px;">';
+    html += '<div style="font-family:Bebas Neue,sans-serif;font-size:16px;letter-spacing:2px;color:var(--accent);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border);">'+MONTHS[mo].toUpperCase()+' '+yr+'</div>';
+    evs.forEach(function(ev) {
+      var dateKey = ev._dateKey || (ev.date||'').slice(0,10);
+      var daysUntil = Math.ceil((new Date(dateKey+'T12:00:00') - new Date()) / (1000*60*60*24));
+      var isPast = daysUntil < 0;
+      var dLabel = isPast ? 'Passee' : daysUntil===0 ? 'Auj.' : daysUntil===1 ? 'Demain' : 'J-'+daysUntil;
+      var dCol = isPast ? 'var(--muted)' : daysUntil<=7 ? '#ef4444' : daysUntil<=30 ? '#f59e0b' : 'var(--accent)';
+      var distStr = (ev.dists||[]).map(function(x){return x+'m';}).join(' · ');
+      var MONS = ['jan','fev','mar','avr','mai','jun','jul','aou','sep','oct','nov','dec'];
+      html += '<div data-evdate="'+dateKey+'" onclick="_athCalOpenDay(this.dataset.evdate)" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:1px solid '+(isPast?'var(--border)':'rgba(245,200,0,.2)')+';border-radius:8px;margin-bottom:6px;cursor:pointer;opacity:'+(isPast?'0.55':'1')+';min-height:52px;">';
+      html += '<div style="text-align:center;min-width:34px;flex-shrink:0;"><div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:'+dCol+';line-height:1;">'+dateKey.slice(8)+'</div><div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">'+MONS[mo]+'</div></div>';
+      html += '<div style="width:1px;height:28px;background:var(--border);flex-shrink:0;"></div>';
+      html += '<div style="flex:1;min-width:0;">';
+      html += '<div style="font-family:Bebas Neue,sans-serif;font-size:16px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+ev.name+'</div>';
+      var meta = [];
+      if (ev.lieu) meta.push(''+ev.lieu);
+      if (ev.type) meta.push(ev.type==='indoor'?'Indoor':'Outdoor');
+      if (distStr) meta.push(distStr);
+      if (meta.length) html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+meta.join(' · ')+'</div>';
+      html += '</div>';
+      html += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">';
+      html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:'+dCol+';font-weight:700;">'+dLabel+'</div>';
+      if (!isPast) html += '<button data-date="'+dateKey+'" data-name="'+ev.name+'" data-lieu="'+(ev.lieu||'')+'" onclick="event.stopPropagation();athAddToIOSCalendar(this.dataset)" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 6px;font-family:DM Mono,monospace;font-size:9px;color:var(--muted);cursor:pointer;">+Cal</button>';
+      html += '</div></div>';
+    });
+    html += '</div>';
+  });
   el.innerHTML = html;
 }
 
@@ -15075,8 +15143,18 @@ setTimeout(() => {
 
     <!-- ONGLET CALENDRIER -->
     <div id="athCompetTabCalendarContent" style="display:none;">
+      <!-- Toggle vue -->
+      <div style="display:flex;gap:0;margin-bottom:10px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+        <button id="athCalViewMonth" onclick="athCalSetView('month')"
+          style="flex:1;padding:10px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:1px;border:none;cursor:pointer;background:var(--accent);color:#000;font-weight:700;">
+          📅 MENSUEL
+        </button>
+        <button id="athCalViewYear" onclick="athCalSetView('year')"
+          style="flex:1;padding:10px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:1px;border:none;cursor:pointer;background:var(--surface2);color:var(--muted);">
+          📆 ANNUEL
+        </button>
+      </div>
       <div class="ath-card" style="margin-bottom:12px;">
-        <div class="ath-card-title">Prochaines compétitions</div>
         <div id="athCompetCalendarList">
           <div style="text-align:center;padding:20px;font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);">Chargement...</div>
         </div>
