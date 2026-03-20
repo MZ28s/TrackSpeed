@@ -3273,13 +3273,13 @@ function _athDrawCalendar() {
     var evs = evByDate[dateStr] || [];
     var isToday = dateStr === today;
     var hasEv = evs.length > 0;
-    var bg = hasEv ? 'var(--accent)' : isToday ? 'rgba(255,255,255,.08)' : 'transparent';
-    var col = hasEv ? '#000' : isToday ? 'var(--text)' : 'var(--muted)';
-    var border = hasEv ? 'none' : isToday ? '1px solid rgba(255,255,255,.2)' : '1px solid transparent';
+    var bg = hasEv ? 'var(--accent)' : isToday ? 'rgba(255,255,255,.1)' : 'transparent';
+    var col = hasEv ? '#000' : 'var(--text)';
+    var border = !hasEv && isToday ? '2px solid var(--accent)' : '1px solid transparent';
     html += '<div data-date="'+dateStr+'" '+(hasEv?'onclick="_athCalOpenDay(this.dataset.date)" ':'');
-      +' style="aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:8px;background:'+bg+';border:'+border+';cursor:'+(hasEv?'pointer':'default')+';">';
-    html += '<span style="font-family:DM Mono,monospace;font-size:12px;color:'+col+';font-weight:'+(hasEv||isToday?'700':'400')+';">'+day+'</span>';
-    if (hasEv) html += '<span style="width:4px;height:4px;background:#000;border-radius:50%;margin-top:1px;"></span>';
+    html += ' style="aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:8px;background:'+bg+';border:'+border+';cursor:'+(hasEv?'pointer':'default')+';min-height:32px;">';
+    html += '<span style="font-family:'+(hasEv?'Bebas Neue':'DM Mono')+',monospace;font-size:'+(hasEv?'15':'12')+'px;color:'+col+';font-weight:'+(hasEv||isToday?'700':'400')+';">'+day+'</span>';
+    html += '</div>';
     html += '</div>';
   }
   html += '</div>';
