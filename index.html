@@ -10452,6 +10452,9 @@ let saisonDistActif = 100;
 
 var _saisonType = 'outdoor';
 
+// Helper : normalise le type d'un résultat compét (null/undefined = outdoor)
+function _competType(r) { return r.type || 'outdoor'; }
+
 function setSaisonType(type) {
   _saisonType = type;
   var btnO = document.getElementById('saisonBtnOutdoor');
@@ -10500,7 +10503,7 @@ function renderSaison() {
   }
 
   const results = (profile.competResults || [])
-    .filter(r => r.saison === saison)
+    .filter(r => r.saison === saison && _competType(r) === _saisonType)
     .sort((a, b) => new Date(a.date) - new Date(b.date));
 
   // Trouver les distances disponibles
@@ -10522,7 +10525,7 @@ function renderSaison() {
     var groupHtml = '<div style="font-family:DM Mono,monospace;font-size:11px;letter-spacing:2px;color:var(--accent);margin-bottom:10px;">// VUE GROUPE — '+_saisonType.toUpperCase()+' '+saison+'</div>';
     var allResults = [];
     profiles.forEach(function(prof) {
-      (prof.competResults||[]).filter(function(r){ return r.saison===saison&&(!r.type||r.type===_saisonType); }).forEach(function(r){
+      (prof.competResults||[]).filter(function(r){ return r.saison===saison&&_competType(r)===_saisonType; }).forEach(function(r){
         allResults.push(Object.assign({},r,{athleteName:prof.name}));
       });
     });
@@ -10607,7 +10610,7 @@ function renderSaison() {
     var profN = profiles.find(function(p){ return p.id === pidN; });
     if (!profN) return;
     var ptsN  = (profN.competResults || [])
-      .filter(function(r){ return r.saison === saison && r.dist === saisonDistActif; })
+      .filter(function(r){ return r.saison === saison && r.dist === saisonDistActif && _competType(r) === _saisonType; })
       .sort(function(a,b){ return new Date(a.date)-new Date(b.date); });
     seriesAll.push({ pts: ptsN, name: profN.name, color: extraColors[idx] });
   });
@@ -11035,7 +11038,7 @@ function athRenderCompetList() {
 
   // Filtrer
   var results = all.filter(function(r) {
-    return r.saison === _athHistSaison && (!r.type || r.type === _athHistType);
+    return r.saison === _athHistSaison && _competType(r) === _athHistType;
   });
 
   // Distances disponibles pour le graphique
@@ -11084,7 +11087,7 @@ function athRenderCompetChart() {
   if (!el || !_athProfile) return;
   var all = (_athProfile.compet_results||[]);
   var pts = all.filter(function(r) {
-    return r.dist === _athHistDist && r.saison === _athHistSaison && (!r.type||r.type===_athHistType);
+    return r.dist === _athHistDist && r.saison === _athHistSaison && _competType(r) === _athHistType;
   }).sort(function(a,b){return new Date(a.date)-new Date(b.date);});
 
   if (!pts.length) {
