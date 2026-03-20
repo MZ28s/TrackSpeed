@@ -12464,43 +12464,55 @@ function _renderProgRPE() {
 }
 
 function _buildBarChart(points, unit, color, colors, maxVal) {
-  var vals = points.map(function(p){return p.weight;});
-  var maxV = maxVal || Math.max.apply(null, vals) * 1.1;
-  var minV = Math.min.apply(null, vals);
-  var range = maxV - (minV * 0.9);
-  var chartH = 120;
+  var vals  = points.map(function(p){return p.weight;});
+  var maxW  = Math.max.apply(null, vals);
+  var minW  = Math.min.apply(null, vals);
+  var absMax = maxVal || maxW;
+  // Base zéro pour RPE, base dynamique pour poids
+  var base  = maxVal ? 0 : Math.max(0, minW * 0.85);
+  var range = absMax - base;
+  if (range <= 0) range = absMax || 1;
+  var chartH = 100;
+  var barW = Math.max(36, Math.min(56, Math.floor(320 / points.length)));
 
-  var html = '<div style="overflow-x:auto;">';
-  html += '<div style="display:flex;align-items:flex-end;gap:4px;height:'+(chartH+40)+'px;padding:10px 0 0;min-width:'+(points.length*44)+'px;">';
+  var html = '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">';
+  html += '<div style="display:flex;align-items:flex-end;gap:6px;padding:24px 4px 0;min-width:'+(points.length*(barW+8))+'px;">';
 
   points.forEach(function(p, i) {
-    var col = colors ? colors[i] : (color || 'var(--accent)');
-    var barH = Math.max(8, Math.round((p.weight - minV * 0.9) / range * chartH));
-    var isMax = p.weight === Math.max.apply(null, vals);
+    var col    = colors ? colors[i] : (color || 'var(--accent)');
+    var barH   = Math.max(12, Math.round((p.weight - base) / range * chartH));
+    var isMax  = p.weight === maxW;
     var isLast = i === points.length - 1;
+    var valStr = p.weight + (unit === 'kg' ? 'kg' : unit);
 
-    html += '<div style="flex:0 0 40px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;">';
-    html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:'+(isMax?'var(--accent)':isLast?'var(--text)':'var(--muted)')+';font-weight:'+(isMax||isLast?'bold':'normal')+';">'+p.weight+(unit==='kg'?'':unit)+'</div>';
-    html += '<div style="width:32px;height:'+barH+'px;background:'+col+';border-radius:4px 4px 0 0;position:relative;">';
-    if (isMax) html += '<div style="position:absolute;top:-16px;left:50%;transform:translateX(-50%);font-size:10px;">🏆</div>';
+    // Label date — court et propre
+    var dl = p.date || '';
+    if (dl.match(/^\d{4}-\d{2}-\d{2}$/)) dl = dl.slice(5).replace('-','/'); // "03/21"
+    else if (dl.length > 8) dl = dl.slice(0, 6);                             // "S12 — "
+
+    html += '<div style="flex:0 0 '+barW+'px;display:flex;flex-direction:column;align-items:center;gap:0;">';
+    // Valeur au-dessus de la barre
+    html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:'+(isMax?'var(--accent)':isLast?'var(--text)':'var(--muted)')+';font-weight:'+(isMax||isLast?'700':'400')+';margin-bottom:3px;white-space:nowrap;">'+valStr+'</div>';
+    // Barre
+    html += '<div style="position:relative;width:'+(barW-8)+'px;height:'+barH+'px;background:'+col+';border-radius:4px 4px 0 0;">';
+    if (isMax) html += '<div style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:12px;line-height:1;">🏆</div>';
     html += '</div>';
-    // Label date court
-    var dateLabel = p.date.replace(/^\d{4}-/,'').replace(/-/,'/');
-    if (p.date.length > 10) dateLabel = p.date.slice(0,6); // week label
-    html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);white-space:nowrap;transform:rotate(-30deg);transform-origin:top left;margin-top:4px;margin-left:4px;width:36px;overflow:hidden;">'+dateLabel+'</div>';
+    // Label date en dessous — horizontal, pas de rotation
+    html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);margin-top:5px;text-align:center;overflow:hidden;white-space:nowrap;max-width:'+(barW)+'px;">'+dl+'</div>';
     html += '</div>';
   });
 
   html += '</div>';
 
-  // Valeur max + progression totale
-  var maxW = Math.max.apply(null, vals);
+  // Stats synthèse
   var firstW = vals[0]; var lastW = vals[vals.length-1];
-  var progPct = ((lastW - firstW) / firstW * 100).toFixed(1);
+  var progPct = firstW > 0 ? ((lastW - firstW) / firstW * 100).toFixed(1) : '0.0';
   var progCol = parseFloat(progPct) >= 0 ? '#22c55e' : '#ef4444';
-  html += '<div style="display:flex;justify-content:space-between;padding:10px 4px 0;border-top:1px solid var(--border);margin-top:8px;">';
-  html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);">Max : <span style="color:var(--accent);font-size:13px;font-family:Bebas Neue,sans-serif;">'+maxW+(unit==='kg'?'kg':unit)+'</span></div>';
-  html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);">Progression : <span style="color:'+progCol+';font-size:13px;font-family:Bebas Neue,sans-serif;">'+(parseFloat(progPct)>0?'+':'')+progPct+'%</span></div>';
+  html += '<div style="display:flex;justify-content:space-between;padding:12px 4px 0;border-top:1px solid var(--border);margin-top:10px;">';
+  html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);">Max <span style="color:var(--accent);font-size:14px;font-family:Bebas Neue,sans-serif;margin-left:4px;">'+maxW+(unit==='kg'?'kg':unit)+'</span></div>';
+  if (points.length > 1) {
+    html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);">Progression <span style="color:'+progCol+';font-size:14px;font-family:Bebas Neue,sans-serif;margin-left:4px;">'+(parseFloat(progPct)>0?'+':'')+progPct+'%</span></div>';
+  }
   html += '</div></div>';
   return html;
 }
