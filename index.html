@@ -10537,10 +10537,17 @@ function renderSaison() {
         groupHtml += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:6px;">'+dist+'m</div>';
         byDist[dist].slice().sort(function(a,b){return a.time-b.time;}).forEach(function(r,ri){
           var isBest = ri===0;
+          var profForDel = profiles.find(function(pr){ return (pr.name||'').toLowerCase()===r.athleteName.toLowerCase(); });
+          var pidForDel = profForDel ? profForDel.id : '';
           groupHtml += '<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;background:'+(isBest?'rgba(245,200,0,.08)':'var(--surface)')+';border:1px solid '+(isBest?'rgba(245,200,0,.3)':'var(--border)')+';border-radius:6px;margin-bottom:4px;">';
           groupHtml += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:'+(isBest?'var(--accent)':'var(--text)')+';">'+r.time+'s</div>';
           groupHtml += '<div style="flex:1;font-family:DM Mono,monospace;font-size:11px;color:var(--muted);">'+r.athleteName+(r.date?' · '+r.date:'')+(r.name?' · '+r.name:'')+'</div>';
           if (isBest) groupHtml += '<span style="font-size:14px;">🥇</span>';
+          if (pidForDel) {
+            var rIdx = (profForDel.competResults||[]).indexOf(r);
+            if (rIdx < 0) rIdx = (profForDel.competResults||[]).findIndex(function(x){ return x.time===r.time&&x.date===r.date&&x.dist===r.dist; });
+            groupHtml += '<button data-pid="'+pidForDel+'" data-saison="'+saison+'" data-idx="'+rIdx+'" onclick="coachDeleteCompetDirect(this.dataset.pid,this.dataset.saison,parseInt(this.dataset.idx))" style="background:none;border:1px solid rgba(239,68,68,.3);border-radius:4px;color:#ef4444;font-size:11px;width:24px;height:24px;cursor:pointer;flex-shrink:0;">✕</button>';
+          }
           groupHtml += '</div>';
         });
         groupHtml += '</div>';
@@ -10850,6 +10857,16 @@ function deleteCompetFromProfile(pid, idx) {
   renderCompetResults(pid);
 }
 
+function coachDeleteCompetDirect(pid, saison, globalIdx) {
+  var profile = profiles.find(function(p){ return p.id === pid; });
+  if (!profile || !profile.competResults) return;
+  if (!confirm('Supprimer ce résultat ?')) return;
+  if (globalIdx < 0 || globalIdx >= profile.competResults.length) return;
+  profile.competResults.splice(globalIdx, 1);
+  saveProfiles();
+  renderSaison();
+}
+
 function deleteCompetResult(pid, saison, idxInFiltered) {
   const profile = profiles.find(p => p.id === pid);
   if (!profile || !profile.competResults) return;
@@ -11091,22 +11108,39 @@ function athRenderCompetChart() {
   }).sort(function(a,b){return new Date(a.date)-new Date(b.date);});
 
   if (!pts.length) {
-    el.innerHTML = '<div style="text-align:center;padding:16px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Aucun résultat '+_athHistDist+'m.</div>';
+    el.innerHTML = '<div style="text-align:center;padding:16px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Aucun résultat '+_athHistDist+'m pour cette saison.</div>';
     return;
   }
-  if (pts.length < 2) {
-    el.innerHTML = '<div style="text-align:center;padding:16px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Un seul résultat — ajoutes-en plus pour voir la progression.</div>';
-    return;
-  }
+
+  var best = Math.min.apply(null, pts.map(function(x){return x.time;}));
   var points = pts.map(function(r) {
     var dl = (r.date||'').slice(5).replace('-','/');
     return { date: dl, weight: r.time };
   });
-  el.innerHTML = _buildBarChart(points, 's', null,
-    pts.map(function(r){
-      var best = Math.min.apply(null, pts.map(function(x){return x.time;}));
-      return r.time === best ? '#22c55e' : 'rgba(245,200,0,.7)';
-    }), null);
+  var colors = pts.map(function(r){ return r.time === best ? '#22c55e' : 'rgba(245,200,0,.7)'; });
+  el.innerHTML = _buildBarChart(points, 's', null, colors, null);
+
+  // Ajouter les Red Curve en référence sous le graphique
+  var genre = _athProfile.genre || 'M';
+  var rcKeys = _athHistType==='indoor' ? ['RC_IND_U18','RC_IND_U20','RC_IND_U23'] : ['RC_U18','RC_U20','RC_U23','RC_SR'];
+  var rcHtml = '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">';
+  rcHtml += '<div style="width:100%;font-family:DM Mono,monospace;font-size:10px;color:var(--muted);margin-bottom:4px;letter-spacing:1px;">RED CURVE SWISS ATHLETICS</div>';
+  rcKeys.forEach(function(key) {
+    var cat = (key.indexOf('IND')>=0 ? STANDARDS_INDOOR : ELITE_REFS)[key];
+    if (!cat) return;
+    var gData = cat[genre] || cat['M'];
+    var refTime = gData ? gData[_athHistDist] : null;
+    if (!refTime) return;
+    var diff = (best - refTime).toFixed(2);
+    var diffCol = parseFloat(diff) <= 0 ? '#22c55e' : '#f59e0b';
+    rcHtml += '<div style="background:'+cat.color+'18;border:1px solid '+cat.color+'55;border-radius:6px;padding:6px 10px;text-align:center;">';
+    rcHtml += '<div style="font-family:DM Mono,monospace;font-size:10px;color:'+cat.color+';">'+cat.short+'</div>';
+    rcHtml += '<div style="font-family:Bebas Neue,sans-serif;font-size:16px;color:var(--text);">'+refTime+'s</div>';
+    rcHtml += '<div style="font-family:DM Mono,monospace;font-size:10px;color:'+diffCol+';">'+(parseFloat(diff)>0?'+':'')+diff+'s</div>';
+    rcHtml += '</div>';
+  });
+  rcHtml += '</div>';
+  el.innerHTML += rcHtml;
 }
 
 var _athCompetType = 'outdoor';
