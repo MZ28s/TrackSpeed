@@ -4039,14 +4039,26 @@ function _loadAndShowVacances(planifId) {
 
 function _injectVacancesInView(planifId) {
   var vacs = _cachedPlanifVacances[planifId] || [];
-  if (!vacs.length) return;
   // Couleurs par athlète
-  var colors = ['#f59e0b','#38bdf8','#f87171','#4ade80','#c084fc','#fb923c'];
+  var colors = ['rgba(255,255,255,0.9)','rgba(255,255,255,0.9)','rgba(255,255,255,0.9)','rgba(255,255,255,0.9)','rgba(255,255,255,0.9)','rgba(255,255,255,0.9)'];
   var athColorMap = {};
   var colorIdx = 0;
   vacs.forEach(function(v) {
     if (!athColorMap[v.athlete_uid]) athColorMap[v.athlete_uid] = colors[colorIdx++ % colors.length];
   });
+  // Repeupler _planifVacancesForRender et re-render le calendrier si actif
+  if (vacs.length && _currentPlanifView === 'calendrier') {
+    _planifVacancesForRender = vacs.map(function(v){ return Object.assign({}, v, {_color: athColorMap[v.athlete_uid]}); });
+    var el = document.getElementById('planifViewContent');
+    var planif = planifData.find(function(p){ return p.id === planifId; });
+    if (el && planif) {
+      var newContent = _vueCalendrier(planif);
+      el.innerHTML = newContent;
+      el.innerHTML += _echeancesTimeline ? '' : ''; // Déjà inclus dans _vueCalendrier
+    }
+    _planifVacancesForRender = [];
+  }
+  if (!vacs.length) return;
   // Injecter un résumé des vacances sous la vue
   var el = document.getElementById('planifViewContent');
   if (!el) return;
@@ -4164,12 +4176,20 @@ function _vueCalendrier(planif) {
       var dateStr = mon2.getDate()+'/'+(mon2.getMonth()+1)+' → '+ven2.getDate()+'/'+(ven2.getMonth()+1);
       var ch = s.charge !== null && s.charge !== undefined ? (s.charge===0?'AF':s.charge+'%') : null;
       var chObj = s.charge !== null && s.charge !== undefined ? PLANIF_CHARGES.find(function(x){return x.val===s.charge;}) : null;
-      var borderCol = hasComp ? (PLANIF_IMPORTANCE.find(function(x){return x.val===(s.competitions[0].importance||'A');})||{color:'#ef4444'}).color : (isCur?'var(--accent)':(ph?ph.border:'var(--border)'));
-      var borderW = (hasComp||isCur)?'2px':'1px';
+      // Vérifier si cette semaine est en vacances
+      var mon2check = getMondayOfISOWeek(s.num, s.year);
+      var ven2check = new Date(mon2check); ven2check.setDate(mon2check.getDate()+6);
+      var isVacSem = _planifVacancesForRender.some(function(v) {
+        return v.date_start <= ven2check.toISOString().slice(0,10) && v.date_end >= mon2check.toISOString().slice(0,10);
+      });
+      var vacColor = _planifVacancesForRender.length && isVacSem ? (typeof _planifVacancesForRender[0]._color !== 'undefined' ? _planifVacancesForRender.find(function(v){ return v.date_start <= ven2check.toISOString().slice(0,10) && v.date_end >= mon2check.toISOString().slice(0,10); })._color : 'rgba(255,255,255,0.9)') : null;
+      var borderCol = isVacSem ? vacColor : (hasComp ? (PLANIF_IMPORTANCE.find(function(x){return x.val===(s.competitions[0].importance||'A');})||{color:'#ef4444'}).color : (isCur?'var(--accent)':(ph?ph.border:'var(--border)')));
+      var borderW = (isVacSem||hasComp||isCur)?'2px':'1px';
+      var boxShadow = isVacSem ? ';box-shadow:0 0 0 2px '+vacColor+',0 0 12px '+vacColor+'55' : '';
       html += '<div ' + _semOnclick(planif.id, s.num, s.year) + ' '
         + 'style="border-radius:6px;overflow:hidden;margin-bottom:5px;cursor:pointer;'
         + 'background:'+(ph?ph.bg:(s.vacances?'rgba(100,100,100,0.07)':'var(--surface)'))
-        + ';border:'+borderW+' solid '+borderCol+';">'
+        + ';border:'+borderW+' solid '+borderCol+boxShadow+';">'
         + '<div style="height:3px;background:'+(ph?ph.color:'transparent')+';"></div>'
         + '<div style="padding:6px 8px;">'
         + '<div style="display:flex;align-items:center;justify-content:space-between;">'
@@ -12094,7 +12114,8 @@ function athDeleteCompetResult(idx) {
 
 var _athPlanif = null;        // planif attribuée à l'athlète
 var _athVacances = [];        // vacances déclarées par l'athlète
-var _athPlanifView = 'agenda'; // vue active
+var _athPlanifView = 'calendrier'; // vue active
+var _planifVacancesForRender = []; // vacances injectées dans la vue calendrier
 
 // ─────────────────────────────────────────────────────────────
 // COACH : Modal attribution + vacances dans les vues
@@ -12443,7 +12464,8 @@ function _athInjectPlanifView(view) {
   var wrap = document.getElementById('athPlanifViewWrap');
   if (!wrap || !_athPlanif) return;
   var p = _athPlanif;
-  // Supprimer le header coach (athNames, etc.) — juste le contenu
+  // Injecter les vacances athlète avec couleur blanche
+  _planifVacancesForRender = _athVacances.map(function(v){ return Object.assign({}, v, {_color:'rgba(255,255,255,0.9)'}); });
   var content = '';
   switch (view) {
     case 'frise':   content = _vueFrise(p);   break;
@@ -12452,6 +12474,7 @@ function _athInjectPlanifView(view) {
     case 'phases':  content = _vuePhases(p);  break;
     default:        content = _vueCalendrier(p); break;
   }
+  _planifVacancesForRender = [];
   wrap.innerHTML = content;
   if (view === 'charge') {
     var _savedView = _currentPlanifView;
