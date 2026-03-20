@@ -12548,34 +12548,178 @@ function _renderAthHomePlanifCard() {
   var el = document.getElementById('athHomePlanifCard');
   if (!el) return;
   if (!_athPlanif) { el.innerHTML = ''; return; }
-  var p   = _athPlanif;
-  var sem = getPlanifCurrentWeek(p);
-  var ph  = sem && sem.phase ? PLANIF_PHASES[sem.phase] : null;
-  var html = '<div class="ath-card" onclick="athGoPage(&quot;planif&quot;)" style="cursor:pointer;border-color:'+(ph?ph.border:'var(--border)')+';">';
-  html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">';
+  var p = _athPlanif;
+  // Trouver la semaine courante et les 2 suivantes
+  var sorted = _sortedSems ? _sortedSems(p) : (p.semaines||[]);
+  var now = new Date();
+  var curWN = getISOWeek(now), curWY = getISOWeekYear(now);
+  var curIdx = sorted.findIndex(function(s){ return s.num===curWN && s.year===curWY; });
+  if (curIdx < 0) curIdx = sorted.findIndex(function(s){ return s.year > curWY || (s.year===curWY && s.num >= curWN); });
+  var upcoming = curIdx >= 0 ? sorted.slice(curIdx, curIdx+3) : sorted.slice(0,3);
+
+  var html = '<div class="ath-card" onclick="athGoPage(&quot;planif&quot;)" style="cursor:pointer;">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">';
   html += '<div style="font-family:DM Mono,monospace;font-size:11px;letter-spacing:2px;color:var(--accent);">// MA PLANIF</div>';
-  html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);letter-spacing:1px;">'+p.nom+'</div>';
+  html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">'+p.nom.substring(0,28)+'</div>';
   html += '</div>';
-  if (sem) {
-    html += '<div style="display:flex;align-items:center;gap:12px;">';
-    html += '<div style="text-align:center;">';
-    html += '<div style="font-family:Bebas Neue,sans-serif;font-size:28px;color:'+(ph?ph.color:'var(--accent)')+';">S'+sem.num+'</div>';
-    if (ph) html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:'+ph.color+';">'+ph.short+'</div>';
-    html += '</div>';
-    html += '<div style="flex:1;">';
-    if (sem.charge !== null && sem.charge !== undefined) {
-      var chObj = PLANIF_CHARGES.find(function(x){return x.val===sem.charge;});
-      html += '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:'+(chObj?chObj.color:'var(--text)')+';">'+(sem.charge===0?'AF':sem.charge+'%')+'</div>';
-    }
-    if (sem.objectif) html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">'+sem.objectif+'</div>';
-    html += '</div>';
-    html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">Voir →</div>';
-    html += '</div>';
+
+  if (!upcoming.length) {
+    html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);">Aucune semaine planifiée.</div>';
   } else {
-    html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);">Planif en cours — Voir →</div>';
+    html += '<div style="display:flex;gap:8px;">';
+    upcoming.forEach(function(s, i) {
+      var ph = s.phase ? PLANIF_PHASES[s.phase] : null;
+      var isCur = s.num===curWN && s.year===curWY;
+      var chObj = (s.charge!==null&&s.charge!==undefined) ? PLANIF_CHARGES.find(function(x){return x.val===s.charge;}) : null;
+      var mon = getMondayOfISOWeek(s.num, s.year);
+      var dateStr = mon.getDate()+'/'+(mon.getMonth()+1);
+      html += '<div style="flex:1;background:'+(ph?ph.bg:'var(--surface2)')+';border:1px solid '+(isCur?'var(--accent)':(ph?ph.border:'var(--border)'))+';border-radius:8px;padding:10px;position:relative;'+(isCur?'box-shadow:0 0 0 1px var(--accent);':'')+';">';
+      if (isCur) html += '<div style="position:absolute;top:6px;right:6px;width:6px;height:6px;border-radius:50%;background:var(--accent);"></div>';
+      html += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:'+(ph?ph.color:isCur?'var(--accent)':'var(--muted)')+';line-height:1;">S'+s.num+'</div>';
+      html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-bottom:4px;">'+dateStr+'</div>';
+      if (s.charge!==null&&s.charge!==undefined) html += '<div style="font-family:Bebas Neue,sans-serif;font-size:15px;color:'+(chObj?chObj.color:'var(--text)')+';line-height:1;">'+(s.charge===0?'AF':s.charge+'%')+'</div>';
+      if (ph) html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:'+ph.color+';margin-top:2px;">'+ph.short+'</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+  html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);text-align:right;margin-top:8px;">Voir planif complète →</div>';
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// CARD COMPÉTITIONS ACCUEIL ATHLÈTE
+// ─────────────────────────────────────────────────────────────
+function _renderAthHomeCompetCard() {
+  var el = document.getElementById('athHomeCompetCard');
+  if (!el) return;
+
+  var now = new Date();
+  var todayStr = now.toISOString().slice(0,10);
+  var nextWeekEnd = new Date(now); nextWeekEnd.setDate(now.getDate()+14);
+  var nextWeekEndStr = nextWeekEnd.toISOString().slice(0,10);
+
+  // Chercher dans athlete_profiles.calendar_events ET compet_results coach
+  var events = [];
+  if (_athProfile && _athProfile.calendar_events) {
+    events = _athProfile.calendar_events.filter(function(e){
+      return e.date >= todayStr && e.date <= nextWeekEndStr;
+    }).sort(function(a,b){ return a.date.localeCompare(b.date); });
+  }
+
+  var html = '<div class="ath-card" onclick="athGoPage(&quot;compet&quot;)" style="cursor:pointer;">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+  html += '<div style="font-family:DM Mono,monospace;font-size:11px;letter-spacing:2px;color:var(--accent);">// PROCHAINES COMPÉTS</div>';
+  html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">14 jours</div>';
+  html += '</div>';
+
+  if (!events.length) {
+    html += '<div style="font-family:DM Mono,monospace;font-size:12px;color:var(--muted);text-align:center;padding:8px 0;">Pas de compétition prévue</div>';
+  } else {
+    events.forEach(function(ev) {
+      var d = new Date((ev.date||'')+'T12:00:00');
+      var days = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+      var months = ['jan.','fév.','mar.','avr.','mai','juin','juil.','aoû.','sep.','oct.','nov.','déc.'];
+      var daysUntil = Math.ceil((d - now) / (1000*60*60*24));
+      var dLabel = daysUntil===0 ? 'Auj.' : daysUntil===1 ? 'Demain' : 'J-'+daysUntil;
+      var dCol = daysUntil<=2 ? '#ef4444' : daysUntil<=7 ? '#f59e0b' : 'var(--accent)';
+      var distStr = (ev.dists||[]).map(function(x){return x+'m';}).join(' · ');
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">';
+      html += '<div style="text-align:center;min-width:36px;flex-shrink:0;">';
+      html += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:'+dCol+';line-height:1;">'+d.getDate()+'</div>';
+      html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">'+months[d.getMonth()]+'</div>';
+      html += '</div>';
+      html += '<div style="flex:1;min-width:0;">';
+      html += '<div style="font-family:Bebas Neue,sans-serif;font-size:15px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+ev.name+'</div>';
+      if (distStr) html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--accent);">'+distStr+'</div>';
+      html += '</div>';
+      html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:'+dCol+';font-weight:700;flex-shrink:0;">'+dLabel+'</div>';
+      html += '</div>';
+    });
   }
   html += '</div>';
   el.innerHTML = html;
+}
+
+// ─────────────────────────────────────────────────────────────
+// PR / 1RM COMPACT REPLIABLE
+// ─────────────────────────────────────────────────────────────
+function _renderAthHomeStats() {
+  var el = document.getElementById('athHomeStats');
+  if (!el || !_athProfile) return;
+  var rm  = _athProfile.rm1 || {};
+  var rec = _athProfile.records || {};
+  var LABELS = { squat:'Squat', hipthrust:'Hip Thrust', deadlift:'Deadlift', rdl:'RDL', powerclean:'Power Clean', bench:'Bench Press', legext:'Leg Ext' };
+  var rms  = Object.keys(rm).filter(function(k){ return rm[k]; });
+  var prs  = [50,60,80,100,200,400].filter(function(d){ return rec['pr'+d]; });
+  if (!rms.length && !prs.length) { el.innerHTML = ''; return; }
+
+  var html = '';
+
+  // PR compét — compact repliable
+  if (prs.length) {
+    html += '<div class="ath-card" style="margin-bottom:10px;padding:10px 14px;">';
+    html += '<div onclick="athToggleStatsSection(&quot;prSection&quot;)" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;">';
+    html += '<div style="font-family:DM Mono,monospace;font-size:11px;letter-spacing:2px;color:var(--accent);">// MES PR</div>';
+    html += '<div style="display:flex;gap:6px;align-items:center;">';
+    // Preview compacte quand replié
+    html += '<div id="prPreview" style="display:flex;gap:4px;">';
+    prs.slice(0,3).forEach(function(d) {
+      html += '<span style="font-family:Bebas Neue,monospace;font-size:12px;color:var(--muted);">'+d+'m <span style="color:var(--accent);">'+rec['pr'+d]+'s</span></span>';
+    });
+    html += '</div>';
+    html += '<span id="prChevron" style="font-family:DM Mono,monospace;font-size:12px;color:var(--muted);transition:transform .2s;">▼</span>';
+    html += '</div></div>';
+    html += '<div id="prSection" style="display:none;margin-top:10px;">';
+    html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">';
+    prs.forEach(function(d) {
+      html += '<div style="background:var(--surface2);border-radius:6px;padding:8px;text-align:center;">';
+      html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">'+d+'m</div>';
+      html += '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:var(--accent);line-height:1;">'+rec['pr'+d]+'s</div>';
+      html += '</div>';
+    });
+    html += '</div></div></div>';
+  }
+
+  // 1RM — compact repliable
+  if (rms.length) {
+    html += '<div class="ath-card" style="padding:10px 14px;">';
+    html += '<div onclick="athToggleStatsSection(&quot;rmSection&quot;)" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;">';
+    html += '<div style="font-family:DM Mono,monospace;font-size:11px;letter-spacing:2px;color:var(--accent);">// MES 1RM</div>';
+    html += '<div style="display:flex;gap:6px;align-items:center;">';
+    html += '<div id="rmPreview" style="display:flex;gap:4px;">';
+    rms.slice(0,2).forEach(function(k) {
+      html += '<span style="font-family:Bebas Neue,monospace;font-size:12px;color:var(--muted);">'+(LABELS[k]||k).split(' ')[0]+' <span style="color:var(--accent2);">'+rm[k]+'kg</span></span>';
+    });
+    if (rms.length > 2) html += '<span style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">+'+( rms.length-2)+'</span>';
+    html += '</div>';
+    html += '<span id="rmChevron" style="font-family:DM Mono,monospace;font-size:12px;color:var(--muted);transition:transform .2s;">▼</span>';
+    html += '</div></div>';
+    html += '<div id="rmSection" style="display:none;margin-top:10px;">';
+    html += '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;">';
+    rms.forEach(function(k) {
+      html += '<div style="background:var(--surface2);border-radius:6px;padding:8px;display:flex;justify-content:space-between;align-items:center;">';
+      html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);">'+(LABELS[k]||k)+'</div>';
+      html += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--accent2);line-height:1;">'+rm[k]+'<span style="font-size:10px;color:var(--muted);">kg</span></div>';
+      html += '</div>';
+    });
+    html += '</div></div></div>';
+  }
+
+  el.innerHTML = html;
+}
+
+function athToggleStatsSection(id) {
+  var sec = document.getElementById(id);
+  var chev = document.getElementById(id.replace('Section','Chevron'));
+  var prev = document.getElementById(id.replace('Section','Preview'));
+  if (!sec) return;
+  var open = sec.style.display !== 'none';
+  sec.style.display = open ? 'none' : 'block';
+  if (chev) chev.style.transform = open ? '' : 'rotate(180deg)';
+  if (prev) prev.style.display = open ? 'flex' : 'none';
 }
 
 // ── Navigation athlète ───────────────────────────────────
@@ -14523,6 +14667,7 @@ function renderAthHome() {
   }
 
   _renderAthHomePlanifCard();
+  _renderAthHomeCompetCard();
   _renderAthHomeFeedbackCard();
   _renderAthHomeSessions();
   _renderAthHomeStats();
@@ -14619,24 +14764,7 @@ function _renderAthHomeSessions() {
     });
 }
 
-function _renderAthHomeStats() {
-  var el = document.getElementById('athHomeStats');
-  if (!el || !_athProfile) return;
-  var rm = _athProfile.rm1 || {};
-  var rms = Object.entries(rm).filter(function(e){ return e[1]; });
-  if (!rms.length) { el.innerHTML = ''; return; }
-  var LABELS = { squat:'Squat', hipthrust:'Hip Thrust', deadlift:'Deadlift', rdl:'RDL', powerclean:'Power Clean', bench:'Bench Press', legext:'Leg Ext' };
-  var html = '<div style="font-family:DM Mono,monospace;font-size:11px;letter-spacing:2px;color:var(--accent);margin-bottom:10px;">// MES 1RM</div>';
-  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
-  rms.forEach(function(e) {
-    html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;">';
-    html += '<div style="font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">' + (LABELS[e[0]]||e[0]) + '</div>';
-    html += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--accent2);">' + e[1] + '<span style="font-size:11px;color:var(--muted);">kg</span></div>';
-    html += '</div>';
-  });
-  html += '</div>';
-  el.innerHTML = html;
-}
+// _renderAthHomeStats — défini plus haut
 
 function athToggleHistDetail(detailId, cardEl) {
   var detail = document.getElementById(detailId);
@@ -15564,6 +15692,9 @@ setTimeout(() => {
     <!-- Card planif semaine en cours -->
     <div id="athHomePlanifCard" style="margin-bottom:16px;"></div>
 
+    <!-- Card compétitions -->
+    <div id="athHomeCompetCard" style="margin-bottom:16px;"></div>
+
     <!-- Stats rapides -->
     <div id="athHomeStats" style="margin-bottom:16px;"></div>
   </div>
@@ -16109,8 +16240,8 @@ setTimeout(() => {
     <button class="ath-nav-btn" id="ath-nav-feedback" onclick="athGoPage('feedback')" style="position:relative;"><span class="icon">📋</span>Feedback<span id="athFeedbackBadge" style="display:none;position:absolute;top:6px;right:calc(50% - 22px);width:8px;height:8px;background:#ef4444;border-radius:50%;"></span></button>
     <button class="ath-nav-btn" id="ath-nav-force" onclick="athGoPage('force')"><span class="icon">🏋</span>Force</button>
     <button class="ath-nav-btn" id="ath-nav-history" onclick="athGoPage('history')"><span class="icon">📊</span>Séances</button>
-    <button class="ath-nav-btn" id="ath-nav-planif" onclick="athGoPage('planif')"><span class="icon">📅</span>Planif</button>
-    <button class="ath-nav-btn" id="ath-nav-compet" onclick="athGoPage('compet')"><span class="icon">🏆</span>Compét</button>
+    <button class="ath-nav-btn" id="ath-nav-planif" onclick="athGoPage(&quot;planif&quot;)"><span class="icon">📅</span>Planif</button>
+    <button class="ath-nav-btn" id="ath-nav-compet" onclick="athGoPage(&quot;compet&quot;)"><span class="icon">🏆</span>Compét</button>
     <button class="ath-nav-btn" id="ath-nav-profile" onclick="athGoPage('profile')"><span class="icon">👤</span>Profil</button>
   </nav>
 
