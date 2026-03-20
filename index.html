@@ -11864,35 +11864,165 @@ function athRenderCompetChart() {
     return;
   }
 
-  var best = Math.min.apply(null, pts.map(function(x){return x.time;}));
-  var points = pts.map(function(r) {
-    var dl = (r.date||'').slice(5).replace('-','/');
-    return { date: dl, weight: r.time };
-  });
-  var colors = pts.map(function(r){ return r.time === best ? '#22c55e' : 'rgba(245,200,0,.7)'; });
-  el.innerHTML = _buildBarChart(points, 's', null, colors, null, true);
-
-  // Ajouter les Red Curve en référence sous le graphique
   var genre = _athProfile.genre || 'M';
+  var best  = Math.min.apply(null, pts.map(function(x){return x.time;}));
+  var worst = Math.max.apply(null, pts.map(function(x){return x.time;}));
+
+  // Red Curve refs pour cette distance
   var rcKeys = _athHistType==='indoor' ? ['RC_IND_U18','RC_IND_U20','RC_IND_U23'] : ['RC_U18','RC_U20','RC_U23','RC_SR'];
-  var rcHtml = '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">';
-  rcHtml += '<div style="width:100%;font-family:DM Mono,monospace;font-size:10px;color:var(--muted);margin-bottom:4px;letter-spacing:1px;">RED CURVE SWISS ATHLETICS</div>';
+  var rcLines = [];
   rcKeys.forEach(function(key) {
     var cat = (key.indexOf('IND')>=0 ? STANDARDS_INDOOR : ELITE_REFS)[key];
     if (!cat) return;
-    var gData = cat[genre] || cat['M'];
-    var refTime = gData ? gData[_athHistDist] : null;
-    if (!refTime) return;
-    var diff = (best - refTime).toFixed(2);
-    var diffCol = parseFloat(diff) <= 0 ? '#22c55e' : '#f59e0b';
-    rcHtml += '<div style="background:'+cat.color+'18;border:1px solid '+cat.color+'55;border-radius:6px;padding:6px 10px;text-align:center;">';
-    rcHtml += '<div style="font-family:DM Mono,monospace;font-size:10px;color:'+cat.color+';">'+cat.short+'</div>';
-    rcHtml += '<div style="font-family:Bebas Neue,sans-serif;font-size:16px;color:var(--text);">'+refTime+'s</div>';
-    rcHtml += '<div style="font-family:DM Mono,monospace;font-size:10px;color:'+diffCol+';">'+(parseFloat(diff)>0?'+':'')+diff+'s</div>';
-    rcHtml += '</div>';
+    var ref = (cat[genre]||cat['M'])[_athHistDist];
+    if (ref) rcLines.push({ time: ref, color: cat.color, short: cat.short });
   });
-  rcHtml += '</div>';
-  el.innerHTML += rcHtml;
+
+  // Bornes Y — inclure les Red Curves
+  var allTimes = pts.map(function(p){return p.time;}).concat(rcLines.map(function(r){return r.time;}));
+  var yMin = Math.min.apply(null, allTimes);
+  var yMax = Math.max.apply(null, allTimes);
+  var pad  = (yMax - yMin) * 0.25 || 0.5;
+  yMin -= pad; yMax += pad;
+
+  var W = 340; var H = 160;
+  var padL = 44; var padR = 14; var padT = 28; var padB = 36;
+  var gW = W - padL - padR;
+  var gH = H - padT - padB;
+  var n  = pts.length;
+
+  function xOf(i) { return padL + (n <= 1 ? gW/2 : i/(n-1)*gW); }
+  function yOf(t) { return padT + (t - yMin)/(yMax - yMin)*gH; } // axe inversé : haut = meilleur
+
+  var svgId = 'athCurve_' + Date.now();
+
+  // Build polyline points
+  var polyPts = pts.map(function(p,i){ return xOf(i)+','+yOf(p.time); }).join(' ');
+
+  var svg = '<svg id="'+svgId+'" viewBox="0 0 '+W+' '+H+'" style="width:100%;display:block;" xmlns="http://www.w3.org/2000/svg">';
+
+  // Grille horizontale légère
+  for (var gi = 0; gi <= 3; gi++) {
+    var gv = yMin + (yMax - yMin) * gi / 3;
+    var gy = yOf(gv);
+    svg += '<line x1="'+padL+'" y1="'+gy+'" x2="'+(W-padR)+'" y2="'+gy+'" stroke="rgba(255,255,255,0.06)" stroke-width="0.5"/>';
+    svg += '<text x="'+(padL-5)+'" y="'+(gy+3)+'" fill="rgba(255,255,255,0.3)" font-size="8" text-anchor="end" font-family="DM Mono,monospace">'+gv.toFixed(2)+'</text>';
+  }
+
+  // Lignes Red Curve
+  rcLines.forEach(function(rc) {
+    var ry = yOf(rc.time);
+    svg += '<line x1="'+padL+'" y1="'+ry+'" x2="'+(W-padR)+'" y2="'+ry+'" stroke="'+rc.color+'" stroke-width="1" stroke-dasharray="4,3" opacity="0.6"/>';
+    svg += '<text x="'+(W-padR-2)+'" y="'+(ry-3)+'" fill="'+rc.color+'" font-size="8" text-anchor="end" font-family="DM Mono,monospace" opacity="0.8">'+rc.short+'</text>';
+  });
+
+  // Courbe de progression
+  if (n > 1) {
+    svg += '<polyline points="'+polyPts+'" fill="none" stroke="#F5C800" stroke-width="2" stroke-linejoin="round" opacity="0.7"/>';
+  }
+
+  // Zone de remplissage sous la courbe
+  if (n > 1) {
+    var fillPts = polyPts + ' '+(W-padR)+','+(padT+gH)+' '+padL+','+(padT+gH);
+    svg += '<polygon points="'+fillPts+'" fill="#F5C800" opacity="0.05"/>';
+  }
+
+  // Points + tooltip invisible
+  pts.forEach(function(p, i) {
+    var x = xOf(i); var y = yOf(p.time);
+    var isPR = p.time === best;
+    var dotR = isPR ? 6 : 4;
+    var dotFill = isPR ? '#F5C800' : 'var(--surface)';
+    var dotStroke = isPR ? '#F5C800' : '#F5C800';
+    var dotOp = isPR ? '1' : '0.8';
+    var dateLabel = (p.date||'').slice(5).replace('-','/');
+    var compLabel = p.name || '';
+
+    svg += '<circle cx="'+x+'" cy="'+y+'" r="'+dotR+'" fill="'+dotFill+'" stroke="'+dotStroke+'" stroke-width="2" opacity="'+dotOp+'"'
+      + ' data-time="'+p.time+'" data-date="'+p.date+'" data-comp="'+compLabel+'" data-pr="'+(isPR?'1':'0')+'"'
+      + ' style="cursor:pointer;" class="athCurveDot" id="'+svgId+'_pt'+i+'"/>';
+
+    // Label temps — PR en jaune, autres au dessus en petit
+    if (isPR) {
+      svg += '<text x="'+x+'" y="'+(y-10)+'" fill="#F5C800" font-size="11" font-weight="500" text-anchor="middle" font-family="DM Mono,monospace">'+p.time+'s</text>';
+      svg += '<text x="'+x+'" y="'+(y-21)+'" fill="#F5C800" font-size="9" text-anchor="middle" font-family="DM Mono,monospace">PR</text>';
+    } else {
+      svg += '<text x="'+x+'" y="'+(y-8)+'" fill="rgba(255,255,255,0.45)" font-size="9" text-anchor="middle" font-family="DM Mono,monospace">'+p.time+'s</text>';
+    }
+
+    // Date en bas
+    svg += '<text x="'+x+'" y="'+(H-6)+'" fill="rgba(255,255,255,0.35)" font-size="8" text-anchor="middle" font-family="DM Mono,monospace">'+dateLabel+'</text>';
+  });
+
+  svg += '</svg>';
+
+  // Tooltip HTML
+  svg += '<div id="'+svgId+'_tip" style="display:none;position:absolute;background:var(--surface);border:1px solid var(--accent);border-radius:8px;padding:10px 14px;font-family:DM Mono,monospace;font-size:12px;pointer-events:none;z-index:100;min-width:120px;box-shadow:0 4px 16px rgba(0,0,0,.4);"></div>';
+
+  // Red Curve badges
+  var rcBadges = '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">';
+  rcBadges += '<div style="width:100%;font-family:DM Mono,monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:4px;">RED CURVE SWISS ATHLETICS — '+_athHistDist+'m</div>';
+  rcLines.forEach(function(rc) {
+    var diff = (best - rc.time).toFixed(2);
+    var diffCol = parseFloat(diff) <= 0 ? '#22c55e' : '#f59e0b';
+    rcBadges += '<div style="background:'+rc.color+'15;border:1px solid '+rc.color+'44;border-radius:8px;padding:7px 12px;text-align:center;">';
+    rcBadges += '<div style="font-family:DM Mono,monospace;font-size:10px;color:'+rc.color+';">'+rc.short+'</div>';
+    rcBadges += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--text);">'+rc.time+'s</div>';
+    rcBadges += '<div style="font-family:DM Mono,monospace;font-size:10px;color:'+diffCol+';font-weight:700;">'+(parseFloat(diff)>0?'+':'')+diff+'s</div>';
+    rcBadges += '</div>';
+  });
+  rcBadges += '</div>';
+
+  el.style.position = 'relative';
+  el.innerHTML = svg + rcBadges;
+
+  // Tooltip JS
+  var svgEl = document.getElementById(svgId);
+  var tipEl  = document.getElementById(svgId+'_tip');
+  if (!svgEl || !tipEl) return;
+
+  svgEl.querySelectorAll('.athCurveDot').forEach(function(dot) {
+    dot.addEventListener('mouseenter', function(e) {
+      var time = dot.getAttribute('data-time');
+      var date = dot.getAttribute('data-date');
+      var comp = dot.getAttribute('data-comp');
+      var isPR = dot.getAttribute('data-pr') === '1';
+      var html = '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:'+(isPR?'var(--accent)':'var(--text)')+';">'+time+'s'+(isPR?' ⭐':'')+'</div>';
+      html += '<div style="color:var(--muted);font-size:11px;margin-top:2px;">'+date+'</div>';
+      if (comp) html += '<div style="color:var(--muted);font-size:11px;">'+comp+'</div>';
+      tipEl.innerHTML = html;
+      tipEl.style.display = 'block';
+    });
+    dot.addEventListener('mousemove', function(e) {
+      var rect = el.getBoundingClientRect();
+      var tx = e.clientX - rect.left + 12;
+      var ty = e.clientY - rect.top - 10;
+      if (tx + 140 > rect.width) tx = e.clientX - rect.left - 144;
+      tipEl.style.left = tx + 'px';
+      tipEl.style.top  = ty + 'px';
+    });
+    dot.addEventListener('mouseleave', function() {
+      tipEl.style.display = 'none';
+    });
+    // Touch support
+    dot.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      var time = dot.getAttribute('data-time');
+      var date = dot.getAttribute('data-date');
+      var comp = dot.getAttribute('data-comp');
+      var isPR = dot.getAttribute('data-pr') === '1';
+      var html = '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:'+(isPR?'var(--accent)':'var(--text)')+';">'+time+'s'+(isPR?' ⭐':'')+'</div>';
+      html += '<div style="color:var(--muted);font-size:11px;margin-top:2px;">'+date+'</div>';
+      if (comp) html += '<div style="color:var(--muted);font-size:11px;">'+comp+'</div>';
+      tipEl.innerHTML = html;
+      var rect = el.getBoundingClientRect();
+      var touch = e.touches[0];
+      tipEl.style.left = (touch.clientX - rect.left + 12) + 'px';
+      tipEl.style.top  = (touch.clientY - rect.top - 60) + 'px';
+      tipEl.style.display = 'block';
+      setTimeout(function(){ tipEl.style.display='none'; }, 2500);
+    }, { passive: false });
+  });
 }
 
 var _athCompetType = 'outdoor';
