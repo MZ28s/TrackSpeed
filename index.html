@@ -12494,8 +12494,8 @@ function _buildBarChart(points, unit, color, colors, maxVal) {
     // Valeur au-dessus de la barre
     html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:'+(isMax?'var(--accent)':isLast?'var(--text)':'var(--muted)')+';font-weight:'+(isMax||isLast?'700':'400')+';margin-bottom:3px;white-space:nowrap;">'+valStr+'</div>';
     // Barre
-    html += '<div style="position:relative;width:'+(barW-8)+'px;height:'+barH+'px;background:'+col+';border-radius:4px 4px 0 0;">';
-    if (isMax) html += '<div style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:12px;line-height:1;">🏆</div>';
+    html += '<div style="position:relative;width:'+(barW-8)+'px;height:'+barH+'px;background:'+col+';border-radius:4px 4px 0 0;display:flex;align-items:flex-end;justify-content:center;padding-bottom:3px;">';
+    if (isMax) html += '<span style="font-size:13px;line-height:1;">🏆</span>';
     html += '</div>';
     // Label date en dessous — horizontal, pas de rotation
     html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);margin-top:5px;text-align:center;overflow:hidden;white-space:nowrap;max-width:'+(barW)+'px;">'+dl+'</div>';
