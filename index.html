@@ -1179,6 +1179,21 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
     <h1>SAISON</h1>
   </div>
 
+  <!-- Onglets principaux : RÉSULTATS / BILAN -->
+  <div style="display:flex;gap:0;margin-bottom:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+    <button id="saisonMainBtnResults" onclick="switchSaisonMain('results')"
+      style="flex:1;padding:12px;font-family:'DM Mono',monospace;font-size:12px;letter-spacing:1px;border:none;cursor:pointer;background:var(--accent);color:#000;font-weight:700;">
+      📊 RÉSULTATS
+    </button>
+    <button id="saisonMainBtnBilan" onclick="switchSaisonMain('bilan')"
+      style="flex:1;padding:12px;font-family:'DM Mono',monospace;font-size:12px;letter-spacing:1px;border:none;cursor:pointer;background:var(--surface2);color:var(--muted);">
+      📋 BILAN
+    </button>
+  </div>
+
+  <!-- ═══ ONGLET RÉSULTATS ═══ -->
+  <div id="saisonMainResults">
+
   <!-- Filtre Indoor/Outdoor -->
   <div style="display:flex;gap:6px;margin-bottom:10px;">
     <button id="saisonBtnOutdoor" onclick="setSaisonType('outdoor')"
@@ -1286,15 +1301,18 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
     <div id="saisonResultsList"></div>
   </div>
 
-  <!-- Bilan de saison -->
-  <div class="card" style="margin-top:12px;">
+
+
+  </div><!-- /saisonMainResults -->
+
+  <!-- ═══ ONGLET BILAN ═══ -->
+  <div id="saisonMainBilan" style="display:none;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-      <div class="card-title" style="margin:0;">// Bilan de saison</div>
+      <div style="font-family:'DM Mono',monospace;font-size:11px;letter-spacing:2px;color:var(--accent);">// BILAN DE SAISON</div>
       <select id="bilanSaisonSelect" onchange="renderBilanSaison()" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;"></select>
     </div>
     <div id="bilanSaisonContent"></div>
   </div>
-
 
 </div><!-- end page-saison -->
 
@@ -10978,6 +10996,19 @@ let saisonDistActif = 100;
 // ══════════════════════════════════════════════════════════════
 
 // ── COACH ──
+
+function switchSaisonMain(tab) {
+  var resEl = document.getElementById('saisonMainResults');
+  var bilEl = document.getElementById('saisonMainBilan');
+  var btnR  = document.getElementById('saisonMainBtnResults');
+  var btnB  = document.getElementById('saisonMainBtnBilan');
+  if (resEl) resEl.style.display = tab === 'results' ? 'block' : 'none';
+  if (bilEl) bilEl.style.display = tab === 'bilan'   ? 'block' : 'none';
+  if (btnR) { btnR.style.background=tab==='results'?'var(--accent)':'var(--surface2)'; btnR.style.color=tab==='results'?'#000':'var(--muted)'; btnR.style.fontWeight=tab==='results'?'700':'400'; }
+  if (btnB) { btnB.style.background=tab==='bilan'?'var(--accent)':'var(--surface2)'; btnB.style.color=tab==='bilan'?'#000':'var(--muted)'; btnB.style.fontWeight=tab==='bilan'?'700':'400'; }
+  if (tab === 'bilan') { initBilanSaison(); }
+}
+
 function initBilanSaison() {
   var sel = document.getElementById('bilanSaisonSelect');
   if (!sel) return;
