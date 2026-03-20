@@ -3197,71 +3197,168 @@ function athAddToIOSCalendar(data) {
   setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
 }
 
+var _athCalEvents = [];
+var _athCalMonth = null; // 'YYYY-MM'
+
 function athRenderCompetCalendar() {
   var el = document.getElementById('athCompetCalendarList');
   if (!el || !_sb || !_athProfile || !_athCoachUid) {
-    if (el) el.innerHTML = '<div style="text-align:center;padding:20px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Pas de coach lié — aucune compétition planifiée.</div>';
+    if (el) el.innerHTML = '<div style="text-align:center;padding:20px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Pas de coach lié.</div>';
     return;
   }
   el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:12px;color:var(--muted);text-align:center;padding:12px;">Chargement...</div>';
 
-  // Lire les compétitions depuis coach_compet_events — filtrer celles qui concernent cet athlète
-  if (!_athCoachUid) { el.innerHTML = '<div style="text-align:center;padding:20px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Pas de coach lié.</div>'; return; }
   _sb.from('coach_compet_events').select('*').eq('coach_uid', _athCoachUid)
     .order('date', { ascending: true })
     .then(function(r) {
-      if (r.error) { el.innerHTML = '<div style="text-align:center;padding:20px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Erreur: '+r.error.message+'</div>'; return; }
+      if (r.error) { el.innerHTML = '<div style="padding:16px;font-family:DM Mono,monospace;font-size:12px;color:#ef4444;">Erreur: '+r.error.message+'</div>'; return; }
       var athName = (_athProfile.name||'').trim().toLowerCase().split(/\s+/)[0];
-      // Garder seulement les compétitions où l'athlète est sélectionné (ou toutes si athletes vide)
-      var events = (r.data||[]).filter(function(ev) {
+      _athCalEvents = (r.data||[]).filter(function(ev) {
         if (!ev.athletes || !ev.athletes.length) return true;
         return ev.athletes.some(function(a){ return (a.name||'').trim().toLowerCase().split(/\s+/)[0] === athName; });
       });
-      var now = new Date().toISOString().slice(0,10);
-      var upcoming = events.filter(function(e){ return e.date >= now; }).sort(function(a,b){ return a.date.localeCompare(b.date); });
-      var past     = events.filter(function(e){ return e.date < now; }).sort(function(a,b){ return b.date.localeCompare(a.date); }).slice(0,5);
-
-      if (!upcoming.length && !past.length) {
-        el.innerHTML = '<div style="text-align:center;padding:20px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Aucune compétition planifiée.</div>';
-        return;
+      // Mois par défaut = mois avec le prochain événement, ou mois actuel
+      var now = new Date();
+      if (!_athCalMonth) {
+        var next = _athCalEvents.find(function(e){ return e.date >= now.toISOString().slice(0,10); });
+        _athCalMonth = next ? next.date.slice(0,7) : now.toISOString().slice(0,7);
       }
-      var html = '';
-      if (upcoming.length) {
-        html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;">À VENIR</div>';
-        upcoming.forEach(function(ev) {
-          var d = new Date((ev.date||'')+'T12:00:00');
-          var days=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
-          var months=['jan.','fév.','mar.','avr.','mai','juin','juil.','aoû.','sep.','oct.','nov.','déc.'];
-          var daysUntil = Math.ceil((d - new Date()) / (1000*60*60*24));
-          var distStr = (ev.dists||[]).map(function(d){return d+'m';}).join(' · ');
-          html += '<div style="background:var(--surface);border:1px solid rgba(245,200,0,.25);border-radius:10px;padding:14px;margin-bottom:8px;">';
-          html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;">';
-          html += '<div>';
-          html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);margin-bottom:3px;">'+days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()]+' '+d.getFullYear()+(ev.type?' · '+(ev.type==='indoor'?'🏟':'☀️'):'')+'</div>';
-          html += '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:var(--text);">'+ev.name+'</div>';
-          if (ev.lieu) html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);margin-top:2px;">📍 '+ev.lieu+'</div>';
-          if (distStr) html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--accent);margin-top:4px;">'+distStr+'</div>';
-          html += '</div>';
-          var dLabel = daysUntil===0 ? 'Auj.' : daysUntil===1 ? 'Demain' : 'J-'+daysUntil;
-          var dCol = daysUntil<=7 ? '#ef4444' : daysUntil<=30 ? '#f59e0b' : 'var(--accent2)';
-          html += '<div style="text-align:right;flex-shrink:0;">';
-          html += '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;color:'+dCol+';">'+dLabel+'</div>';
-          html += '<button data-evid="'+ev.id+'" data-name="'+ev.name+'" data-date="'+ev.date+'" data-lieu="'+(ev.lieu||'')+'" onclick="athAddToIOSCalendar(this.dataset)" style="margin-top:6px;background:none;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-family:DM Mono,monospace;font-size:10px;color:var(--muted);cursor:pointer;white-space:nowrap;">📅 Calendrier</button>';
-          html += '</div>';
-          html += '</div></div>';
-        });
-      }
-      if (past.length) {
-        html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);letter-spacing:1px;margin:14px 0 8px;">PASSÉES</div>';
-        past.forEach(function(ev) {
-          html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:6px;opacity:0.6;">';
-          html += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--text);">'+ev.name+'</div>';
-          html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);">'+ev.date+(ev.lieu?' · '+ev.lieu:'')+'</div>';
-          html += '</div>';
-        });
-      }
-      el.innerHTML = html;
+      _athDrawCalendar();
     });
+}
+
+function _athDrawCalendar() {
+  var el = document.getElementById('athCompetCalendarList');
+  if (!el) return;
+  var MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+  var DAYS   = ['L','M','M','J','V','S','D'];
+  var yr = parseInt(_athCalMonth.slice(0,4));
+  var mo = parseInt(_athCalMonth.slice(5,7)) - 1; // 0-based
+  var firstDay = new Date(yr, mo, 1);
+  var lastDay  = new Date(yr, mo+1, 0);
+  var startDow = (firstDay.getDay()+6)%7; // 0=Lun
+  var today = new Date().toISOString().slice(0,10);
+
+  // Index événements par date
+  var evByDate = {};
+  _athCalEvents.forEach(function(ev) {
+    if (!evByDate[ev.date]) evByDate[ev.date] = [];
+    evByDate[ev.date].push(ev);
+  });
+
+  var html = '';
+
+  // Navigation mois
+  var prevMo = new Date(yr, mo-1, 1);
+  var nextMo = new Date(yr, mo+1, 1);
+  var prevStr = prevMo.getFullYear()+'-'+String(prevMo.getMonth()+1).padStart(2,'0');
+  var nextStr = nextMo.getFullYear()+'-'+String(nextMo.getMonth()+1).padStart(2,'0');
+
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">';
+  html += '<button data-m="'+prevStr+'" onclick="_athCalNav(this.dataset.m)" style="background:none;border:1px solid var(--border);border-radius:6px;padding:8px 14px;color:var(--muted);font-size:16px;cursor:pointer;">‹</button>';
+  html += '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;letter-spacing:2px;">'+MONTHS[mo]+' '+yr+'</div>';
+  html += '<button data-m="'+nextStr+'" onclick="_athCalNav(this.dataset.m)" style="background:none;border:1px solid var(--border);border-radius:6px;padding:8px 14px;color:var(--muted);font-size:16px;cursor:pointer;">›</button>';
+  html += '</div>';
+
+  // Grille jours de la semaine
+  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px;">';
+  DAYS.forEach(function(d){ html += '<div style="text-align:center;font-family:DM Mono,monospace;font-size:10px;color:var(--muted);padding:4px 0;">'+d+'</div>'; });
+  html += '</div>';
+
+  // Grille jours
+  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:16px;">';
+  for (var i = 0; i < startDow; i++) html += '<div></div>';
+  for (var day = 1; day <= lastDay.getDate(); day++) {
+    var dateStr = yr+'-'+String(mo+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+    var evs = evByDate[dateStr] || [];
+    var isToday = dateStr === today;
+    var hasEv = evs.length > 0;
+    var bg = hasEv ? 'var(--accent)' : isToday ? 'rgba(255,255,255,.08)' : 'transparent';
+    var col = hasEv ? '#000' : isToday ? 'var(--text)' : 'var(--muted)';
+    var border = hasEv ? 'none' : isToday ? '1px solid rgba(255,255,255,.2)' : '1px solid transparent';
+    html += '<div data-date="'+dateStr+'" '+(hasEv?'onclick="_athCalOpenDay(this.dataset.date)" ':'');
+      +' style="aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:8px;background:'+bg+';border:'+border+';cursor:'+(hasEv?'pointer':'default')+';">';
+    html += '<span style="font-family:DM Mono,monospace;font-size:12px;color:'+col+';font-weight:'+(hasEv||isToday?'700':'400')+';">'+day+'</span>';
+    if (hasEv) html += '<span style="width:4px;height:4px;background:#000;border-radius:50%;margin-top:1px;"></span>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Liste événements du mois
+  var moEvents = _athCalEvents.filter(function(e){ return e.date && e.date.slice(0,7) === _athCalMonth; })
+    .sort(function(a,b){ return a.date.localeCompare(b.date); });
+  if (moEvents.length) {
+    html += '<div style="font-family:DM Mono,monospace;font-size:11px;letter-spacing:2px;color:var(--accent);margin-bottom:8px;">CE MOIS</div>';
+    moEvents.forEach(function(ev) {
+      var daysUntil = Math.ceil((new Date(ev.date+'T12:00:00') - new Date()) / (1000*60*60*24));
+      var dLabel = daysUntil < 0 ? 'Passé' : daysUntil === 0 ? 'Auj.' : daysUntil === 1 ? 'Demain' : 'J-'+daysUntil;
+      var dCol = daysUntil < 0 ? 'var(--muted)' : daysUntil <= 7 ? '#ef4444' : daysUntil <= 30 ? '#f59e0b' : 'var(--accent)';
+      var distStr = (ev.dists||[]).join('m · ')+(ev.dists&&ev.dists.length?'m':'');
+      html += '<div data-evdate="'+ev.date+'" onclick="_athCalOpenDay(this.dataset.evdate)" style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--surface);border:1px solid rgba(245,200,0,.2);border-radius:10px;margin-bottom:6px;cursor:pointer;">';
+      html += '<div style="text-align:center;min-width:44px;"><div style="font-family:Bebas Neue,sans-serif;font-size:22px;color:'+dCol+';">'+ev.date.slice(8)+'</div><div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">'+['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'][mo]+'</div></div>';
+      html += '<div style="flex:1;min-width:0;"><div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+ev.name+'</div>';
+      if (ev.lieu) html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">📍 '+ev.lieu+'</div>';
+      if (distStr) html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--accent);">'+distStr+'</div>';
+      html += '</div>';
+      html += '<div style="font-family:Bebas Neue,sans-serif;font-size:16px;color:'+dCol+';flex-shrink:0;">'+dLabel+'</div>';
+      html += '</div>';
+    });
+  }
+
+  el.innerHTML = html;
+}
+
+function _athCalOpenDay(dateStr) { _athCalOpenEvent(dateStr); }
+
+function _athCalNav(month) {
+  _athCalMonth = month;
+  _athDrawCalendar();
+}
+
+function _athCalOpenEvent(dateStr) {
+  var evs = _athCalEvents.filter(function(e){ return e.date === dateStr; });
+  if (!evs.length) return;
+  var ev = evs[0];
+  // Widget modal détail
+  var d = new Date(ev.date+'T12:00:00');
+  var MONTHS_F = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+  var DAYS_F   = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+  var daysUntil = Math.ceil((d - new Date()) / (1000*60*60*24));
+  var dLabel = daysUntil < 0 ? 'Passée' : daysUntil === 0 ? "Aujourd'hui" : daysUntil === 1 ? 'Demain' : 'Dans '+daysUntil+' jours';
+  var dCol = daysUntil < 0 ? 'var(--muted)' : daysUntil <= 7 ? '#ef4444' : daysUntil <= 30 ? '#f59e0b' : 'var(--accent)';
+  var distStr = (ev.dists||[]).map(function(x){ return x+'m'; }).join(' · ');
+
+  var modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.85);display:flex;align-items:flex-end;justify-content:center;padding:0;';
+  var inner = document.createElement('div');
+  inner.style.cssText = 'background:var(--surface);border-radius:20px 20px 0 0;padding:24px 20px 40px;width:100%;max-width:480px;box-shadow:0 -8px 40px rgba(0,0,0,.5);';
+
+  inner.innerHTML =
+    '<div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 20px;"></div>'
+    +'<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);margin-bottom:4px;">'+DAYS_F[d.getDay()]+' '+d.getDate()+' '+MONTHS_F[d.getMonth()]+' '+d.getFullYear()+'</div>'
+    +'<div style="font-family:Bebas Neue,sans-serif;font-size:28px;line-height:1.1;margin-bottom:4px;">'+ev.name+'</div>'
+    +'<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:'+dCol+';margin-bottom:16px;">'+dLabel+'</div>'
+    +'<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">'
+    +(ev.lieu?'<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface2);border-radius:8px;"><span style="font-size:16px;">📍</span><span style="font-family:DM Mono,monospace;font-size:12px;color:var(--text);">'+ev.lieu+'</span></div>':'')
+    +(ev.type?'<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface2);border-radius:8px;"><span style="font-size:16px;">'+(ev.type==='indoor'?'🏟':'☀️')+'</span><span style="font-family:DM Mono,monospace;font-size:12px;color:var(--text);">'+(ev.type==='indoor'?'Indoor':'Outdoor')+'</span></div>':'')
+    +(distStr?'<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface2);border-radius:8px;"><span style="font-size:16px;">🏃</span><span style="font-family:DM Mono,monospace;font-size:12px;color:var(--accent);">'+distStr+'</span></div>':'')
+    +'</div>';
+
+  var btnCal = document.createElement('button');
+  btnCal.textContent = '📅 Ajouter à mon calendrier';
+  btnCal.style.cssText = 'width:100%;background:var(--accent);border:none;border-radius:10px;padding:14px;font-family:Bebas Neue,sans-serif;font-size:18px;color:#000;cursor:pointer;letter-spacing:1px;margin-bottom:10px;min-height:52px;';
+  btnCal.onclick = function() { athAddToIOSCalendar({date:ev.date, name:ev.name, lieu:ev.lieu||''}); };
+
+  var btnClose = document.createElement('button');
+  btnClose.textContent = 'Fermer';
+  btnClose.style.cssText = 'width:100%;background:none;border:1px solid var(--border);border-radius:10px;padding:12px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);cursor:pointer;min-height:48px;';
+  btnClose.onclick = function() { modal.remove(); };
+
+  inner.appendChild(btnCal);
+  inner.appendChild(btnClose);
+  modal.appendChild(inner);
+  modal.addEventListener('click', function(e){ if(e.target===modal) modal.remove(); });
+  document.body.appendChild(modal);
 }
 
 function renderPlanifListe() {
