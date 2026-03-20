@@ -1057,6 +1057,19 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
     <div id="stab-hist-inner"></div>
   </div>
 
+  <!-- ══════════════════ TAB LIVE ══════════════════ -->
+  <div id="stab-content-live" style="display:none;">
+    <div class="card">
+      <div class="card-title">// Séance Live — saisie des temps sur le terrain</div>
+      <p style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:16px;line-height:1.6;">
+        Crée tes blocs dans <strong>PLANIFIER</strong>, sélectionne les athlètes, puis saisis les temps ici.
+      </p>
+      <div id="liveSessionSetup" style="margin-bottom:16px;"></div>
+      <div id="liveSessionTable"></div>
+      <div id="liveSessionActions" style="margin-top:16px;"></div>
+    </div>
+  </div><!-- end stab-content-live -->
+
 </div><!-- end page-session -->
 
 <!-- ══ PAGE FORCE ══ -->
@@ -1518,6 +1531,33 @@ function sbPullAll() {
       if (prMerged) {
         changed = true;
         // Pousser la mise à jour vers Supabase immédiatement
+        sbPush('profiles_data', profiles);
+      }
+    }
+    // Dédupliquer profiles par prénom (garder le plus complet = nom le plus long)
+    if (profiles && profiles.length > 1) {
+      var seen = {};
+      var deduped = [];
+      profiles.forEach(function(p) {
+        var firstName = (p.name||'').trim().toLowerCase().split(/\s+/)[0];
+        if (!seen[firstName]) {
+          seen[firstName] = deduped.length;
+          deduped.push(p);
+        } else {
+          // Garder le profil avec le nom le plus long (nom complet > prénom seul)
+          var existingP = deduped[seen[firstName]];
+          if ((p.name||'').length > (existingP.name||'').length) {
+            // Fusionner les données : garder le meilleur des deux
+            p.competResults = p.competResults || existingP.competResults || [];
+            if (!p.records || !Object.keys(p.records).length) p.records = existingP.records;
+            if (!p.rm1    || !Object.keys(p.rm1).length)     p.rm1     = existingP.rm1;
+            deduped[seen[firstName]] = p;
+          }
+        }
+      });
+      if (deduped.length < profiles.length) {
+        profiles = deduped;
+        changed = true;
         sbPush('profiles_data', profiles);
       }
     }
@@ -6738,7 +6778,7 @@ let currentLibFilter = 'all';
 
 function switchStab(tab) {
   // Boutons
-  ['plan','lib','hist'].forEach(t => {
+  ['plan','lib','hist','live'].forEach(t => {
     const btn = document.getElementById('stab-' + t);
     if (!btn) return;
     btn.style.background  = tab === t ? 'var(--accent)' : 'var(--surface2)';
@@ -6750,9 +6790,12 @@ function switchStab(tab) {
   document.getElementById('stab-content-lib').style.display  = tab === 'lib'  ? '' : 'none';
   const histEl = document.getElementById('stab-content-hist');
   if (histEl) histEl.style.display = tab === 'hist' ? '' : 'none';
+  var liveEl = document.getElementById('stab-content-live');
+  if (liveEl) liveEl.style.display = tab === 'live' ? '' : 'none';
   if (tab === 'lib')  renderLib();
   if (tab === 'hist') renderHistoryInline();
   if (tab === 'plan') renderAthleteCheckboxes();
+  if (tab === 'live') renderLiveSession();
 }
 
 function renderHistoryInline() {
@@ -8960,6 +9003,183 @@ function chronoBeep() {
 // ════════════════════════════════════════════════════════
 // ══  FONCTIONNALITÉ 2 : PARTAGE SÉANCE  ═════════════════
 // ════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════
+// SÉANCE LIVE — saisie des temps en direct par le coach
+// ══════════════════════════════════════════════════════════════
+
+var _liveTimesData = {}; // { pid_bi_ri: value }
+
+function renderLiveSession() {
+  var setupEl  = document.getElementById('liveSessionSetup');
+  var tableEl  = document.getElementById('liveSessionTable');
+  var actionsEl = document.getElementById('liveSessionActions');
+  if (!setupEl || !tableEl) return;
+
+  if (!sessionBlocks.length) {
+    setupEl.innerHTML = '<div style="background:rgba(245,200,0,.08);border:1px solid rgba(245,200,0,.3);border-radius:8px;padding:14px;font-family:DM Mono,monospace;font-size:9px;color:var(--accent);line-height:1.6;">Cr&#233;e d&#39;abord des blocs dans l&#39;onglet PLANIFIER puis reviens ici.</div>';
+    tableEl.innerHTML = '';
+    actionsEl.innerHTML = '';
+    return;
+  }
+
+  if (!selectedAthletes.length) {
+    setupEl.innerHTML = '<div style="background:rgba(245,200,0,.08);border:1px solid rgba(245,200,0,.3);border-radius:8px;padding:14px;font-family:DM Mono,monospace;font-size:9px;color:var(--accent);line-height:1.6;">S&#233;lectionne les athl&#232;tes dans l&#39;onglet PLANIFIER puis reviens ici.</div>';
+    tableEl.innerHTML = '';
+    actionsEl.innerHTML = '';
+    return;
+  }
+
+  // Infos séance
+  var athNames = selectedAthletes.map(function(pid) {
+    var p = profiles.find(function(pr){return pr.id===pid;});
+    return p ? p.name : pid;
+  });
+  var blocsSummary = sessionBlocks.map(function(b){return (b.reps||'?')+'×'+(b.dist||'?')+'m';}).join('  ·  ');
+
+  setupEl.innerHTML = '<div style="background:var(--surface2);border-radius:8px;padding:12px 14px;margin-bottom:4px;">'
+    + '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:var(--text);">' + athNames.join(', ') + '</div>'
+    + '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--accent);margin-top:3px;">' + blocsSummary + '</div>'
+    + '</div>';
+
+  // Construire le tableau de saisie par bloc
+  var html = '';
+  sessionBlocks.forEach(function(b, bi) {
+    var reps = parseInt(b.reps) || 0;
+    html += '<div style="margin-bottom:20px;">';
+    html += '<div style="font-family:DM Mono,monospace;font-size:8px;letter-spacing:1px;color:var(--accent);margin-bottom:10px;padding:8px 0;border-bottom:1px solid var(--border);">BLOC '+(bi+1)+' — '+reps+'×'+b.dist+'m @ '+b.pct+'%'+(b.rest?' · '+b.rest+'min récup':'')+'</div>';
+    html += '<div style="overflow-x:auto;">';
+    html += '<table style="width:100%;border-collapse:collapse;font-family:DM Mono,monospace;font-size:11px;">';
+    // Header
+    html += '<thead><tr><th style="text-align:left;padding:6px 8px;font-size:8px;color:var(--muted);border-bottom:1px solid var(--border);min-width:100px;">ATHLÈTE</th>';
+    for (var r = 0; r < reps; r++) {
+      html += '<th style="padding:6px 8px;font-size:8px;color:var(--muted);border-bottom:1px solid var(--border);text-align:center;min-width:80px;">R'+(r+1)+'</th>';
+    }
+    html += '<th style="padding:6px 8px;font-size:8px;color:#51cf66;border-bottom:1px solid var(--border);text-align:center;">MEILLEUR</th></tr></thead><tbody>';
+    // Lignes par athlète
+    selectedAthletes.forEach(function(pid) {
+      var p = profiles.find(function(pr){return pr.id===pid;});
+      if (!p) return;
+      html += '<tr><td style="padding:6px 8px;font-family:Bebas Neue,sans-serif;font-size:15px;border-bottom:1px solid var(--border);white-space:nowrap;">'+p.name+'</td>';
+      for (var r2 = 0; r2 < reps; r2++) {
+        var key = pid+'_'+bi+'_'+r2;
+        var val = _liveTimesData[key] || '';
+        html += '<td style="padding:4px;border-bottom:1px solid var(--border);text-align:center;">'
+          + '<input type="number" step="0.01" min="3" max="60" placeholder="—" value="'+val+'"'
+          + ' data-key="'+key+'" data-pid="'+pid+'" data-bi="'+bi+'" data-ri="'+r2+'"'
+          + ' onchange="liveUpdateTime(this)"'
+          + ' style="width:72px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 4px;color:var(--text);font-family:DM Mono,monospace;font-size:13px;text-align:center;outline:none;-webkit-tap-highlight-color:transparent;"'
+          + ' onfocus=\'this.style.borderColor=\"var(--accent)\"\' onblur=\'this.style.borderColor=\"var(--border)\"\'>'
+          + '</td>';
+      }
+      // Meilleur temps
+      html += '<td id="liveBest_'+pid+'_'+bi+'" style="padding:6px 4px;border-bottom:1px solid var(--border);text-align:center;font-family:Bebas Neue,sans-serif;font-size:16px;color:#51cf66;">—</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div></div>';
+  });
+
+  tableEl.innerHTML = html;
+  // Recalculer les meilleurs existants
+  selectedAthletes.forEach(function(pid) {
+    sessionBlocks.forEach(function(b, bi) {
+      liveUpdateBest(pid, bi);
+    });
+  });
+
+  // Bouton enregistrer
+  actionsEl.innerHTML =
+    '<button onclick="saveLiveSession()" style="width:100%;background:var(--accent);border:none;border-radius:10px;padding:16px;font-family:Bebas Neue,sans-serif;font-size:22px;color:#000;cursor:pointer;letter-spacing:2px;min-height:56px;margin-bottom:10px;">💾 ENREGISTRER LA SÉANCE</button>'
+    + '<div id="liveSessionMsg" style="text-align:center;font-family:DM Mono,monospace;font-size:9px;color:#22c55e;min-height:14px;"></div>';
+}
+
+function liveUpdateTime(input) {
+  var key = input.dataset.key;
+  var val = parseFloat(input.value);
+  if (!isNaN(val) && val > 0) {
+    _liveTimesData[key] = val;
+    input.style.background = 'rgba(81,207,102,.12)';
+  } else {
+    delete _liveTimesData[key];
+    input.style.background = 'var(--surface2)';
+  }
+  liveUpdateBest(input.dataset.pid, parseInt(input.dataset.bi));
+}
+
+function liveUpdateBest(pid, bi) {
+  var b = sessionBlocks[bi];
+  if (!b) return;
+  var reps = parseInt(b.reps) || 0;
+  var vals = [];
+  for (var r = 0; r < reps; r++) {
+    var v = _liveTimesData[pid+'_'+bi+'_'+r];
+    if (v) vals.push(v);
+  }
+  var bestEl = document.getElementById('liveBest_'+pid+'_'+bi);
+  if (bestEl) {
+    bestEl.textContent = vals.length ? Math.min.apply(null,vals).toFixed(2)+'s' : '—';
+  }
+}
+
+function saveLiveSession() {
+  if (!sessionBlocks.length || !selectedAthletes.length) return;
+  if (!_sb || !_sbUser) { alert('Non connecté.'); return; }
+
+  var date = new Date().toISOString().slice(0,10);
+  var conditions = (document.getElementById('sessConditions')||{}).value || '';
+  var note = (document.getElementById('sessGlobalNote')||{}).value || '';
+
+  var rows = selectedAthletes.map(function(pid) {
+    var p = profiles.find(function(pr){return pr.id===pid;});
+    if (!p) return null;
+    var pAllRefs = [];
+    if (p.records) {
+      [50,60,80,100,200,400].forEach(function(d) {
+        var t = p.records['pr'+d]; if (t) pAllRefs.push({dRef:d,t:parseFloat(t)});
+      });
+      pAllRefs.sort(function(a,b){return a.dRef-b.dRef;});
+    }
+    var blocksWithTimes = sessionBlocks.map(function(b, bi) {
+      var times = [];
+      for (var r = 0; r < parseInt(b.reps)||0; r++) {
+        var v = _liveTimesData[pid+'_'+bi+'_'+r];
+        times.push(v || null);
+      }
+      var tCible = null;
+      if (pAllRefs.length) {
+        var dist = b.dist;
+        var closest = pAllRefs.reduce(function(best,ref){return Math.abs(ref.dRef-dist)<Math.abs(best.dRef-dist)?ref:best;});
+        var t100 = computeTarget(dist,[closest]);
+        tCible = Math.round(t100/(b.pct/100)*100)/100;
+      }
+      return Object.assign({},b,{times:times,tCible:tCible});
+    });
+    return {
+      coach_uid: _sbUser.id, athlete_name: p.name,
+      session_date: date, blocks: blocksWithTimes,
+      conditions: conditions, note: note, type: 'done'
+    };
+  }).filter(Boolean);
+
+  var btn = document.querySelector('#liveSessionActions button');
+  var msg = document.getElementById('liveSessionMsg');
+  if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement...'; }
+
+  _sb.from('coach_sessions').insert(rows).then(function(r) {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 ENREGISTRER LA SÉANCE'; }
+    if (r.error) {
+      if (msg) { msg.textContent = '⚠ '+r.error.message; msg.style.color='#ef4444'; }
+      return;
+    }
+    if (msg) { msg.textContent = '✅ Séance enregistrée et envoyée aux athlètes !'; msg.style.color='#22c55e'; }
+    // Rafraîchir le cache
+    sbPullAll().then(function(){ renderHistoryInline(); });
+    // Reset times
+    _liveTimesData = {};
+    setTimeout(function(){ if(msg) msg.textContent=''; }, 4000);
+  });
+}
+
 function sendSessionToAthletes() {
   if (!sessionBlocks.length) { alert('Aucun bloc de séance à envoyer.'); return; }
   if (!selectedAthletes.length) { alert('Sélectionne au moins un athlète dans le tableau.'); return; }
@@ -11554,6 +11774,51 @@ function renderAthHistory() {
               html += '<td style="padding:6px 4px;border-bottom:1px solid var(--border);text-align:center;">';
               if (best !== null) html += '<span style="font-family:Bebas Neue,sans-serif;font-size:14px;color:#51cf66;">' + best.toFixed(2) + 's</span>';
               html += '</td></tr></tbody></table></div>';
+              // ── Graphique des temps ──
+              if (validT.length >= 2) {
+                var maxT = Math.max.apply(null, validT);
+                var minT = Math.min.apply(null, validT);
+                var tCible = b.tCible || null;
+                html += '<div style="margin-top:14px;background:var(--surface2);border-radius:8px;padding:14px;">';
+                html += '<div style="font-family:DM Mono,monospace;font-size:7px;letter-spacing:1px;color:var(--muted);margin-bottom:10px;">PROGRESSION DES TEMPS — BLOC '+(bi+1)+'</div>';
+                // Barres verticales
+                html += '<div style="display:flex;align-items:flex-end;gap:6px;height:80px;padding-bottom:20px;position:relative;">';
+                // Ligne cible si disponible
+                if (tCible) {
+                  var ciblePct = maxT > minT ? Math.round((maxT - tCible) / (maxT - minT) * 80) : 40;
+                  ciblePct = Math.max(2, Math.min(78, ciblePct));
+                  html += '<div style="position:absolute;left:0;right:0;border-top:1px dashed rgba(245,200,0,.5);bottom:calc(20px + '+ciblePct+'px);z-index:1;"><span style="font-family:DM Mono,monospace;font-size:6px;color:var(--accent);background:var(--surface2);padding:0 3px;position:absolute;right:0;top:-8px;">cible '+tCible+'s</span></div>';
+                }
+                b.times.forEach(function(t, ri) {
+                  var hasV = t !== null && !isNaN(t);
+                  var barH = hasV && maxT > minT ? Math.round((maxT - t) / (maxT - minT) * 72 + 8) : 8;
+                  if (maxT === minT && hasV) barH = 40;
+                  var isBestBar = hasV && parseFloat(t) === best;
+                  var barCol = isBestBar ? '#51cf66' : hasV ? 'rgba(245,200,0,.7)' : 'var(--border)';
+                  html += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;">';
+                  html += '<div style="font-family:DM Mono,monospace;font-size:7px;color:'+(hasV?'var(--text)':'var(--border)')+';">'+(hasV?parseFloat(t).toFixed(2):'—')+'</div>';
+                  html += '<div style="width:100%;height:'+barH+'px;background:'+barCol+';border-radius:3px 3px 0 0;transition:height .3s;position:relative;z-index:2;"></div>';
+                  html += '<div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);">R'+(ri+1)+'</div>';
+                  html += '</div>';
+                });
+                html += '</div>';
+                // Stats synthèse
+                var avgT = validT.reduce(function(s,v){return s+v;},0)/validT.length;
+                var fatigue = validT.length>=2 ? ((validT[validT.length-1]-validT[0])/validT[0]*100) : 0;
+                var fatigueStr = Math.abs(fatigue) < 1 ? 'Stable' : fatigue > 0 ? '↓ '+fatigue.toFixed(1)+'%' : '↑ '+Math.abs(fatigue).toFixed(1)+'%';
+                var fatCol = Math.abs(fatigue) < 1 ? '#22c55e' : fatigue > 3 ? '#ef4444' : '#f59e0b';
+                html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">';
+                html += '<div style="text-align:center;"><div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);margin-bottom:3px;">MOYENNE</div><div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--text);">'+avgT.toFixed(2)+'s</div></div>';
+                html += '<div style="text-align:center;"><div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);margin-bottom:3px;">MEILLEUR</div><div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:#51cf66;">'+best.toFixed(2)+'s</div></div>';
+                html += '<div style="text-align:center;"><div style="font-family:DM Mono,monospace;font-size:7px;color:var(--muted);margin-bottom:3px;">TENDANCE</div><div style="font-family:Bebas Neue,sans-serif;font-size:16px;color:'+fatCol+';">'+fatigueStr+'</div></div>';
+                if (tCible) {
+                  var ecartCible = ((avgT - tCible)/tCible*100);
+                  var ecartCol = ecartCible <= -2 ? '#22c55e' : ecartCible <= 2 ? 'var(--muted)' : ecartCible <= 5 ? '#f59e0b' : '#ef4444';
+                  html += '</div><div style="margin-top:8px;text-align:center;font-family:DM Mono,monospace;font-size:8px;color:'+ecartCol+';">';
+                  html += (ecartCible>0?'+':'')+ecartCible.toFixed(1)+'% vs temps cible ('+tCible+'s)';
+                }
+                html += '</div></div>';
+              }
               // Bouton modifier les temps
               html += '<button data-sid="' + s.id + '" data-nb="' + blocks.length + '" data-reps=\'' + JSON.stringify(blocks.map(function(b2){return Array.isArray(b2.reps)?b2.reps.length:(parseInt(b2.reps)||0);})) + '\' onclick="athEditTimes(this)" style="margin-top:8px;background:none;border:1px solid var(--border);border-radius:4px;padding:6px 12px;font-family:DM Mono,monospace;font-size:8px;color:var(--muted);cursor:pointer;">✏️ Modifier mes temps</button>';
               html += '<div id="athedit_' + s.id + '" style="display:none;margin-top:10px;"></div>';
@@ -13016,11 +13281,21 @@ function linkAthleteById(athId, profileId, callback) {
           if (!athName) athName = ath.name || athId;
 
           // Étape 4 : importer dans profiles coach (créer ou mettre à jour)
+          // Chercher un profil existant : correspondance exacte du nom complet en priorité,
+          // puis prénom seul si le profil coach n'a que le prénom
+          var athNameNorm = athName.trim().toLowerCase();
+          var athFirstName = athNameNorm.split(/\s+/)[0];
           var existingIdx = profiles.findIndex(function(p) {
-            var pFirst = (p.name || '').trim().toLowerCase().split(/\s+/)[0];
-            var aFirst = athName.trim().toLowerCase().split(/\s+/)[0];
-            return pFirst && aFirst && pFirst === aFirst;
+            return (p.name||'').trim().toLowerCase() === athNameNorm;
           });
+          if (existingIdx < 0) {
+            // Fallback : prénom exact ET profil coach avec un seul mot (prénom seulement)
+            existingIdx = profiles.findIndex(function(p) {
+              var pNorm = (p.name||'').trim().toLowerCase();
+              var pWords = pNorm.split(/\s+/);
+              return pWords.length === 1 && pWords[0] === athFirstName;
+            });
+          }
 
           var newProfile = {
             id:           existingIdx >= 0 ? profiles[existingIdx].id : Date.now().toString(),
