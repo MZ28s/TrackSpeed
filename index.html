@@ -2964,10 +2964,14 @@ function importIAPlanif(data, nom, athId) {
 function renderPlanifCompet() {
   var el = document.getElementById('planif-stab-compet-content');
   if (!el) return;
+  el.innerHTML = '<div style="text-align:center;padding:20px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Chargement...</div>';
 
-  // Charger les compétitions planifiées depuis settings_data
-  sbPull('settings_data').then(function(data) {
-    var events = (data && data.competEvents) || [];
+  if (!_sb || !_sbUser) { el.innerHTML = '<div style="padding:20px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Non connecté.</div>'; return; }
+
+  _sb.from('coach_compet_events').select('*').eq('coach_uid', _sbUser.id)
+    .order('date', { ascending: true })
+    .then(function(r) {
+    var events = (r.data) || [];
     var now = new Date().toISOString().slice(0,10);
 
     var html = '<div style="margin-bottom:16px;">';
@@ -3042,27 +3046,36 @@ function coachAddCompetEvent() {
   var date  = (document.getElementById('coachCompetDate')||{}).value;
   var name  = ((document.getElementById('coachCompetName')||{}).value||'').trim();
   var lieu  = ((document.getElementById('coachCompetLieu')||{}).value||'').trim();
-  var dists = [50,60,80,100,200,400].filter(function(d){ var el=document.getElementById('coachCompetDist_'+d); return el&&el.checked; });
-  var selectedAthleteIds = [];
-  document.querySelectorAll('.coachCompetAthChk:checked').forEach(function(chk){ selectedAthleteIds.push({pid:chk.dataset.pid, name:chk.dataset.name}); });
+  var dists = [50,60,80,100,200,400].filter(function(d){ var chk=document.getElementById('coachCompetDist_'+d); return chk&&chk.checked; });
+  var selectedAthletes = [];
+  document.querySelectorAll('.coachCompetAthChk:checked').forEach(function(chk){ selectedAthletes.push({pid:chk.dataset.pid, name:chk.dataset.name}); });
   var msgEl = document.getElementById('coachCompetEventMsg');
   if (!date) { if(msgEl){msgEl.textContent='Entre une date.';msgEl.style.color='#ef4444';} return; }
   if (!name) { if(msgEl){msgEl.textContent='Entre un nom.';msgEl.style.color='#ef4444';} return; }
+  if (!_sb || !_sbUser) { if(msgEl){msgEl.textContent='Non connecté.';msgEl.style.color='#ef4444';} return; }
 
-  var evId = 'ev_'+Date.now();
-  var newEvent = { id:evId, date:date, name:name, lieu:lieu, type:_coachCompetType, dists:dists, athletes:selectedAthleteIds };
+  if(msgEl){msgEl.textContent='Sauvegarde...';msgEl.style.color='var(--muted)';}
 
-  sbPull('settings_data').then(function(data) {
-    var settings = data || {};
-    settings.competEvents = settings.competEvents || [];
-    settings.competEvents.push(newEvent);
-    settings.competEvents.sort(function(a,b){ return a.date.localeCompare(b.date); });
-    sbPush('settings_data', settings).then(function() {
-      if(msgEl){msgEl.textContent='✅ Compétition ajoutée !';msgEl.style.color='#22c55e';}
-      // Synchroniser dans athlete_profiles pour chaque athlète sélectionné
-      _syncCompetEventToAthletes(newEvent);
-      setTimeout(function(){renderPlanifCompet();},300);
-    });
+  var newEvent = {
+    coach_uid: _sbUser.id,
+    date: date,
+    name: name,
+    lieu: lieu,
+    type: _coachCompetType,
+    dists: dists,
+    athletes: selectedAthletes
+  };
+
+  _sb.from('coach_compet_events').insert(newEvent).select().then(function(r) {
+    if (r.error) {
+      console.error('coachAddCompetEvent error:', r.error);
+      if(msgEl){msgEl.textContent='Erreur: '+r.error.message;msgEl.style.color='#ef4444';}
+      return;
+    }
+    if(msgEl){msgEl.textContent='✅ Compétition ajoutée !';msgEl.style.color='#22c55e';}
+    var saved = r.data && r.data[0] ? r.data[0] : newEvent;
+    _syncCompetEventToAthletes(saved);
+    setTimeout(function(){renderPlanifCompet();}, 400);
   });
 }
 
@@ -3101,15 +3114,15 @@ function _syncDeleteCompetEventToAthletes(evId) {
   });
 }
 
-function coachDeleteCompetEvent(idx) {
+function coachDeleteCompetEvent(evid) {
   if (!confirm('Supprimer cette compétition du calendrier ?')) return;
-  sbPull('settings_data').then(function(data) {
-    var settings = data || {};
-    settings.competEvents = settings.competEvents || [];
-    var deleted = settings.competEvents.splice(idx, 1);
-    if (deleted.length && deleted[0].id) _syncDeleteCompetEventToAthletes(deleted[0].id);
-    sbPush('settings_data', settings).then(function(){ renderPlanifCompet(); });
-  });
+  if (!_sb || !_sbUser) return;
+  _syncDeleteCompetEventToAthletes(evid);
+  _sb.from('coach_compet_events').delete().eq('id', evid).eq('coach_uid', _sbUser.id)
+    .then(function(r) {
+      if (r.error) { console.error('delete compet error:', r.error.message); return; }
+      renderPlanifCompet();
+    });
 }
 
 function _renderCompetEventCard(ev, idx, isPast) {
@@ -3132,7 +3145,7 @@ function _renderCompetEventCard(ev, idx, isPast) {
     html += '</div>';
   }
   html += '</div>';
-  html += '<button data-idx="'+idx+'" onclick="coachDeleteCompetEvent(parseInt(this.dataset.idx))" style="background:none;border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:6px 10px;color:#ef4444;font-size:14px;cursor:pointer;flex-shrink:0;">🗑</button>';
+  html += '<button data-evid="'+(ev.id||idx)+'" onclick="coachDeleteCompetEvent(this.dataset.evid)" style="background:none;border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:6px 10px;color:#ef4444;font-size:14px;cursor:pointer;flex-shrink:0;">🗑</button>';
   html += '</div>';
   return html;
 }
@@ -3192,11 +3205,18 @@ function athRenderCompetCalendar() {
   }
   el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:12px;color:var(--muted);text-align:center;padding:12px;">Chargement...</div>';
 
-  // Lire les compétitions depuis calendar_events du profil athlète (synchro par le coach)
-  _sb.from('athlete_profiles').select('calendar_events').eq('user_id', _athProfile.user_id).maybeSingle()
+  // Lire les compétitions depuis coach_compet_events — filtrer celles qui concernent cet athlète
+  if (!_athCoachUid) { el.innerHTML = '<div style="text-align:center;padding:20px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Pas de coach lié.</div>'; return; }
+  _sb.from('coach_compet_events').select('*').eq('coach_uid', _athCoachUid)
+    .order('date', { ascending: true })
     .then(function(r) {
-      if (!r.data) { el.innerHTML = '<div style="text-align:center;padding:20px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Aucune compétition planifiée par ton coach.</div>'; return; }
-      var events = r.data.calendar_events || [];
+      if (r.error) { el.innerHTML = '<div style="text-align:center;padding:20px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Erreur: '+r.error.message+'</div>'; return; }
+      var athName = (_athProfile.name||'').trim().toLowerCase().split(/\s+/)[0];
+      // Garder seulement les compétitions où l'athlète est sélectionné (ou toutes si athletes vide)
+      var events = (r.data||[]).filter(function(ev) {
+        if (!ev.athletes || !ev.athletes.length) return true;
+        return ev.athletes.some(function(a){ return (a.name||'').trim().toLowerCase().split(/\s+/)[0] === athName; });
+      });
       var now = new Date().toISOString().slice(0,10);
       var upcoming = events.filter(function(e){ return e.date >= now; }).sort(function(a,b){ return a.date.localeCompare(b.date); });
       var past     = events.filter(function(e){ return e.date < now; }).sort(function(a,b){ return b.date.localeCompare(a.date); }).slice(0,5);
