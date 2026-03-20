@@ -12060,7 +12060,7 @@ function openPlanifAssignModal(planifId) {
   document.body.appendChild(modal);
 
   // Charger les athlete_profiles liés — ils contiennent le vrai user_id UUID
-  _sb.from('athlete_profiles').select('user_id,name,spec').eq('coach_uid', _sbUser.id)
+  _sb.from('athlete_profiles').select('user_id,name').eq('coach_uid', _sbUser.id)
     .then(function(r) {
       var athProfiles = r.data || [];
 
@@ -12084,7 +12084,7 @@ function openPlanifAssignModal(planifId) {
               row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border:1px solid '+(isAssigned?'var(--accent)':'var(--border)')+';border-radius:8px;cursor:pointer;';
               row.innerHTML = '<input type="checkbox" data-uid="'+ap.user_id+'" data-name="'+(ap.name||'')+'" '+(isAssigned?'checked':'')+' style="accent-color:var(--accent);width:16px;height:16px;">'
                 +'<div><div style="font-family:DM Mono,monospace;font-size:12px;color:var(--text);">'+(ap.name||ap.user_id)+'</div>'
-                +'<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">'+(ap.spec||'')+'</div></div>';
+                +'</div>';
               row.querySelector('input').addEventListener('change', function() {
                 row.style.borderColor = this.checked ? 'var(--accent)' : 'var(--border)';
               });
