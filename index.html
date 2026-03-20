@@ -3231,84 +3231,88 @@ function _athDrawCalendar() {
   var el = document.getElementById('athCompetCalendarList');
   if (!el) return;
   var MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-  var DAYS   = ['L','M','M','J','V','S','D'];
   var yr = parseInt(_athCalMonth.slice(0,4));
-  var mo = parseInt(_athCalMonth.slice(5,7)) - 1; // 0-based
-  var firstDay = new Date(yr, mo, 1);
-  var lastDay  = new Date(yr, mo+1, 0);
-  var startDow = (firstDay.getDay()+6)%7; // 0=Lun
+  var mo = parseInt(_athCalMonth.slice(5,7)) - 1;
   var today = new Date().toISOString().slice(0,10);
 
-  // Index événements par date
   var evByDate = {};
   _athCalEvents.forEach(function(ev) {
-    if (!evByDate[ev.date]) evByDate[ev.date] = [];
-    evByDate[ev.date].push(ev);
+    var d = (ev.date||'').slice(0,10);
+    ev._dateKey = d;
+    if (!evByDate[d]) evByDate[d] = [];
+    evByDate[d].push(ev);
   });
 
-  var html = '';
-
-  // Navigation mois
   var prevMo = new Date(yr, mo-1, 1);
   var nextMo = new Date(yr, mo+1, 1);
   var prevStr = prevMo.getFullYear()+'-'+String(prevMo.getMonth()+1).padStart(2,'0');
   var nextStr = nextMo.getFullYear()+'-'+String(nextMo.getMonth()+1).padStart(2,'0');
 
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">';
-  html += '<button data-m="'+prevStr+'" onclick="_athCalNav(this.dataset.m)" style="background:none;border:1px solid var(--border);border-radius:6px;padding:8px 14px;color:var(--muted);font-size:16px;cursor:pointer;">‹</button>';
-  html += '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;letter-spacing:2px;">'+MONTHS[mo]+' '+yr+'</div>';
-  html += '<button data-m="'+nextStr+'" onclick="_athCalNav(this.dataset.m)" style="background:none;border:1px solid var(--border);border-radius:6px;padding:8px 14px;color:var(--muted);font-size:16px;cursor:pointer;">›</button>';
+  var html = '';
+
+  // Navigation mois — compacte
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">';
+  html += '<button data-m="'+prevStr+'" onclick="_athCalNav(this.dataset.m)" style="background:none;border:1px solid var(--border);border-radius:6px;padding:6px 12px;color:var(--muted);font-size:14px;cursor:pointer;min-height:36px;">‹</button>';
+  html += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;letter-spacing:2px;">'+MONTHS[mo]+' '+yr+'</div>';
+  html += '<button data-m="'+nextStr+'" onclick="_athCalNav(this.dataset.m)" style="background:none;border:1px solid var(--border);border-radius:6px;padding:6px 12px;color:var(--muted);font-size:14px;cursor:pointer;min-height:36px;">›</button>';
   html += '</div>';
 
-  // Grille jours de la semaine
-  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px;">';
-  DAYS.forEach(function(d){ html += '<div style="text-align:center;font-family:DM Mono,monospace;font-size:10px;color:var(--muted);padding:4px 0;">'+d+'</div>'; });
-  html += '</div>';
+  // Événements du mois — style cartes compactes
+  var moEvents = _athCalEvents.filter(function(e){
+    return (e._dateKey||'').slice(0,7) === _athCalMonth;
+  }).sort(function(a,b){ return (a._dateKey||'').localeCompare(b._dateKey||''); });
 
-  // Grille jours
-  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:16px;">';
-  for (var i = 0; i < startDow; i++) html += '<div></div>';
-  for (var day = 1; day <= lastDay.getDate(); day++) {
-    var dateStr = yr+'-'+String(mo+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
-    var evs = evByDate[dateStr] || [];
-    var isToday = dateStr === today;
-    var hasEv = evs.length > 0;
-    var bg = hasEv ? 'var(--accent)' : isToday ? 'rgba(255,255,255,.1)' : 'transparent';
-    var col = hasEv ? '#000' : 'var(--text)';
-    var border = !hasEv && isToday ? '2px solid var(--accent)' : '1px solid transparent';
-    html += '<div data-date="'+dateStr+'" '+(hasEv?'onclick="_athCalOpenDay(this.dataset.date)" ':'');
-    html += ' style="aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:8px;background:'+bg+';border:'+border+';cursor:'+(hasEv?'pointer':'default')+';min-height:32px;">';
-    html += '<span style="font-family:'+(hasEv?'Bebas Neue':'DM Mono')+',monospace;font-size:'+(hasEv?'15':'12')+'px;color:'+col+';font-weight:'+(hasEv||isToday?'700':'400')+';">'+day+'</span>';
-    html += '</div>';
-    html += '</div>';
-  }
-  html += '</div>';
-
-  // Liste événements du mois
-  var moEvents = _athCalEvents.filter(function(e){ return e.date && e.date.slice(0,7) === _athCalMonth; })
-    .sort(function(a,b){ return a.date.localeCompare(b.date); });
-  if (moEvents.length) {
-    html += '<div style="font-family:DM Mono,monospace;font-size:11px;letter-spacing:2px;color:var(--accent);margin-bottom:8px;">CE MOIS</div>';
+  if (!moEvents.length) {
+    html += '<div style="text-align:center;padding:24px 0;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Aucune compétition ce mois.</div>';
+  } else {
     moEvents.forEach(function(ev) {
-      var daysUntil = Math.ceil((new Date(ev.date+'T12:00:00') - new Date()) / (1000*60*60*24));
-      var dLabel = daysUntil < 0 ? 'Passé' : daysUntil === 0 ? 'Auj.' : daysUntil === 1 ? 'Demain' : 'J-'+daysUntil;
+      var daysUntil = Math.ceil((new Date((ev._dateKey||ev.date)+'T12:00:00') - new Date()) / (1000*60*60*24));
+      var dLabel = daysUntil < 0 ? 'Passée' : daysUntil === 0 ? 'Auj.' : daysUntil === 1 ? 'Demain' : 'J-'+daysUntil;
       var dCol = daysUntil < 0 ? 'var(--muted)' : daysUntil <= 7 ? '#ef4444' : daysUntil <= 30 ? '#f59e0b' : 'var(--accent)';
-      var distStr = (ev.dists||[]).join('m · ')+(ev.dists&&ev.dists.length?'m':'');
-      html += '<div data-evdate="'+ev.date+'" onclick="_athCalOpenDay(this.dataset.evdate)" style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--surface);border:1px solid rgba(245,200,0,.2);border-radius:10px;margin-bottom:6px;cursor:pointer;">';
-      html += '<div style="text-align:center;min-width:44px;"><div style="font-family:Bebas Neue,sans-serif;font-size:22px;color:'+dCol+';">'+ev.date.slice(8)+'</div><div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">'+['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'][mo]+'</div></div>';
-      html += '<div style="flex:1;min-width:0;"><div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+ev.name+'</div>';
-      if (ev.lieu) html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">📍 '+ev.lieu+'</div>';
-      if (distStr) html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--accent);">'+distStr+'</div>';
+      var distStr = (ev.dists||[]).map(function(x){ return x+'m'; }).join(' · ');
+      var isPast = daysUntil < 0;
+      html += '<div data-evdate="'+(ev._dateKey||ev.date)+'" onclick="_athCalOpenDay(this.dataset.evdate)" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:1px solid '+(isPast?'var(--border)':'rgba(245,200,0,.2)')+';border-radius:8px;margin-bottom:6px;cursor:pointer;opacity:'+(isPast?'0.6':'1')+';min-height:52px;">';
+      // Date badge
+      html += '<div style="text-align:center;min-width:38px;flex-shrink:0;">';
+      html += '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:'+dCol+';line-height:1;">'+(ev._dateKey||ev.date).slice(8)+'</div>';
+      html += '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);">'+['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'][mo]+'</div>';
       html += '</div>';
-      html += '<div style="font-family:Bebas Neue,sans-serif;font-size:16px;color:'+dCol+';flex-shrink:0;">'+dLabel+'</div>';
+      // Séparateur
+      html += '<div style="width:1px;height:32px;background:var(--border);flex-shrink:0;"></div>';
+      // Infos
+      html += '<div style="flex:1;min-width:0;">';
+      html += '<div style="font-family:Bebas Neue,sans-serif;font-size:16px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+ev.name+'</div>';
+      var meta = [];
+      if (ev.lieu) meta.push('📍 '+ev.lieu);
+      if (ev.type) meta.push(ev.type==='indoor'?'🏟':'☀️');
+      if (distStr) meta.push(distStr);
+      if (meta.length) html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+meta.join(' · ')+'</div>';
+      html += '</div>';
+      // Countdown
+      html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:'+dCol+';flex-shrink:0;font-weight:700;">'+dLabel+'</div>';
+      html += '</div>';
+    });
+  }
+
+  // Mois suivants avec événements
+  var futureEvents = _athCalEvents.filter(function(e){
+    return (e._dateKey||'').slice(0,7) > _athCalMonth;
+  });
+  if (futureEvents.length) {
+    var futureMos = [...new Set(futureEvents.map(function(e){ return (e._dateKey||'').slice(0,7); }))].sort().slice(0,3);
+    html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-top:14px;margin-bottom:6px;">PROCHAINS MOIS</div>';
+    futureMos.forEach(function(mStr) {
+      var mEvs = _athCalEvents.filter(function(e){ return (e._dateKey||'').slice(0,7) === mStr; });
+      var moIdx = parseInt(mStr.slice(5,7))-1;
+      html += '<div data-m="'+mStr+'" onclick="_athCalNav(this.dataset.m)" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;margin-bottom:4px;cursor:pointer;">';
+      html += '<div style="font-family:Bebas Neue,sans-serif;font-size:14px;color:var(--text);">'+MONTHS[moIdx]+' '+mStr.slice(0,4)+'</div>';
+      html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--accent);">'+mEvs.length+' compét.</div>';
       html += '</div>';
     });
   }
 
   el.innerHTML = html;
 }
-
-function _athCalOpenDay(dateStr) { _athCalOpenEvent(dateStr); }
 
 function _athCalNav(month) {
   _athCalMonth = month;
