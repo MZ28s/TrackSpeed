@@ -11058,14 +11058,32 @@ function athRenderCompetList() {
     return r.saison === _athHistSaison && _competType(r) === _athHistType;
   });
 
-  // Distances disponibles pour le graphique
-  var dists = [...new Set(results.map(function(r){return r.dist;}).filter(Boolean))].sort(function(a,b){return a-b;});
+  // Distances fixes selon le type (outdoor/indoor)
+  var DISTS_OUTDOOR = [100, 200, 400];
+  var DISTS_INDOOR  = [50, 60, 200, 400];
+  var allDists = _athHistType === 'indoor' ? DISTS_INDOOR : DISTS_OUTDOOR;
+  // Garder seulement les distances qui ont au moins un résultat
+  var dists = allDists.filter(function(d) {
+    return results.some(function(r){ return r.dist === d; });
+  });
+  // Si aucun résultat pour les distances fixes, prendre celles disponibles
+  if (!dists.length) {
+    dists = [...new Set(results.map(function(r){return r.dist;}).filter(Boolean))].sort(function(a,b){return a-b;});
+  }
   if ((!_athHistDist || !dists.includes(_athHistDist)) && dists.length) _athHistDist = dists[0];
   var distEl = document.getElementById('athCompetDistBtns');
   if (distEl) {
-    distEl.innerHTML = dists.map(function(d) {
+    distEl.innerHTML = allDists.map(function(d) {
       var active = d === _athHistDist;
-      return '<button data-d="'+d+'" onclick="athSetHistDist('+d+')" style="padding:7px 14px;border-radius:20px;border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'+(active?'rgba(245,200,0,.12)':'var(--surface2)')+';color:'+(active?'var(--accent)':'var(--muted)')+';font-family:DM Mono,monospace;font-size:11px;cursor:pointer;font-weight:'+(active?'700':'400')+';">'+d+'m</button>';
+      var hasData = results.some(function(r){ return r.dist === d; });
+      return '<button data-d="'+d+'" onclick="athSetHistDist('+d+')" '
+        + (active ? '' : !hasData ? 'disabled ' : '')
+        + 'style="padding:7px 14px;border-radius:20px;border:1px solid '
+        + (active?'var(--accent)':hasData?'var(--border)':'rgba(255,255,255,.1)')
+        + ';background:'+(active?'rgba(245,200,0,.12)':'var(--surface2)')
+        + ';color:'+(active?'var(--accent)':hasData?'var(--muted)':'rgba(255,255,255,.2)')
+        + ';font-family:DM Mono,monospace;font-size:11px;cursor:'+(hasData?'pointer':'default')
+        + ';font-weight:'+(active?'700':'400')+';">'+d+'m</button>';
     }).join('');
   }
 
@@ -11167,16 +11185,21 @@ function athRenderCompetPage() {
   var dateEl = document.getElementById('athCompetDate');
   if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0,10);
 
-  // Réinitialiser les filtres à chaque ouverture pour afficher les données immédiatement
-  _athHistSaison = null; // sera recalculé depuis les données dans athRenderCompetList
-  _athHistType = 'outdoor'; // toujours commencer par outdoor
-  _athHistDist = null; // sera recalculé depuis les données disponibles
+  // Réinitialiser les filtres et détecter le bon type selon les données
+  _athHistSaison = null;
+  _athHistDist = null;
 
-  // Synchroniser les boutons outdoor/indoor
+  var all = (_athProfile && _athProfile.compet_results) || [];
+  // Détecter le type dominant (outdoor ou indoor) parmi les données récentes
+  var outdoorCount = all.filter(function(r){ return _competType(r)==='outdoor'; }).length;
+  var indoorCount  = all.filter(function(r){ return _competType(r)==='indoor'; }).length;
+  _athHistType = indoorCount > outdoorCount ? 'indoor' : 'outdoor';
+
+  // Synchroniser les boutons
   var btnO = document.getElementById('athSaisonBtnOutdoor');
   var btnI = document.getElementById('athSaisonBtnIndoor');
-  if (btnO) { btnO.style.borderColor='var(--accent)'; btnO.style.background='rgba(245,200,0,.12)'; btnO.style.color='var(--accent)'; btnO.style.fontWeight='700'; }
-  if (btnI) { btnI.style.borderColor='var(--border)'; btnI.style.background='var(--surface2)'; btnI.style.color='var(--muted)'; btnI.style.fontWeight='400'; }
+  if (btnO) { var activeO=_athHistType==='outdoor'; btnO.style.borderColor=activeO?'var(--accent)':'var(--border)'; btnO.style.background=activeO?'rgba(245,200,0,.12)':'var(--surface2)'; btnO.style.color=activeO?'var(--accent)':'var(--muted)'; btnO.style.fontWeight=activeO?'700':'400'; }
+  if (btnI) { var activeI=_athHistType==='indoor'; btnI.style.borderColor=activeI?'var(--accent)':'var(--border)'; btnI.style.background=activeI?'rgba(245,200,0,.12)':'var(--surface2)'; btnI.style.color=activeI?'var(--accent)':'var(--muted)'; btnI.style.fontWeight=activeI?'700':'400'; }
 
   // Recharger depuis Supabase pour avoir les données à jour
   if (_sb && _athProfile) {
