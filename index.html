@@ -10641,7 +10641,7 @@ function _updateMultiTable() {
     if (!currentRefs || !currentRefs.length) return null;
     try {
       var t = computeTarget(c.dist, currentRefs);
-      return (t / (c.pct / 100)).toFixed(2);
+      return (t / (c.pct / 100) - 0.2).toFixed(2);
     } catch(e) { return null; }
   });
 
@@ -10689,7 +10689,7 @@ function _updateMultiTable() {
     if (!refs.length) return null;
     try {
       var t = computeTarget(col.dist, refs);
-      return (t / (col.pct / 100)).toFixed(2);
+      return (t / (col.pct / 100) - 0.2).toFixed(2);
     } catch(e) { return null; }
   }
 
