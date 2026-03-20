@@ -1319,12 +1319,18 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
              background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);cursor:pointer;">
       🤖 IA
     </button>
+    <button id="planif-stab-compet" onclick="switchPlanifTab('compet')"
+      style="flex:1;padding:10px 4px;font-family:'DM Mono',monospace;font-size:12px;letter-spacing:1px;
+             background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);cursor:pointer;">
+      🏆 COMPÉTS
+    </button>
   </div>
 
   <!-- Contenu sous-onglets -->
   <div id="planif-stab-liste-content" style="padding:14px 16px 100px;overflow-y:auto;"></div>
   <div id="planif-stab-edit-content"  style="padding:14px 16px 100px;overflow-y:auto;display:none;"></div>
   <div id="planif-stab-ia-content" style="padding:0 0 100px;overflow-y:auto;display:none;"></div>
+  <div id="planif-stab-compet-content" style="padding:14px 16px 100px;overflow-y:auto;display:none;"></div>
   <div id="planif-stab-vue-content" style="padding:0 0 100px;overflow-y:auto;display:none;">
     <!-- Sélecteur de vues -->
     <div id="planifViewSelector" style="display:flex;gap:0;overflow-x:auto;border-bottom:1px solid var(--border);padding:0 16px;background:var(--surface);position:sticky;top:0;z-index:10;">
@@ -2949,6 +2955,197 @@ function importIAPlanif(data, nom, athId) {
 }
 
 
+
+// ══════════════════════════════════════════════════════════════
+// CALENDRIER COMPÉTITIONS
+// ══════════════════════════════════════════════════════════════
+
+// ── COACH : Planifier des compétitions ──
+function renderPlanifCompet() {
+  var el = document.getElementById('planif-stab-compet-content');
+  if (!el) return;
+
+  // Charger les compétitions planifiées depuis settings_data
+  sbPull('settings_data').then(function(data) {
+    var events = (data && data.competEvents) || [];
+    var now = new Date().toISOString().slice(0,10);
+
+    var html = '<div style="margin-bottom:16px;">';
+    html += '<div style="font-family:DM Mono,monospace;font-size:11px;letter-spacing:2px;color:var(--accent);margin-bottom:12px;">// PLANIFIER UNE COMPÉTITION</div>';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">';
+    html += '<div><label style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:5px;">DATE</label><input type="date" id="coachCompetDate" value="'+now+'" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text);font-family:DM Mono,monospace;font-size:13px;outline:none;"></div>';
+    html += '<div><label style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:5px;">NOM</label><input type="text" id="coachCompetName" maxlength="60" placeholder="Ex: Championnat suisse" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text);font-family:DM Mono,monospace;font-size:13px;outline:none;"></div>';
+    html += '<div><label style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:5px;">LIEU</label><input type="text" id="coachCompetLieu" maxlength="60" placeholder="Ex: Berne, Suisse" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text);font-family:DM Mono,monospace;font-size:13px;outline:none;"></div>';
+    html += '<div>';
+    html += '<label style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:5px;">TYPE</label>';
+    html += '<div style="display:flex;gap:6px;margin-top:2px;">';
+    html += '<button id="coachCompetTypeO" data-t="outdoor" onclick="coachSetCompetType(this.dataset.t)" style="flex:1;padding:10px;border-radius:6px;border:2px solid var(--accent);background:rgba(245,200,0,.12);color:var(--accent);font-family:DM Mono,monospace;font-size:11px;cursor:pointer;font-weight:700;">Outdoor</button>';
+    html += '<button id="coachCompetTypeI" data-t="indoor" onclick="coachSetCompetType(this.dataset.t)" style="flex:1;padding:10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-family:DM Mono,monospace;font-size:11px;cursor:pointer;">Indoor</button>';
+    html += '</div></div>';
+    html += '</div>';
+    html += '<div style="margin-bottom:6px;"><label style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:5px;">DISTANCES</label>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:6px;" id="coachCompetDistsWrap">';
+    [50,60,80,100,200,400].forEach(function(d) {
+      html += '<label style="display:flex;align-items:center;gap:4px;font-family:DM Mono,monospace;font-size:11px;color:var(--muted);cursor:pointer;"><input type="checkbox" id="coachCompetDist_'+d+'" value="'+d+'" style="accent-color:var(--accent);"> '+d+'m</label>';
+    });
+    html += '</div></div>';
+    html += '<button onclick="coachAddCompetEvent()" style="width:100%;background:var(--accent);border:none;border-radius:8px;padding:14px;font-family:Bebas Neue,sans-serif;font-size:18px;color:#000;cursor:pointer;letter-spacing:2px;min-height:52px;margin-top:4px;">+ AJOUTER AU CALENDRIER</button>';
+    html += '<div id="coachCompetEventMsg" style="font-family:DM Mono,monospace;font-size:11px;min-height:14px;margin-top:8px;text-align:center;"></div>';
+    html += '</div>';
+
+    // Liste des événements
+    html += '<div style="font-family:DM Mono,monospace;font-size:11px;letter-spacing:2px;color:var(--accent);margin-bottom:10px;padding-top:16px;border-top:1px solid var(--border);">// CALENDRIER</div>';
+    if (!events.length) {
+      html += '<div style="text-align:center;padding:20px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Aucune compétition planifiée.</div>';
+    } else {
+      var upcoming = events.filter(function(e){ return e.date >= now; }).sort(function(a,b){ return a.date.localeCompare(b.date); });
+      var past     = events.filter(function(e){ return e.date < now; }).sort(function(a,b){ return b.date.localeCompare(a.date); });
+      if (upcoming.length) {
+        html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;">À VENIR</div>';
+        upcoming.forEach(function(ev, i) {
+          html += _renderCompetEventCard(ev, events.indexOf(ev), false);
+        });
+      }
+      if (past.length) {
+        html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-top:16px;margin-bottom:8px;">PASSÉES</div>';
+        past.forEach(function(ev) {
+          html += _renderCompetEventCard(ev, events.indexOf(ev), true);
+        });
+      }
+    }
+    el.innerHTML = html;
+  });
+}
+
+var _coachCompetType = 'outdoor';
+
+function coachSetCompetType(type) {
+  _coachCompetType = type;
+  var btnO = document.getElementById('coachCompetTypeO');
+  var btnI = document.getElementById('coachCompetTypeI');
+  if (btnO) { btnO.style.borderColor=type==='outdoor'?'var(--accent)':'var(--border)'; btnO.style.background=type==='outdoor'?'rgba(245,200,0,.12)':'var(--surface2)'; btnO.style.color=type==='outdoor'?'var(--accent)':'var(--muted)'; btnO.style.fontWeight=type==='outdoor'?'700':'400'; }
+  if (btnI) { btnI.style.borderColor=type==='indoor'?'var(--accent)':'var(--border)'; btnI.style.background=type==='indoor'?'rgba(245,200,0,.12)':'var(--surface2)'; btnI.style.color=type==='indoor'?'var(--accent)':'var(--muted)'; btnI.style.fontWeight=type==='indoor'?'700':'400'; }
+}
+
+function coachAddCompetEvent() {
+  var date  = (document.getElementById('coachCompetDate')||{}).value;
+  var name  = ((document.getElementById('coachCompetName')||{}).value||'').trim();
+  var lieu  = ((document.getElementById('coachCompetLieu')||{}).value||'').trim();
+  var dists = [50,60,80,100,200,400].filter(function(d){ var el=document.getElementById('coachCompetDist_'+d); return el&&el.checked; });
+  var msgEl = document.getElementById('coachCompetEventMsg');
+  if (!date) { if(msgEl){msgEl.textContent='Entre une date.';msgEl.style.color='#ef4444';} return; }
+  if (!name) { if(msgEl){msgEl.textContent='Entre un nom.';msgEl.style.color='#ef4444';} return; }
+
+  sbPull('settings_data').then(function(data) {
+    var settings = data || {};
+    settings.competEvents = settings.competEvents || [];
+    settings.competEvents.push({ id:'ev_'+Date.now(), date:date, name:name, lieu:lieu, type:_coachCompetType, dists:dists });
+    settings.competEvents.sort(function(a,b){ return a.date.localeCompare(b.date); });
+    sbPush('settings_data', settings).then(function() {
+      if(msgEl){msgEl.textContent='✅ Compétition ajoutée !';msgEl.style.color='#22c55e';}
+      setTimeout(function(){renderPlanifCompet();},300);
+    });
+  });
+}
+
+function coachDeleteCompetEvent(idx) {
+  if (!confirm('Supprimer cette compétition du calendrier ?')) return;
+  sbPull('settings_data').then(function(data) {
+    var settings = data || {};
+    settings.competEvents = settings.competEvents || [];
+    settings.competEvents.splice(idx, 1);
+    sbPush('settings_data', settings).then(function(){ renderPlanifCompet(); });
+  });
+}
+
+function _renderCompetEventCard(ev, idx, isPast) {
+  var d = new Date((ev.date||'')+'T12:00:00');
+  var days=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+  var months=['jan.','fév.','mar.','avr.','mai','juin','juil.','aoû.','sep.','oct.','nov.','déc.'];
+  var dateStr = days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()]+' '+d.getFullYear();
+  var distStr = (ev.dists||[]).map(function(d){ return d+'m'; }).join(' · ');
+  var html = '<div style="background:var(--surface);border:1px solid '+(isPast?'var(--border)':'rgba(245,200,0,.2)')+';border-radius:10px;padding:14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start;opacity:'+(isPast?'0.6':'1')+';">';
+  html += '<div>';
+  html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);margin-bottom:3px;">'+dateStr+(ev.type?' · '+(ev.type==='indoor'?'🏟 Indoor':'☀️ Outdoor'):'')+'</div>';
+  html += '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:var(--text);">'+ev.name+'</div>';
+  if (ev.lieu) html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);margin-top:2px;">📍 '+ev.lieu+'</div>';
+  if (distStr) html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--accent);margin-top:4px;">'+distStr+'</div>';
+  html += '</div>';
+  html += '<button data-idx="'+idx+'" onclick="coachDeleteCompetEvent(parseInt(this.dataset.idx))" style="background:none;border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:6px 10px;color:#ef4444;font-size:14px;cursor:pointer;flex-shrink:0;">🗑</button>';
+  html += '</div>';
+  return html;
+}
+
+// ── ATHLÈTE : voir le calendrier des compétitions ──
+function athCompetTab(tab) {
+  var resEl = document.getElementById('athCompetTabResultsContent');
+  var calEl = document.getElementById('athCompetTabCalendarContent');
+  var btnR  = document.getElementById('athCompetTabResults');
+  var btnC  = document.getElementById('athCompetTabCalendar');
+  if (resEl) resEl.style.display = tab==='results' ? 'block' : 'none';
+  if (calEl) calEl.style.display = tab==='calendar' ? 'block' : 'none';
+  if (btnR) { btnR.style.background=tab==='results'?'var(--accent)':'var(--surface2)'; btnR.style.color=tab==='results'?'#000':'var(--muted)'; }
+  if (btnC) { btnC.style.background=tab==='calendar'?'var(--accent)':'var(--surface2)'; btnC.style.color=tab==='calendar'?'#000':'var(--muted)'; }
+  if (tab === 'calendar') athRenderCompetCalendar();
+}
+
+function athRenderCompetCalendar() {
+  var el = document.getElementById('athCompetCalendarList');
+  if (!el || !_sb || !_athProfile || !_athCoachUid) {
+    if (el) el.innerHTML = '<div style="text-align:center;padding:20px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Pas de coach lié — aucune compétition planifiée.</div>';
+    return;
+  }
+  el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:12px;color:var(--muted);text-align:center;padding:12px;">Chargement...</div>';
+
+  // Lire les compétitions depuis settings_data du coach
+  _sb.from('settings_data').select('data').eq('user_id', _athCoachUid).maybeSingle()
+    .then(function(r) {
+      if (!r.data || !r.data.data) { el.innerHTML = '<div style="text-align:center;padding:20px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Aucune compétition planifiée par ton coach.</div>'; return; }
+      var events = r.data.data.competEvents || [];
+      var now = new Date().toISOString().slice(0,10);
+      var upcoming = events.filter(function(e){ return e.date >= now; }).sort(function(a,b){ return a.date.localeCompare(b.date); });
+      var past     = events.filter(function(e){ return e.date < now; }).sort(function(a,b){ return b.date.localeCompare(a.date); }).slice(0,5);
+
+      if (!upcoming.length && !past.length) {
+        el.innerHTML = '<div style="text-align:center;padding:20px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Aucune compétition planifiée.</div>';
+        return;
+      }
+      var html = '';
+      if (upcoming.length) {
+        html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;">À VENIR</div>';
+        upcoming.forEach(function(ev) {
+          var d = new Date((ev.date||'')+'T12:00:00');
+          var days=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+          var months=['jan.','fév.','mar.','avr.','mai','juin','juil.','aoû.','sep.','oct.','nov.','déc.'];
+          var daysUntil = Math.ceil((d - new Date()) / (1000*60*60*24));
+          var distStr = (ev.dists||[]).map(function(d){return d+'m';}).join(' · ');
+          html += '<div style="background:var(--surface);border:1px solid rgba(245,200,0,.25);border-radius:10px;padding:14px;margin-bottom:8px;">';
+          html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;">';
+          html += '<div>';
+          html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);margin-bottom:3px;">'+days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()]+' '+d.getFullYear()+(ev.type?' · '+(ev.type==='indoor'?'🏟':'☀️'):'')+'</div>';
+          html += '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:var(--text);">'+ev.name+'</div>';
+          if (ev.lieu) html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);margin-top:2px;">📍 '+ev.lieu+'</div>';
+          if (distStr) html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--accent);margin-top:4px;">'+distStr+'</div>';
+          html += '</div>';
+          var dLabel = daysUntil===0 ? 'Auj.' : daysUntil===1 ? 'Demain' : 'J-'+daysUntil;
+          var dCol = daysUntil<=7 ? '#ef4444' : daysUntil<=30 ? '#f59e0b' : 'var(--accent2)';
+          html += '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;color:'+dCol+';text-align:right;flex-shrink:0;">'+dLabel+'</div>';
+          html += '</div></div>';
+        });
+      }
+      if (past.length) {
+        html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);letter-spacing:1px;margin:14px 0 8px;">PASSÉES</div>';
+        past.forEach(function(ev) {
+          html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:6px;opacity:0.6;">';
+          html += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--text);">'+ev.name+'</div>';
+          html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);">'+ev.date+(ev.lieu?' · '+ev.lieu:'')+'</div>';
+          html += '</div>';
+        });
+      }
+      el.innerHTML = html;
+    });
+}
+
 function renderPlanifListe() {
   _planifDeleteIds = [];
   var el = document.getElementById('planif-stab-liste-content');
@@ -3444,7 +3641,7 @@ var _currentPlanifView = 'calendrier';
 
 // ── Tab switcher planif ──
 function switchPlanifTab(tab) {
-  ['liste','edit','vue','ia'].forEach(function(t) {
+  ['liste','edit','vue','ia','compet'].forEach(function(t) {
     var btn = document.getElementById('planif-stab-' + t);
     var div = document.getElementById('planif-stab-' + t + '-content');
     if (!btn || !div) return;
@@ -3457,6 +3654,7 @@ function switchPlanifTab(tab) {
   if (tab === 'edit')  renderPlanifEdit();
   if (tab === 'vue')   { _currentPlanifView = _currentPlanifView || 'calendrier'; renderPlanifVue(); }
   if (tab === 'ia')    renderPlanifIA();
+  if (tab === 'compet') renderPlanifCompet();
 }
 
 // Helper: génère onclick pour une semaine dans les vues
@@ -14614,6 +14812,20 @@ setTimeout(() => {
       <div id="athCompetMsg" style="font-family:'DM Mono',monospace;font-size:11px;min-height:14px;margin-top:8px;text-align:center;"></div>
     </div>
 
+    <!-- Sous-onglets RÉSULTATS / CALENDRIER -->
+    <div style="display:flex;gap:0;margin-bottom:14px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+      <button id="athCompetTabResults" onclick="athCompetTab('results')"
+        style="flex:1;padding:12px;font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:1px;border:none;cursor:pointer;background:var(--accent);color:#000;">
+        🏆 MES RÉSULTATS
+      </button>
+      <button id="athCompetTabCalendar" onclick="athCompetTab('calendar')"
+        style="flex:1;padding:12px;font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:1px;border:none;cursor:pointer;background:var(--surface2);color:var(--muted);">
+        📅 CALENDRIER
+      </button>
+    </div>
+
+    <!-- ONGLET RÉSULTATS -->
+    <div id="athCompetTabResultsContent">
     <!-- Filtres saison + type -->
     <div class="ath-card" style="margin-bottom:12px;">
       <div style="display:flex;gap:6px;margin-bottom:10px;">
@@ -14639,6 +14851,17 @@ setTimeout(() => {
     <!-- Liste des résultats -->
     <div id="athCompetList">
       <div style="text-align:center;padding:30px 0;font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);">Chargement...</div>
+    </div>
+    </div><!-- /athCompetTabResultsContent -->
+
+    <!-- ONGLET CALENDRIER -->
+    <div id="athCompetTabCalendarContent" style="display:none;">
+      <div class="ath-card" style="margin-bottom:12px;">
+        <div class="ath-card-title">Prochaines compétitions</div>
+        <div id="athCompetCalendarList">
+          <div style="text-align:center;padding:20px;font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);">Chargement...</div>
+        </div>
+      </div>
     </div>
   </div>
 
