@@ -9822,7 +9822,7 @@ function saveLiveSession() {
         var dist = b.dist;
         var closest = pAllRefs.reduce(function(best,ref){return Math.abs(ref.dRef-dist)<Math.abs(best.dRef-dist)?ref:best;});
         var t100 = computeTarget(dist,[closest]);
-        tCible = Math.round(t100/(b.pct/100)*100)/100;
+        tCible = Math.round((t100/(b.pct/100) - 0.2)*100)/100;
       }
       return Object.assign({},b,{times:times,tCible:tCible});
     });
@@ -9893,7 +9893,7 @@ function sendSessionToAthletes() {
           return Math.abs(ref.dRef - dist) < Math.abs(best.dRef - dist) ? ref : best;
         });
         var t100 = computeTarget(dist, [closest]);
-        tCible = Math.round(t100 / (b.pct/100) * 100) / 100;
+        tCible = Math.round((t100 / (b.pct/100) - 0.2) * 100) / 100;
       }
       return Object.assign({}, b, { times: times, tCible: tCible });
     });
@@ -10389,7 +10389,7 @@ function openPresentation() {
     if (hasRefs) {
       try {
         var tTarget = computeTarget(b.dist, currentRefs);
-        var tAtPct  = tTarget / (b.pct / 100);
+        var tAtPct  = tTarget / (b.pct / 100) - 0.2;
         var spd     = b.dist / tAtPct;
         tCible  = fmt(tAtPct);
         spdStr  = (spd * 3.6).toFixed(1) + ' km/h';
@@ -13012,7 +13012,7 @@ function renderAthHistory() {
                     var dist = b.dist;
                     var closest = athRefs.reduce(function(best,ref){return Math.abs(ref.dRef-dist)<Math.abs(best.dRef-dist)?ref:best;});
                     var t100 = computeTarget(dist,[closest]);
-                    if (t100) tCible = Math.round(t100/(b.pct/100)*100)/100;
+                    if (t100) tCible = Math.round((t100/(b.pct/100) - 0.2)*100)/100;
                   }
                 }
                 html += '<div style="margin-top:14px;background:var(--surface2);border-radius:8px;padding:14px;">';
