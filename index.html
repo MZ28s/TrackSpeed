@@ -11031,8 +11031,8 @@ function athSetHistSaison(saison) {
 }
 
 function athSetHistDist(dist) {
-  _athHistDist = dist;
-  athRenderCompetChart();
+  _athHistDist = parseInt(dist);
+  athRenderCompetList();
 }
 
 function athRenderCompetList() {
