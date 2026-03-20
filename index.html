@@ -2116,67 +2116,13 @@ function defaultStandardKey(genre, categorie) {
 // ══  CONTRÔLES SAISON (sans backticks imbriqués)  ════════
 // ════════════════════════════════════════════════════════
 function renderSaisonControls() {
-  const ctrlEl = document.getElementById('saisonStandardControls');
-  if (!ctrlEl) return;
-
-  // Lire le profil athlète sélectionné pour pré-remplir genre + standard
-  const pid     = document.getElementById('saisonAthleteSelect') && document.getElementById('saisonAthleteSelect').value;
-  const profile = profiles.find(function(p) { return p.id === pid; });
-
-  // Utiliser genre/catégorie du profil si dispo, sinon valeur mémorisée
-  if (profile) {
-    if (!saison_genre_override && profile.genre) saison_genre = profile.genre;
-    if (!activeStandards.length && profile.genre && profile.categorie) {
-      activeStandards = [defaultStandardKey(profile.genre, profile.categorie)].filter(Boolean);
-    }
-  }
-
-  const g = saison_genre;
-
-  // ── Boutons genre ──
-  var html = '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;">';
-  html += '<span style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);letter-spacing:1px;min-width:40px;">GENRE</span>';
-
-  var btnStyle = 'font-family:DM Mono,monospace;font-size:10px;padding:4px 12px;border-radius:3px;cursor:pointer;border:1px solid ';
-  html += '<button onclick="setSaisonGenre(\'M\')" style="' + btnStyle
-       + (g==='M' ? 'var(--accent);background:var(--accent);color:#000;' : 'var(--border);background:var(--surface2);color:var(--muted);') + '">♂ Garçons</button>';
-  html += '<button onclick="setSaisonGenre(\'F\')" style="' + btnStyle
-       + (g==='F' ? 'var(--accent);background:var(--accent);color:#000;' : 'var(--border);background:var(--surface2);color:var(--muted);') + '">♀ Filles</button>';
-  html += '</div>';
-
-  // ── Sélecteur standard ──
-  html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">';
-  html += '<span style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);letter-spacing:1px;min-width:40px;">STANDARD</span>';
-  html += '<select id="standardSelect" onchange="onStandardChange()" style="font-family:DM Mono,monospace;font-size:10px;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:3px;color:var(--text);max-width:200px;">';
-  html += '<option value="">— Aucun —</option>';
-
-  // Récupérer les refs adaptées à la catégorie de l'athlète
-  const allRefs = getAllRefs(profile ? profile.categorie : '');
-  var stdKeys = Object.keys(allRefs);
-  for (var i = 0; i < stdKeys.length; i++) {
-    var k = stdKeys[i];
-    var cat = allRefs[k];
-    var sel = activeStandards.length > 0 && activeStandards[0] === k ? ' selected' : '';
-    html += '<option value="' + k + '"' + sel + '>' + cat.label + '</option>';
-  }
-  html += '</select>';
-
-  // Afficher les détails du standard actif (temps pour la distance courante)
-  if (activeStandards.length > 0) {
-    var catKey = activeStandards[0];
-    var stdCat = allRefs[catKey];
-    if (stdCat) {
-      var gData = stdCat[g] || stdCat['M'];
-      var t = gData ? gData[saisonDistActif] : null;
-      if (t) {
-        html += '<span style="font-family:DM Mono,monospace;font-size:12px;padding:4px 8px;background:' + stdCat.color + '22;border:1px solid ' + stdCat.color + ';border-radius:3px;color:' + stdCat.color + ';">'
-             + saisonDistActif + 'm : ' + t + 's</span>';
-      }
-    }
-  }
-  html += '</div>';
-
-  ctrlEl.innerHTML = html;
+  // Standards supprimés — uniquement Red Curve Swiss Athletics dans le graphique
+  var ctrlEl = document.getElementById('saisonStandardControls');
+  if (ctrlEl) ctrlEl.innerHTML = '';
+  // Mettre à jour saison_genre depuis le profil sélectionné
+  var pid = document.getElementById('saisonAthleteSelect') && document.getElementById('saisonAthleteSelect').value;
+  var profile = profiles.find(function(p){ return p.id === pid; });
+  if (profile && !saison_genre_override && profile.genre) saison_genre = profile.genre;
 }
 
 function onStandardChange() {
@@ -10693,9 +10639,10 @@ function drawSaisonChart(canvas, seriesAll) {
   // ── Bornes Y : tous les points + standards actifs ──
   var allTimes = [];
   seriesAll.forEach(function(s){ s.pts.forEach(function(p){ allTimes.push(p.time); }); });
-  var allRefsNow = getAllRefs('');
-  activeStandards.forEach(function(key) {
-    var cat = allRefsNow[key]; if (!cat) return;
+  // Inclure les Red Curve dans les bornes Y
+  ['RC_U18','RC_U20','RC_U23','RC_SR','RC_IND_U18','RC_IND_U20','RC_IND_U23'].forEach(function(key) {
+    var cat = (key.indexOf('IND')>=0 ? STANDARDS_INDOOR : ELITE_REFS)[key];
+    if (!cat) return;
     var gData = cat[saison_genre] || cat['M'];
     var t = gData ? gData[saisonDistActif] : null;
     if (t) allTimes.push(t);
@@ -10725,9 +10672,15 @@ function drawSaisonChart(canvas, seriesAll) {
     ctx.fillText(gt.toFixed(2), pad.left - 6, gy + 3);
   }
 
-  // ── Lignes de référence standards ──
-  activeStandards.forEach(function(key) {
-    var cat = allRefsNow[key]; if (!cat) return;
+  // ── Red Curve Swiss Athletics — basée sur catégorie de l'athlète ──
+  var rcKeys = ['RC_U18','RC_U20','RC_U23','RC_SR'];
+  var rcIndoorKeys = ['RC_IND_U18','RC_IND_U20','RC_IND_U23'];
+  // Choisir outdoor ou indoor selon les points affichés (heuristique : dist 60 = indoor)
+  var useIndoor = (saisonDistActif === 60);
+  var keysToShow = useIndoor ? rcIndoorKeys : rcKeys;
+  keysToShow.forEach(function(key) {
+    var cat = (key.indexOf('IND')>=0 ? STANDARDS_INDOOR : ELITE_REFS)[key];
+    if (!cat) return;
     var gData = cat[saison_genre] || cat['M'];
     var refTime = gData ? gData[saisonDistActif] : null;
     if (!refTime) return;
@@ -10735,11 +10688,12 @@ function drawSaisonChart(canvas, seriesAll) {
     ctx.save();
     ctx.strokeStyle = cat.color; ctx.lineWidth = 1.5;
     ctx.setLineDash([5, 4]);
+    ctx.globalAlpha = 0.7;
     ctx.beginPath(); ctx.moveTo(pad.left, ry); ctx.lineTo(W - pad.right, ry); ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
     ctx.fillStyle = cat.color;
     ctx.font = 'bold 8px DM Mono, monospace'; ctx.textAlign = 'right';
-    ctx.fillText((cat.short || key) + ' · ' + refTime + 's', W - pad.right - 2, ry - 3);
+    ctx.fillText((cat.short || key) + ' ' + refTime + 's', W - pad.right - 2, ry - 3);
     ctx.restore();
   });
 
