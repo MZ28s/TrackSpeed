@@ -10960,6 +10960,120 @@ function athForgotPassword() {
 }
 
 
+
+// ══════════════════════════════════════════════════════
+// COMPÉTITIONS ATHLÈTE
+// ══════════════════════════════════════════════════════
+
+function athRenderCompetPage() {
+  var dateEl = document.getElementById('athCompetDate');
+  if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0,10);
+  athRenderCompetList();
+}
+
+function athAddCompetResult() {
+  if (!_athProfile || !_sb) return;
+  var date = (document.getElementById('athCompetDate')||{}).value;
+  var dist = parseInt((document.getElementById('athCompetDist')||{}).value);
+  var time = parseFloat((document.getElementById('athCompetTime')||{}).value);
+  var name = ((document.getElementById('athCompetName')||{}).value||'').trim();
+  var msgEl = document.getElementById('athCompetMsg');
+  if (!date) { if(msgEl){msgEl.textContent='Entre une date.';msgEl.style.color='#ef4444';} return; }
+  if (isNaN(time)||time<=0) { if(msgEl){msgEl.textContent='Entre un temps valide.';msgEl.style.color='#ef4444';} return; }
+  var year = new Date(date).getFullYear();
+  var month = new Date(date).getMonth()+1;
+  var saison = month >= 9 ? year+'-'+(year+1) : (year-1)+'-'+year;
+  var competResults = (_athProfile.compet_results||[]).slice();
+  competResults.unshift({date:date,dist:dist,time:time,name:name,saison:saison});
+  _sb.from('athlete_profiles').update({compet_results:competResults}).eq('user_id',_athProfile.user_id)
+    .then(function(r) {
+      if (r.error) { if(msgEl){msgEl.textContent='Erreur: '+r.error.message;msgEl.style.color='#ef4444';} return; }
+      _athProfile.compet_results = competResults;
+      if(msgEl){msgEl.textContent='Resultat ajoute !';msgEl.style.color='#22c55e';}
+      document.getElementById('athCompetTime').value='';
+      document.getElementById('athCompetName').value='';
+      setTimeout(function(){if(msgEl)msgEl.textContent='';},2500);
+      athRenderCompetList();
+      _syncAthCompetsToCoach(competResults);
+    });
+}
+
+function _syncAthCompetsToCoach(competResults) {
+  if (!_athProfile||!_athProfile.coach_uid||!_sb) return;
+  var athFirstName = (_athProfile.name||'').trim().toLowerCase().split(/\s+/)[0];
+  _sb.from('profiles_data').select('data').eq('user_id',_athProfile.coach_uid).maybeSingle()
+    .then(function(res) {
+      if (!res.data||!res.data.data) return;
+      var coachProfiles = res.data.data;
+      var updated = false;
+      coachProfiles.forEach(function(p) {
+        var pFirst = (p.name||'').trim().toLowerCase().split(/\s+/)[0];
+        if (pFirst === athFirstName) {
+          p.competResults = competResults.map(function(r){return {date:r.date,dist:r.dist,time:r.time,saison:r.saison};});
+          updated = true;
+        }
+      });
+      if (updated) _sb.from('profiles_data').update({data:coachProfiles}).eq('user_id',_athProfile.coach_uid).then(function(){});
+    });
+}
+
+function athDeleteCompetResult(idx) {
+  if (!_athProfile||!_sb) return;
+  if (!confirm('Supprimer ce resultat ?')) return;
+  var competResults = (_athProfile.compet_results||[]).slice();
+  competResults.splice(idx,1);
+  _sb.from('athlete_profiles').update({compet_results:competResults}).eq('user_id',_athProfile.user_id)
+    .then(function(r) {
+      if (r.error) return;
+      _athProfile.compet_results = competResults;
+      athRenderCompetList();
+      _syncAthCompetsToCoach(competResults);
+    });
+}
+
+function athRenderCompetList() {
+  var el = document.getElementById('athCompetList');
+  if (!el||!_athProfile) return;
+  var results = _athProfile.compet_results||[];
+  if (!results.length) {
+    el.innerHTML = '<div style="text-align:center;padding:30px 0;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Aucun resultat enregistre.</div>';
+    return;
+  }
+  var bySaison = {};
+  results.forEach(function(r,i) {
+    var s = r.saison||'—';
+    if (!bySaison[s]) bySaison[s] = [];
+    bySaison[s].push({r:r,i:i});
+  });
+  var html = '';
+  Object.keys(bySaison).sort().reverse().forEach(function(saison) {
+    html += '<div style="font-family:DM Mono,monospace;font-size:11px;letter-spacing:2px;color:var(--accent);padding:10px 0 6px;border-bottom:1px solid var(--border);margin-bottom:8px;">SAISON '+saison+'</div>';
+    var bests = {};
+    bySaison[saison].forEach(function(item){ var d=item.r.dist; if(!bests[d]||item.r.time<bests[d])bests[d]=item.r.time; });
+    html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">';
+    Object.keys(bests).sort(function(a,b){return a-b;}).forEach(function(d){
+      html += '<div style="background:rgba(245,200,0,.1);border:1px solid rgba(245,200,0,.3);border-radius:8px;padding:8px 14px;text-align:center;">'
+        +'<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">PR '+d+'m</div>'
+        +'<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:var(--accent);">'+bests[d]+'s</div>'
+        +'</div>';
+    });
+    html += '</div>';
+    bySaison[saison].forEach(function(item){
+      var r=item.r; var i=item.i;
+      var isBest = bests[r.dist]===r.time;
+      html += '<div style="background:var(--surface);border:1px solid '+(isBest?'rgba(245,200,0,.4)':'var(--border)')+';border-radius:8px;padding:12px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">';
+      html += '<div>'
+        +'<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:'+(isBest?'var(--accent)':'var(--text)')+';">'+r.time+'s <span style="font-size:14px;color:var(--muted);">'+r.dist+'m</span></div>'
+        +'<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);margin-top:2px;">'+(r.name||'—')+' · '+r.date+'</div>'
+        +(isBest?'<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--accent);margin-top:2px;">PR saison</div>':'')
+        +'</div>';
+      html += '<button data-idx="'+i+'" onclick="athDeleteCompetResult(parseInt(this.dataset.idx))" style="background:none;border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:6px 10px;color:#ef4444;font-size:14px;cursor:pointer;">🗑</button>';
+      html += '</div>';
+    });
+  });
+  el.innerHTML = html;
+}
+
 // ── Navigation athlète ───────────────────────────────────
 
 
@@ -14235,6 +14349,49 @@ setTimeout(() => {
   </div>
 
   <!-- PROFIL -->
+  <!-- ── PAGE COMPÉTITIONS ATHLÈTE ── -->
+  <div id="ath-page-compet" class="ath-page">
+    <div style="font-family:'DM Mono',monospace;font-size:11px;letter-spacing:2px;color:var(--accent);margin-bottom:4px;">// Compétitions</div>
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;margin-bottom:16px;line-height:1;">MES RÉSULTATS</div>
+
+    <!-- Formulaire ajout résultat -->
+    <div class="ath-card" style="margin-bottom:12px;">
+      <div class="ath-card-title">Ajouter un résultat</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div>
+          <label style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:5px;">DATE</label>
+          <input type="date" id="athCompetDate" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;">
+        </div>
+        <div>
+          <label style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:5px;">DISTANCE</label>
+          <select id="athCompetDist" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;">
+            <option value="50">50m</option>
+            <option value="60">60m</option>
+            <option value="80">80m</option>
+            <option value="100" selected>100m</option>
+            <option value="200">200m</option>
+            <option value="400">400m</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:5px;">TEMPS (s)</label>
+          <input type="number" id="athCompetTime" step="0.01" min="5" max="120" placeholder="Ex: 11.45" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:16px;outline:none;">
+        </div>
+        <div>
+          <label style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:5px;">COMPÉTITION</label>
+          <input type="text" id="athCompetName" maxlength="60" placeholder="Ex: Championnat cantonal" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;">
+        </div>
+      </div>
+      <button onclick="athAddCompetResult()" style="width:100%;background:var(--accent);border:none;border-radius:8px;padding:14px;font-family:'Bebas Neue',sans-serif;font-size:18px;color:#000;cursor:pointer;letter-spacing:2px;min-height:52px;">+ AJOUTER</button>
+      <div id="athCompetMsg" style="font-family:'DM Mono',monospace;font-size:11px;min-height:14px;margin-top:8px;text-align:center;"></div>
+    </div>
+
+    <!-- Liste des résultats -->
+    <div id="athCompetList">
+      <div style="text-align:center;padding:30px 0;font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);">Chargement...</div>
+    </div>
+  </div>
+
   <div id="ath-page-profile" class="ath-page">
     <div style="font-family:'DM Mono',monospace;font-size:11px;letter-spacing:2px;color:var(--accent);margin-bottom:4px;">// PROFIL</div>
     <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;margin-bottom:20px;line-height:1;">MON PROFIL</div>
@@ -14345,6 +14502,7 @@ setTimeout(() => {
     <button class="ath-nav-btn" id="ath-nav-feedback" onclick="athGoPage('feedback')" style="position:relative;"><span class="icon">📋</span>Feedback<span id="athFeedbackBadge" style="display:none;position:absolute;top:6px;right:calc(50% - 22px);width:8px;height:8px;background:#ef4444;border-radius:50%;"></span></button>
     <button class="ath-nav-btn" id="ath-nav-force" onclick="athGoPage('force')"><span class="icon">🏋</span>Force</button>
     <button class="ath-nav-btn" id="ath-nav-history" onclick="athGoPage('history')"><span class="icon">📊</span>Séances</button>
+    <button class="ath-nav-btn" id="ath-nav-compet" onclick="athGoPage('compet')"><span class="icon">🏆</span>Compét</button>
     <button class="ath-nav-btn" id="ath-nav-profile" onclick="athGoPage('profile')"><span class="icon">👤</span>Profil</button>
   </nav>
 
