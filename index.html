@@ -11949,20 +11949,20 @@ function athRenderCompetChart() {
   var genre = _athProfile.genre || 'M';
   var best  = Math.min.apply(null, pts.map(function(x){return x.time;}));
 
-  // Créer canvas + l'appeler via drawSaisonChart (même rendu que coach)
-  el.innerHTML = '<canvas id="athCompetCanvas" style="display:block;width:100%;"></canvas>';
-  var canvas = document.getElementById('athCompetCanvas');
+  // Créer canvas + l'appeler via drawSaisonChart — avec requestAnimationFrame pour garantir le DOM
+  el.innerHTML = '<canvas id="athCompetCanvas" style="display:block;width:100%;min-height:240px;"></canvas>';
 
-  // Adapter les données au format attendu par drawSaisonChart
   var series = [{ pts: pts.map(function(p){ return {date:p.date,time:p.time,compet:p.name||''}; }), name: _athProfile.name||'', color: '#F5C800' }];
-
-  // Utiliser saison_genre et saisonDistActif temporairement
   var _savedGenre = saison_genre;
   var _savedDist  = saisonDistActif;
   saison_genre    = genre;
   saisonDistActif = _athHistDist;
 
-  drawSaisonChart(canvas, series);
+  // Attendre que le canvas soit dans le DOM
+  requestAnimationFrame(function() {
+    var canvas = document.getElementById('athCompetCanvas');
+    if (canvas) drawSaisonChart(canvas, series);
+  });
 
   saison_genre    = _savedGenre;
   saisonDistActif = _savedDist;
