@@ -1286,6 +1286,15 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
     <div id="saisonResultsList"></div>
   </div>
 
+  <!-- Bilan de saison -->
+  <div class="card" style="margin-top:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <div class="card-title" style="margin:0;">// Bilan de saison</div>
+      <select id="bilanSaisonSelect" onchange="renderBilanSaison()" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;"></select>
+    </div>
+    <div id="bilanSaisonContent"></div>
+  </div>
+
 
 </div><!-- end page-saison -->
 
@@ -3154,13 +3163,19 @@ function _renderCompetEventCard(ev, idx, isPast) {
 function athCompetTab(tab) {
   var resEl = document.getElementById('athCompetTabResultsContent');
   var calEl = document.getElementById('athCompetTabCalendarContent');
+  var bilEl = document.getElementById('athCompetTabBilanContent');
   var btnR  = document.getElementById('athCompetTabResults');
   var btnC  = document.getElementById('athCompetTabCalendar');
+  var btnB  = document.getElementById('athCompetTabBilan');
   if (resEl) resEl.style.display = tab==='results' ? 'block' : 'none';
   if (calEl) calEl.style.display = tab==='calendar' ? 'block' : 'none';
-  if (btnR) { btnR.style.background=tab==='results'?'var(--accent)':'var(--surface2)'; btnR.style.color=tab==='results'?'#000':'var(--muted)'; }
-  if (btnC) { btnC.style.background=tab==='calendar'?'var(--accent)':'var(--surface2)'; btnC.style.color=tab==='calendar'?'#000':'var(--muted)'; }
+  if (bilEl) bilEl.style.display = tab==='bilan' ? 'block' : 'none';
+  [btnR,btnC,btnB].forEach(function(b,i){
+    var t = ['results','calendar','bilan'][i];
+    if(b){b.style.background=tab===t?'var(--accent)':'var(--surface2)';b.style.color=tab===t?'#000':'var(--muted)';}
+  });
   if (tab === 'calendar') athRenderCompetCalendar();
+  if (tab === 'bilan') athRenderBilan();
 }
 
 
@@ -10957,6 +10972,184 @@ function populateSaisonAthletes() {
 
 let saisonDistActif = 100;
 
+
+// ══════════════════════════════════════════════════════════════
+// BILAN DE SAISON
+// ══════════════════════════════════════════════════════════════
+
+// ── COACH ──
+function initBilanSaison() {
+  var sel = document.getElementById('bilanSaisonSelect');
+  if (!sel) return;
+  // Collecter toutes les saisons disponibles
+  var saisons = new Set();
+  profiles.forEach(function(p) {
+    (p.competResults||[]).forEach(function(r){ if(r.saison) saisons.add(r.saison); });
+  });
+  var saisonList = Array.from(saisons).sort().reverse();
+  var currentSaison = document.getElementById('saisonSelect') ? document.getElementById('saisonSelect').value : '';
+  sel.innerHTML = saisonList.map(function(s){
+    return '<option value="'+s+'"'+(s===currentSaison?' selected':'')+'>'+s+'</option>';
+  }).join('');
+  if (!saisonList.length) sel.innerHTML = '<option>—</option>';
+  renderBilanSaison();
+}
+
+function renderBilanSaison() {
+  var el = document.getElementById('bilanSaisonContent');
+  if (!el) return;
+  var sel = document.getElementById('bilanSaisonSelect');
+  var saison = sel ? sel.value : '';
+  if (!saison || saison === '—') { el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:12px;color:var(--muted);text-align:center;padding:16px;">Aucune saison disponible.</div>'; return; }
+
+  var html = '';
+  var activeProfiles = profiles.filter(function(p){
+    return (p.competResults||[]).some(function(r){ return r.saison===saison; });
+  });
+
+  if (!activeProfiles.length) {
+    el.innerHTML = '<div style="font-family:DM Mono,monospace;font-size:12px;color:var(--muted);text-align:center;padding:16px;">Aucun résultat pour cette saison.</div>';
+    return;
+  }
+
+  // Résumé par athlète
+  activeProfiles.forEach(function(p) {
+    var results = (p.competResults||[]).filter(function(r){ return r.saison===saison; });
+    var dists = [...new Set(results.map(function(r){return r.dist;}))].sort(function(a,b){return a-b;});
+
+    html += '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px;">';
+    html += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--text);margin-bottom:10px;">'+p.name+'</div>';
+
+    // Stats par distance
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-bottom:10px;">';
+    dists.forEach(function(dist) {
+      var times = results.filter(function(r){return r.dist===dist;}).map(function(r){return r.time;}).sort(function(a,b){return a-b;});
+      var best = times[0];
+      var worst = times[times.length-1];
+      var gain = worst && best ? (worst - best).toFixed(2) : null;
+      html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center;">';
+      html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">'+dist+'m</div>';
+      html += '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:var(--accent);">'+best+'s</div>';
+      html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">'+times.length+' course'+(times.length>1?'s':'')+'</div>';
+      if (gain && parseFloat(gain) > 0) html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:#22c55e;">-'+gain+'s</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+
+    // Red Curve comparaison pour distance principale
+    if (dists.length) {
+      var mainDist = dists[0];
+      var bestTime = Math.min.apply(null, results.filter(function(r){return r.dist===mainDist;}).map(function(r){return r.time;}));
+      var genre = p.genre || 'M';
+      var rcKeys = ['RC_U18','RC_U20','RC_U23','RC_SR'];
+      var rcRow = '';
+      rcKeys.forEach(function(key) {
+        var cat = ELITE_REFS[key]; if(!cat) return;
+        var ref = (cat[genre]||cat['M'])[mainDist];
+        if (!ref) return;
+        var diff = (bestTime - ref).toFixed(2);
+        var col = parseFloat(diff) <= 0 ? '#22c55e' : '#f59e0b';
+        rcRow += '<span style="font-family:DM Mono,monospace;font-size:10px;background:'+cat.color+'18;border:1px solid '+cat.color+'44;border-radius:6px;padding:3px 8px;color:'+col+';margin-right:4px;">'+(cat.short||key)+' '+(parseFloat(diff)>0?'+':'')+diff+'s</span>';
+      });
+      if (rcRow) html += '<div style="margin-bottom:6px;font-family:DM Mono,monospace;font-size:10px;color:var(--muted);margin-top:4px;">Red Curve '+mainDist+'m: '+rcRow+'</div>';
+    }
+
+    // Nb compéts + période
+    var dates = results.map(function(r){return r.date;}).filter(Boolean).sort();
+    if (dates.length) {
+      html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">'+results.length+' résultat'+(results.length>1?'s':'')+' · '+dates[0]+' → '+dates[dates.length-1]+'</div>';
+    }
+    html += '</div>';
+  });
+
+  el.innerHTML = html;
+}
+
+// ── ATHLÈTE ──
+function athRenderBilan() {
+  var el = document.getElementById('athBilanContent');
+  if (!el || !_athProfile) return;
+  var results = _athProfile.compet_results || [];
+  if (!results.length) {
+    el.innerHTML = '<div style="text-align:center;padding:24px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Aucun résultat enregistré.</div>';
+    return;
+  }
+
+  // Saisons disponibles
+  var saisons = [...new Set(results.map(function(r){return r.saison;}).filter(Boolean))].sort().reverse();
+  var html = '';
+
+  saisons.forEach(function(saison) {
+    var saisonResults = results.filter(function(r){return r.saison===saison;});
+    var dists = [...new Set(saisonResults.map(function(r){return r.dist;}))].sort(function(a,b){return a-b;});
+    var outdoor = saisonResults.filter(function(r){return _competType(r)==='outdoor';});
+    var indoor  = saisonResults.filter(function(r){return _competType(r)==='indoor';});
+
+    html += '<div style="margin-bottom:20px;">';
+    html += '<div style="font-family:Bebas Neue,sans-serif;font-size:20px;letter-spacing:2px;color:var(--accent);padding-bottom:8px;border-bottom:2px solid var(--accent);margin-bottom:12px;">SAISON '+saison+'</div>';
+
+    // Stats globales
+    html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;">';
+    html += _athBilanStat(saisonResults.length+'', 'COURSES', 'var(--text)');
+    html += _athBilanStat(outdoor.length+'', 'OUTDOOR', 'var(--accent)');
+    html += _athBilanStat(indoor.length+'', 'INDOOR', '#38bdf8');
+    html += '</div>';
+
+    // PR par distance
+    html += '<div style="font-family:DM Mono,monospace;font-size:11px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">RECORDS DE LA SAISON</div>';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;margin-bottom:14px;">';
+    dists.forEach(function(dist) {
+      var times = saisonResults.filter(function(r){return r.dist===dist;}).map(function(r){return r.time;});
+      var best = Math.min.apply(null, times);
+      html += '<div style="background:var(--surface2);border:1px solid rgba(245,200,0,.3);border-radius:8px;padding:10px;text-align:center;">';
+      html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">'+dist+'m</div>';
+      html += '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;color:var(--accent);">'+best+'s</div>';
+      html += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);">'+times.length+' course'+(times.length>1?'s':'')+'</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+
+    // Red Curve distance principale
+    var mainDist = dists[0];
+    if (mainDist) {
+      var bestTime = Math.min.apply(null, saisonResults.filter(function(r){return r.dist===mainDist;}).map(function(r){return r.time;}));
+      var genre = _athProfile.genre || 'M';
+      var rcKeys = mainDist===60 ? ['RC_IND_U18','RC_IND_U20','RC_IND_U23'] : ['RC_U18','RC_U20','RC_U23','RC_SR'];
+      var hasRc = false;
+      var rcHtml = '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+      rcKeys.forEach(function(key) {
+        var cat = (key.indexOf('IND')>=0 ? STANDARDS_INDOOR : ELITE_REFS)[key];
+        if (!cat) return;
+        var ref = (cat[genre]||cat['M'])[mainDist]; if (!ref) return;
+        var diff = (bestTime - ref).toFixed(2);
+        var col = parseFloat(diff) <= 0 ? '#22c55e' : '#f59e0b';
+        hasRc = true;
+        rcHtml += '<div style="background:'+cat.color+'18;border:1px solid '+cat.color+'44;border-radius:8px;padding:6px 10px;text-align:center;">';
+        rcHtml += '<div style="font-family:DM Mono,monospace;font-size:10px;color:'+cat.color+';">'+cat.short+'</div>';
+        rcHtml += '<div style="font-family:Bebas Neue,sans-serif;font-size:16px;color:var(--text);">'+ref+'s</div>';
+        rcHtml += '<div style="font-family:DM Mono,monospace;font-size:10px;color:'+col+';font-weight:700;">'+(parseFloat(diff)>0?'+':'')+diff+'s</div>';
+        rcHtml += '</div>';
+      });
+      rcHtml += '</div>';
+      if (hasRc) {
+        html += '<div style="font-family:DM Mono,monospace;font-size:11px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">RED CURVE '+mainDist+'m</div>';
+        html += rcHtml;
+      }
+    }
+
+    html += '</div>';
+  });
+
+  el.innerHTML = html;
+}
+
+function _athBilanStat(val, label, col) {
+  return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center;">'
+    +'<div style="font-family:Bebas Neue,sans-serif;font-size:26px;color:'+col+';line-height:1;">'+val+'</div>'
+    +'<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);letter-spacing:1px;">'+label+'</div>'
+    +'</div>';
+}
+
 var _saisonType = 'outdoor';
 
 // Helper : normalise le type d'un résultat compét (null/undefined = outdoor)
@@ -10985,6 +11178,7 @@ function initSaison() {
   populateSaisonSelects();
   populateSaisonAthletes();
   renderSaison();
+  initBilanSaison();
 }
 
 function renderSaison() {
@@ -15121,15 +15315,19 @@ setTimeout(() => {
       <div id="athCompetMsg" style="font-family:'DM Mono',monospace;font-size:11px;min-height:14px;margin-top:8px;text-align:center;"></div>
     </div>
 
-    <!-- Sous-onglets RÉSULTATS / CALENDRIER -->
+    <!-- Sous-onglets RÉSULTATS / CALENDRIER / BILAN -->
     <div style="display:flex;gap:0;margin-bottom:14px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
       <button id="athCompetTabResults" onclick="athCompetTab('results')"
-        style="flex:1;padding:12px;font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:1px;border:none;cursor:pointer;background:var(--accent);color:#000;">
-        🏆 MES RÉSULTATS
+        style="flex:1;padding:12px;font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1px;border:none;cursor:pointer;background:var(--accent);color:#000;">
+        🏆 RÉSULTATS
       </button>
       <button id="athCompetTabCalendar" onclick="athCompetTab('calendar')"
-        style="flex:1;padding:12px;font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:1px;border:none;cursor:pointer;background:var(--surface2);color:var(--muted);">
+        style="flex:1;padding:12px;font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1px;border:none;cursor:pointer;background:var(--surface2);color:var(--muted);">
         📅 CALENDRIER
+      </button>
+      <button id="athCompetTabBilan" onclick="athCompetTab('bilan')"
+        style="flex:1;padding:12px;font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1px;border:none;cursor:pointer;background:var(--surface2);color:var(--muted);">
+        📊 BILAN
       </button>
     </div>
 
@@ -15162,6 +15360,13 @@ setTimeout(() => {
       <div style="text-align:center;padding:30px 0;font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);">Chargement...</div>
     </div>
     </div><!-- /athCompetTabResultsContent -->
+
+    <!-- ONGLET BILAN -->
+    <div id="athCompetTabBilanContent" style="display:none;">
+      <div id="athBilanContent">
+        <div style="text-align:center;padding:20px;font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);">Chargement...</div>
+      </div>
+    </div>
 
     <!-- ONGLET CALENDRIER -->
     <div id="athCompetTabCalendarContent" style="display:none;">
