@@ -1462,7 +1462,7 @@ function sbPush(table, data) {
 function sbPull(table) {
   if (!_sbUser || !_sb) return Promise.resolve(null);
   return _sb.from(table).select('data').eq('user_id', _sbUser.id)
-    .order('updated_at', { ascending: false }).limit(1).maybeSingle()
+    .maybeSingle()
     .then(function(r) {
       if (r.error) { console.error('sbPull [' + table + ']:', r.error.message, r.error); return null; }
       return (r.data && r.data.data !== undefined) ? r.data.data : null;
