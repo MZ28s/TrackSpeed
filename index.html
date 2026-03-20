@@ -11033,6 +11033,125 @@ function athForgotPassword() {
 // COMPÉTITIONS ATHLÈTE
 // ══════════════════════════════════════════════════════
 
+
+// ══════════════════════════════════════════════════════
+// HISTORIQUE COMPÉTITIONS ATHLÈTE — graphique + filtres
+// ══════════════════════════════════════════════════════
+
+var _athHistType = 'outdoor';
+var _athHistSaison = null;
+var _athHistDist = 100;
+
+function athSetHistType(type) {
+  _athHistType = type;
+  var btnO = document.getElementById('athSaisonBtnOutdoor');
+  var btnI = document.getElementById('athSaisonBtnIndoor');
+  if (btnO) { btnO.style.borderColor=type==='outdoor'?'var(--accent)':'var(--border)'; btnO.style.background=type==='outdoor'?'rgba(245,200,0,.12)':'var(--surface2)'; btnO.style.color=type==='outdoor'?'var(--accent)':'var(--muted)'; btnO.style.fontWeight=type==='outdoor'?'700':'400'; }
+  if (btnI) { btnI.style.borderColor=type==='indoor'?'var(--accent)':'var(--border)'; btnI.style.background=type==='indoor'?'rgba(245,200,0,.12)':'var(--surface2)'; btnI.style.color=type==='indoor'?'var(--accent)':'var(--muted)'; btnI.style.fontWeight=type==='indoor'?'700':'400'; }
+  athRenderCompetList();
+}
+
+function athSetHistSaison(saison) {
+  _athHistSaison = saison;
+  athRenderCompetList();
+}
+
+function athSetHistDist(dist) {
+  _athHistDist = dist;
+  athRenderCompetChart();
+}
+
+function athRenderCompetList() {
+  var el = document.getElementById('athCompetList');
+  if (!el || !_athProfile) return;
+  var all = (_athProfile.compet_results||[]);
+
+  // Construire les saisons disponibles
+  var saisons = [...new Set(all.map(function(r){return r.saison;}).filter(Boolean))].sort().reverse();
+  if (!_athHistSaison && saisons.length) _athHistSaison = saisons[0];
+
+  // Rendu sélecteur saisons
+  var selEl = document.getElementById('athSaisonSelector');
+  if (selEl) {
+    selEl.innerHTML = saisons.map(function(s) {
+      var active = s === _athHistSaison;
+      return '<button data-s="'+s+'" onclick="athSetHistSaison(this.dataset.s)" style="padding:7px 14px;border-radius:20px;border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'+(active?'rgba(245,200,0,.12)':'var(--surface2)')+';color:'+(active?'var(--accent)':'var(--muted)')+';font-family:DM Mono,monospace;font-size:11px;cursor:pointer;font-weight:'+(active?'700':'400')+';">'+s+'</button>';
+    }).join('');
+  }
+
+  // Filtrer
+  var results = all.filter(function(r) {
+    return r.saison === _athHistSaison && (!r.type || r.type === _athHistType);
+  });
+
+  // Distances disponibles pour le graphique
+  var dists = [...new Set(results.map(function(r){return r.dist;}).filter(Boolean))].sort(function(a,b){return a-b;});
+  if (!dists.includes(_athHistDist) && dists.length) _athHistDist = dists[0];
+  var distEl = document.getElementById('athCompetDistBtns');
+  if (distEl) {
+    distEl.innerHTML = dists.map(function(d) {
+      var active = d === _athHistDist;
+      return '<button data-d="'+d+'" onclick="athSetHistDist('+d+')" style="padding:7px 14px;border-radius:20px;border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'+(active?'rgba(245,200,0,.12)':'var(--surface2)')+';color:'+(active?'var(--accent)':'var(--muted)')+';font-family:DM Mono,monospace;font-size:11px;cursor:pointer;font-weight:'+(active?'700':'400')+';">'+d+'m</button>';
+    }).join('');
+  }
+
+  // Graphique
+  athRenderCompetChart();
+
+  // Liste
+  if (!results.length) {
+    el.innerHTML = '<div style="text-align:center;padding:24px 0;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Aucun résultat '+_athHistType+' pour cette saison.</div>';
+    return;
+  }
+
+  var html = '';
+  var byDist = {};
+  results.forEach(function(r,i) { if(!byDist[r.dist])byDist[r.dist]=[]; byDist[r.dist].push({r:r,i:i}); });
+  Object.keys(byDist).sort(function(a,b){return a-b;}).forEach(function(dist) {
+    var bests = byDist[dist].slice().sort(function(a,b){return a.r.time-b.r.time;});
+    html += '<div style="font-family:DM Mono,monospace;font-size:11px;letter-spacing:2px;color:var(--accent);padding:10px 0 6px;border-bottom:1px solid var(--border);margin-bottom:8px;">'+dist+'m — PR : <span style="font-family:Bebas Neue,sans-serif;font-size:16px;">'+bests[0].r.time+'s</span></div>';
+    byDist[dist].slice().sort(function(a,b){return new Date(b.r.date)-new Date(a.r.date);}).forEach(function(item) {
+      var r=item.r; var idx=item.i;
+      var isBest = r.time === bests[0].r.time;
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:'+(isBest?'rgba(245,200,0,.08)':'var(--surface)')+';border:1px solid '+(isBest?'rgba(245,200,0,.3)':'var(--border)')+';border-radius:8px;margin-bottom:6px;">';
+      html += '<div>';
+      html += '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;color:'+(isBest?'var(--accent)':'var(--text)')+';">'+r.time+'s'+(isBest?' ⭐':'')+'</div>';
+      html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);margin-top:2px;">'+(r.name||'—')+' · '+r.date+'</div>';
+      html += '</div>';
+      html += '<button data-idx="'+idx+'" onclick="athDeleteCompetResult(parseInt(this.dataset.idx))" style="background:none;border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:6px 10px;color:#ef4444;font-size:14px;cursor:pointer;">🗑</button>';
+      html += '</div>';
+    });
+  });
+  el.innerHTML = html;
+}
+
+function athRenderCompetChart() {
+  var el = document.getElementById('athCompetChart');
+  if (!el || !_athProfile) return;
+  var all = (_athProfile.compet_results||[]);
+  var pts = all.filter(function(r) {
+    return r.dist === _athHistDist && r.saison === _athHistSaison && (!r.type||r.type===_athHistType);
+  }).sort(function(a,b){return new Date(a.date)-new Date(b.date);});
+
+  if (!pts.length) {
+    el.innerHTML = '<div style="text-align:center;padding:16px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Aucun résultat '+_athHistDist+'m.</div>';
+    return;
+  }
+  if (pts.length < 2) {
+    el.innerHTML = '<div style="text-align:center;padding:16px;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Un seul résultat — ajoutes-en plus pour voir la progression.</div>';
+    return;
+  }
+  var points = pts.map(function(r) {
+    var dl = (r.date||'').slice(5).replace('-','/');
+    return { date: dl, weight: r.time };
+  });
+  el.innerHTML = _buildBarChart(points, 's', null,
+    pts.map(function(r){
+      var best = Math.min.apply(null, pts.map(function(x){return x.time;}));
+      return r.time === best ? '#22c55e' : 'rgba(245,200,0,.7)';
+    }), null);
+}
+
 var _athCompetType = 'outdoor';
 
 function athSetCompetType(type) {
@@ -14488,6 +14607,28 @@ setTimeout(() => {
       </div>
       <button onclick="athAddCompetResult()" style="width:100%;background:var(--accent);border:none;border-radius:8px;padding:14px;font-family:'Bebas Neue',sans-serif;font-size:18px;color:#000;cursor:pointer;letter-spacing:2px;min-height:52px;">+ AJOUTER</button>
       <div id="athCompetMsg" style="font-family:'DM Mono',monospace;font-size:11px;min-height:14px;margin-top:8px;text-align:center;"></div>
+    </div>
+
+    <!-- Filtres saison + type -->
+    <div class="ath-card" style="margin-bottom:12px;">
+      <div style="display:flex;gap:6px;margin-bottom:10px;">
+        <button id="athSaisonBtnOutdoor" onclick="athSetHistType('outdoor')"
+          style="flex:1;padding:10px;border-radius:8px;border:2px solid var(--accent);background:rgba(245,200,0,.12);color:var(--accent);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;font-weight:700;">
+          ☀️ OUTDOOR
+        </button>
+        <button id="athSaisonBtnIndoor" onclick="athSetHistType('indoor')"
+          style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;">
+          🏟 INDOOR
+        </button>
+      </div>
+      <div id="athSaisonSelector" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+    </div>
+
+    <!-- Graphique progression -->
+    <div class="ath-card" style="margin-bottom:12px;">
+      <div class="ath-card-title">Progression</div>
+      <div id="athCompetDistBtns" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;"></div>
+      <div id="athCompetChart"></div>
     </div>
 
     <!-- Liste des résultats -->
