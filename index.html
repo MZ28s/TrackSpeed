@@ -11497,11 +11497,13 @@ function drawSaisonChart(canvas, seriesAll) {
   }
 
   // ── Red Curve Swiss Athletics — basée sur catégorie de l'athlète ──
+  // Si override athlète (catégorie spécifique), utiliser ces clés
   var rcKeys = ['RC_U18','RC_U20','RC_U23','RC_SR'];
   var rcIndoorKeys = ['RC_IND_U18','RC_IND_U20','RC_IND_U23'];
-  // Choisir outdoor ou indoor selon les points affichés (heuristique : dist 60 = indoor)
   var useIndoor = (saisonDistActif === 60);
-  var keysToShow = useIndoor ? rcIndoorKeys : rcKeys;
+  var keysToShow = (_athRCKeysOverride && _athShowRC !== false) ? _athRCKeysOverride
+    : (useIndoor ? rcIndoorKeys : rcKeys);
+  if (!_athShowRC && _athRCKeysOverride !== null) keysToShow = [];
   keysToShow.forEach(function(key) {
     var cat = (key.indexOf('IND')>=0 ? STANDARDS_INDOOR : ELITE_REFS)[key];
     if (!cat) return;
@@ -11827,6 +11829,7 @@ function athForgotPassword() {
 // ══════════════════════════════════════════════════════
 
 var _athHistType = 'outdoor';
+var _athShowRC = true; // toggle Red Curve
 var _athHistSaison = null;
 var _athHistDist = 100;
 
@@ -11959,35 +11962,79 @@ function athRenderCompetChart() {
   saisonDistActif = _athHistDist;
 
   // Attendre que le canvas soit dans le DOM
+  // Injecter les RC filtrées par catégorie dans le canvas
+  _athRCKeysOverride = _athShowRC ? _getAthRCKeys() : [];
   requestAnimationFrame(function() {
     var canvas = document.getElementById('athCompetCanvas');
     if (canvas) drawSaisonChart(canvas, series);
+    _athRCKeysOverride = null; // Remettre à null pour ne pas affecter le coach
   });
 
   saison_genre    = _savedGenre;
   saisonDistActif = _savedDist;
 
-  // Red Curve badges sous le graphique
-  var rcKeys = _athHistType==='indoor' ? ['RC_IND_U18','RC_IND_U20','RC_IND_U23'] : ['RC_U18','RC_U20','RC_U23','RC_SR'];
-  var rcBadges = '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">';
-  rcBadges += '<div style="width:100%;font-family:DM Mono,monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:4px;">RED CURVE SWISS ATHLETICS — '+_athHistDist+'m</div>';
-  rcKeys.forEach(function(key) {
-    var cat = (key.indexOf('IND')>=0 ? STANDARDS_INDOOR : ELITE_REFS)[key];
-    if (!cat) return;
-    var ref = (cat[genre]||cat['M'])[_athHistDist];
-    if (!ref) return;
-    var diff = (best - ref).toFixed(2);
-    var diffCol = parseFloat(diff) <= 0 ? '#22c55e' : '#f59e0b';
-    rcBadges += '<div style="background:'+cat.color+'15;border:1px solid '+cat.color+'44;border-radius:8px;padding:7px 12px;text-align:center;">';
-    rcBadges += '<div style="font-family:DM Mono,monospace;font-size:10px;color:'+cat.color+';">'+cat.short+'</div>';
-    rcBadges += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--text);">'+ref+'s</div>';
-    rcBadges += '<div style="font-family:DM Mono,monospace;font-size:10px;color:'+diffCol+';font-weight:700;">'+(parseFloat(diff)>0?'+':'')+diff+'s</div>';
-    rcBadges += '</div>';
-  });
-  rcBadges += '</div>';
-  el.innerHTML += rcBadges;
+  // Déterminer les RC à afficher selon catégorie + genre
+  var rcKeysForDisplay = _getAthRCKeys();
+
+  // Toggle button + badges RC
+  var rcSection = '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">';
+  rcSection += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+  rcSection += '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);letter-spacing:1px;">RED CURVE SWISS ATHLETICS — '+_athHistDist+'m</div>';
+  rcSection += '<button onclick="_athToggleRC()" id="athRCToggleBtn" style="background:none;border:1px solid '+(_athShowRC?'var(--accent)':'var(--border)')+';border-radius:6px;padding:3px 10px;font-family:DM Mono,monospace;font-size:10px;color:'+(_athShowRC?'var(--accent)':'var(--muted)')+';cursor:pointer;">RC '+ (_athShowRC?'ON':'OFF')+'</button>';
+  rcSection += '</div>';
+
+  if (_athShowRC) {
+    rcSection += '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+    rcKeysForDisplay.forEach(function(key) {
+      var cat = (key.indexOf('IND')>=0 ? STANDARDS_INDOOR : ELITE_REFS)[key];
+      if (!cat) return;
+      var ref = (cat[genre]||cat['M'])[_athHistDist];
+      if (!ref) return;
+      var diff = (best - ref).toFixed(2);
+      var diffCol = parseFloat(diff) <= 0 ? '#22c55e' : '#f59e0b';
+      rcSection += '<div style="background:'+cat.color+'15;border:1px solid '+cat.color+'44;border-radius:8px;padding:7px 12px;text-align:center;">';
+      rcSection += '<div style="font-family:DM Mono,monospace;font-size:10px;color:'+cat.color+';">'+cat.short+'</div>';
+      rcSection += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--text);">'+ref+'s</div>';
+      rcSection += '<div style="font-family:DM Mono,monospace;font-size:10px;color:'+diffCol+';font-weight:700;">'+(parseFloat(diff)>0?'+':'')+diff+'s</div>';
+      rcSection += '</div>';
+    });
+    rcSection += '</div>';
+  }
+  rcSection += '</div>';
+  el.innerHTML += rcSection;
 }
 
+
+function _getAthRCKeys() {
+  if (!_athProfile) return [];
+  var genre = _athProfile.genre || 'M';
+  var cat   = (_athProfile.categorie||'').toUpperCase();
+  var indoor = _athHistType === 'indoor';
+
+  // Mapping catégorie → index RC
+  var catMap = { 'U18':0, 'U20':1, 'U23':2, 'SENIOR':3, 'SR':3 };
+  var idx = catMap[cat];
+  if (idx === undefined) idx = 1; // défaut U20
+
+  var allKeys = indoor
+    ? ['RC_IND_U18','RC_IND_U20','RC_IND_U23']
+    : ['RC_U18','RC_U20','RC_U23','RC_SR'];
+
+  // Afficher la catégorie actuelle + la suivante (objectif)
+  var keys = [];
+  if (idx < allKeys.length) keys.push(allKeys[idx]);
+  if (idx+1 < allKeys.length) keys.push(allKeys[idx+1]);
+  if (!keys.length) keys = [allKeys[allKeys.length-1]];
+  return keys;
+}
+
+function _athToggleRC() {
+  _athShowRC = !_athShowRC;
+  athRenderCompetChart();
+}
+
+// Aussi injecter les bonnes RC dans drawSaisonChart côté athlète
+var _athRCKeysOverride = null;
 var _athCompetType = 'outdoor';
 
 function athSetCompetType(type) {
