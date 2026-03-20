@@ -1178,6 +1178,19 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
     <span class="label-tag">// Suivi de saison</span>
     <h1>SAISON</h1>
   </div>
+
+  <!-- Filtre Indoor/Outdoor -->
+  <div style="display:flex;gap:6px;margin-bottom:10px;">
+    <button id="saisonBtnOutdoor" onclick="setSaisonType('outdoor')"
+      style="flex:1;padding:10px;border-radius:8px;border:2px solid var(--accent);background:rgba(245,200,0,.12);color:var(--accent);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;font-weight:700;">
+      ☀️ OUTDOOR
+    </button>
+    <button id="saisonBtnIndoor" onclick="setSaisonType('indoor')"
+      style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;">
+      🏟 INDOOR
+    </button>
+  </div>
+
   <!-- Contrôle genre + standard par athlète (rendu dynamiquement dans renderSaison) -->
   <div id="saisonStandardControls" style="margin-bottom:10px;"></div>
 
@@ -1534,7 +1547,7 @@ function sbPullAll() {
             if (ap.compet_results && ap.compet_results.length) {
               // Convertir format athlète → format coach (competResults)
               p.competResults = ap.compet_results.map(function(r){
-                return { date:r.date, dist:r.dist, time:r.time, saison:r.saison };
+                return { date:r.date, dist:r.dist, time:r.time, saison:r.saison, name:r.name||'', type:r.type||'outdoor' };
               });
               prMerged = true;
             }
@@ -10537,17 +10550,44 @@ function renderSaison() {
 
   const pts = results.filter(r => r.dist === saisonDistActif);
 
-  // Liste complète tous résultats
+  // Vue groupe TOUS les athlètes + liste perso
   if (listEl) {
-    if (!results.length) {
-      listEl.innerHTML = `<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:12px 0;text-align:center;">Aucun résultat pour cette saison.</div>`;
+    var groupHtml = '<div style="font-family:DM Mono,monospace;font-size:11px;letter-spacing:2px;color:var(--accent);margin-bottom:10px;">// VUE GROUPE — '+_saisonType.toUpperCase()+' '+saison+'</div>';
+    var allResults = [];
+    profiles.forEach(function(prof) {
+      (prof.competResults||[]).filter(function(r){ return r.saison===saison&&(!r.type||r.type===_saisonType); }).forEach(function(r){
+        allResults.push(Object.assign({},r,{athleteName:prof.name}));
+      });
+    });
+    if (allResults.length) {
+      var byDist = {};
+      allResults.forEach(function(r){ if(!byDist[r.dist])byDist[r.dist]=[]; byDist[r.dist].push(r); });
+      Object.keys(byDist).sort(function(a,b){return a-b;}).forEach(function(dist){
+        groupHtml += '<div style="margin-bottom:12px;">';
+        groupHtml += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:6px;">'+dist+'m</div>';
+        byDist[dist].slice().sort(function(a,b){return a.time-b.time;}).forEach(function(r,ri){
+          var isBest = ri===0;
+          groupHtml += '<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;background:'+(isBest?'rgba(245,200,0,.08)':'var(--surface)')+';border:1px solid '+(isBest?'rgba(245,200,0,.3)':'var(--border)')+';border-radius:6px;margin-bottom:4px;">';
+          groupHtml += '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:'+(isBest?'var(--accent)':'var(--text)')+';">'+r.time+'s</div>';
+          groupHtml += '<div style="flex:1;font-family:DM Mono,monospace;font-size:11px;color:var(--muted);">'+r.athleteName+(r.date?' · '+r.date:'')+(r.name?' · '+r.name:'')+'</div>';
+          if (isBest) groupHtml += '<span style="font-size:14px;">🥇</span>';
+          groupHtml += '</div>';
+        });
+        groupHtml += '</div>';
+      });
     } else {
-      listEl.innerHTML = results.slice().reverse().map((r, i) => {
+      groupHtml += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);text-align:center;padding:10px 0;">Aucun résultat '+_saisonType+' pour cette saison.</div>';
+    }
+    groupHtml += '<div style="height:1px;background:var(--border);margin:14px 0;"></div>';
+    if (!results.length) {
+      listEl.innerHTML = groupHtml + '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);text-align:center;padding:8px 0;">Aucun résultat perso pour cette saison.</div>';
+    } else {
+      listEl.innerHTML = groupHtml + results.slice().reverse().map((r, i) => {
         const idx = results.length - 1 - i;
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
           <div>
             <span style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--accent);">${r.time}s</span>
-            <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);margin-left:8px;">${r.dist}m · ${r.date}${r.compet ? ' · ' + r.compet : ''}</span>
+            <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);margin-left:8px;">${r.dist}m · ${r.date}${r.name ? ' · ' + r.name : ''}${r.type ? ' · ' + (r.type==='indoor'?'🏟':'☀️') : ''}</span>
           </div>
           <button onclick="deleteCompetResult('${pid}','${saison}',${idx})"
             style="background:none;border:1px solid var(--border);border-radius:3px;color:var(--muted);font-size:11px;width:26px;height:26px;cursor:pointer;">✕</button>
@@ -10972,6 +11012,26 @@ function athForgotPassword() {
 // COMPÉTITIONS ATHLÈTE
 // ══════════════════════════════════════════════════════
 
+var _athCompetType = 'outdoor';
+
+function athSetCompetType(type) {
+  _athCompetType = type;
+  var btnO = document.getElementById('athCompetOutdoor');
+  var btnI = document.getElementById('athCompetIndoor');
+  if (btnO) {
+    btnO.style.borderColor   = type==='outdoor' ? 'var(--accent)' : 'var(--border)';
+    btnO.style.background    = type==='outdoor' ? 'rgba(245,200,0,.15)' : 'var(--surface2)';
+    btnO.style.color         = type==='outdoor' ? 'var(--accent)' : 'var(--muted)';
+    btnO.style.fontWeight    = type==='outdoor' ? '700' : '400';
+  }
+  if (btnI) {
+    btnI.style.borderColor   = type==='indoor' ? 'var(--accent)' : 'var(--border)';
+    btnI.style.background    = type==='indoor' ? 'rgba(245,200,0,.15)' : 'var(--surface2)';
+    btnI.style.color         = type==='indoor' ? 'var(--accent)' : 'var(--muted)';
+    btnI.style.fontWeight    = type==='indoor' ? '700' : '400';
+  }
+}
+
 function athRenderCompetPage() {
   var dateEl = document.getElementById('athCompetDate');
   if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0,10);
@@ -10989,9 +11049,12 @@ function athAddCompetResult() {
   if (isNaN(time)||time<=0) { if(msgEl){msgEl.textContent='Entre un temps valide.';msgEl.style.color='#ef4444';} return; }
   var year = new Date(date).getFullYear();
   var month = new Date(date).getMonth()+1;
-  var saison = month >= 9 ? year+'-'+(year+1) : (year-1)+'-'+year;
+  // Format unifié avec le coach : "2025/26"
+  var saisonYear = month >= 10 ? year : year - 1;
+  var saison = saisonYear + '/' + String(saisonYear + 1).slice(-2);
   var competResults = (_athProfile.compet_results||[]).slice();
-  competResults.unshift({date:date,dist:dist,time:time,name:name,saison:saison});
+  var type = _athCompetType || 'outdoor';
+  competResults.unshift({date:date,dist:dist,time:time,name:name,saison:saison,type:type});
   _sb.from('athlete_profiles').update({compet_results:competResults}).eq('user_id',_athProfile.user_id)
     .then(function(r) {
       if (r.error) { if(msgEl){msgEl.textContent='Erreur: '+r.error.message;msgEl.style.color='#ef4444';} return; }
@@ -11071,7 +11134,7 @@ function athRenderCompetList() {
       html += '<div style="background:var(--surface);border:1px solid '+(isBest?'rgba(245,200,0,.4)':'var(--border)')+';border-radius:8px;padding:12px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">';
       html += '<div>'
         +'<div style="font-family:Bebas Neue,sans-serif;font-size:20px;color:'+(isBest?'var(--accent)':'var(--text)')+';">'+r.time+'s <span style="font-size:14px;color:var(--muted);">'+r.dist+'m</span></div>'
-        +'<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);margin-top:2px;">'+(r.name||'—')+' · '+r.date+'</div>'
+        +'<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);margin-top:2px;">'+(r.name||'—')+' · '+r.date+(r.type?' · '+(r.type==='indoor'?'🏟 Indoor':'☀️ Outdoor'):'')+'</div>'
         +(isBest?'<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--accent);margin-top:2px;">PR saison</div>':'')
         +'</div>';
       html += '<button data-idx="'+i+'" onclick="athDeleteCompetResult(parseInt(this.dataset.idx))" style="background:none;border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:6px 10px;color:#ef4444;font-size:14px;cursor:pointer;">🗑</button>';
@@ -14387,6 +14450,19 @@ setTimeout(() => {
         <div>
           <label style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:5px;">COMPÉTITION</label>
           <input type="text" id="athCompetName" maxlength="60" placeholder="Ex: Championnat cantonal" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;outline:none;">
+        </div>
+        <div>
+          <label style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:5px;">TYPE</label>
+          <div style="display:flex;gap:6px;">
+            <button id="athCompetOutdoor" onclick="athSetCompetType('outdoor')" type="button"
+              style="flex:1;padding:10px;border-radius:6px;border:2px solid var(--accent);background:rgba(245,200,0,.15);color:var(--accent);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;font-weight:700;">
+              ☀️ Outdoor
+            </button>
+            <button id="athCompetIndoor" onclick="athSetCompetType('indoor')" type="button"
+              style="flex:1;padding:10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;">
+              🏟 Indoor
+            </button>
+          </div>
         </div>
       </div>
       <button onclick="athAddCompetResult()" style="width:100%;background:var(--accent);border:none;border-radius:8px;padding:14px;font-family:'Bebas Neue',sans-serif;font-size:18px;color:#000;cursor:pointer;letter-spacing:2px;min-height:52px;">+ AJOUTER</button>
