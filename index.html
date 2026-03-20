@@ -11051,6 +11051,7 @@ function athFeedbackTab(tab) {
     if (histBtn) { histBtn.style.borderColor = 'var(--accent)'; histBtn.style.color = 'var(--accent)'; }
     if (title) title.textContent = 'HISTORIQUE';
     athLoadFeedbackHistory();
+    _renderProgRPE();
   } else {
     if (formEl) formEl.style.display = 'block';
     if (histEl) histEl.style.display = 'none';
@@ -12436,7 +12437,7 @@ function _renderProg1RM(exo) {
 }
 
 function _renderProgRPE() {
-  var el = document.getElementById('progChartRPE');
+  var el = document.getElementById('feedbackChartRPE');
   if (!el || !_sb || !_athProfile) return;
 
   _sb.from('athlete_feedback').select('week_label,week_id,rpe')
@@ -14050,6 +14051,10 @@ setTimeout(() => {
       <button onclick="athFeedbackTab('form')" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--text);cursor:pointer;letter-spacing:1px;margin-bottom:16px;min-height:52px;">
         ← RETOUR AU FEEDBACK
       </button>
+      <div class="ath-card" style="margin-bottom:12px;">
+        <div class="ath-card-title">RPE — semaine par semaine</div>
+        <div id="feedbackChartRPE"><div style="text-align:center;padding:16px 0;font-family:DM Mono,monospace;font-size:12px;color:var(--muted);">Chargement...</div></div>
+      </div>
       <div id="athFeedbackHistoryList">
         <div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);text-align:center;padding:20px 0;">Chargement...</div>
       </div>
