@@ -11118,7 +11118,7 @@ function athRenderCompetChart() {
     return { date: dl, weight: r.time };
   });
   var colors = pts.map(function(r){ return r.time === best ? '#22c55e' : 'rgba(245,200,0,.7)'; });
-  el.innerHTML = _buildBarChart(points, 's', null, colors, null);
+  el.innerHTML = _buildBarChart(points, 's', null, colors, null, true);
 
   // Ajouter les Red Curve en référence sous le graphique
   var genre = _athProfile.genre || 'M';
@@ -12748,7 +12748,7 @@ function _renderProgRPE() {
     });
 }
 
-function _buildBarChart(points, unit, color, colors, maxVal) {
+function _buildBarChart(points, unit, color, colors, maxVal, invert) {
   var vals  = points.map(function(p){return p.weight;});
   var maxW  = Math.max.apply(null, vals);
   var minW  = Math.min.apply(null, vals);
@@ -12765,8 +12765,11 @@ function _buildBarChart(points, unit, color, colors, maxVal) {
 
   points.forEach(function(p, i) {
     var col    = colors ? colors[i] : (color || 'var(--accent)');
-    var barH   = Math.max(12, Math.round((p.weight - base) / range * chartH));
-    var isMax  = p.weight === maxW;
+    // invert=true pour les temps sprint (plus bas = meilleur = barre plus haute)
+    var barH   = invert
+      ? Math.max(12, Math.round((maxW + base - p.weight) / range * chartH))
+      : Math.max(12, Math.round((p.weight - base) / range * chartH));
+    var isMax  = invert ? p.weight === minW : p.weight === maxW;
     var isLast = i === points.length - 1;
     var valStr = p.weight + (unit === 'kg' ? 'kg' : unit);
 
@@ -12792,9 +12795,13 @@ function _buildBarChart(points, unit, color, colors, maxVal) {
   // Stats synthèse
   var firstW = vals[0]; var lastW = vals[vals.length-1];
   var progPct = firstW > 0 ? ((lastW - firstW) / firstW * 100).toFixed(1) : '0.0';
-  var progCol = parseFloat(progPct) >= 0 ? '#22c55e' : '#ef4444';
+  // Pour les temps, la progression est inverse (négatif = amélioration)
+  var progCol = invert
+    ? (parseFloat(progPct) <= 0 ? '#22c55e' : '#ef4444')
+    : (parseFloat(progPct) >= 0 ? '#22c55e' : '#ef4444');
   html += '<div style="display:flex;justify-content:space-between;padding:12px 4px 0;border-top:1px solid var(--border);margin-top:10px;">';
-  html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);">Max <span style="color:var(--accent);font-size:14px;font-family:Bebas Neue,sans-serif;margin-left:4px;">'+maxW+(unit==='kg'?'kg':unit)+'</span></div>';
+  var bestW = invert ? minW : maxW;
+  html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);">'+(invert?'Meilleur':'Max')+' <span style="color:var(--accent);font-size:14px;font-family:Bebas Neue,sans-serif;margin-left:4px;">'+bestW+(unit==='kg'?'kg':unit)+'</span></div>';
   if (points.length > 1) {
     html += '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--muted);">Progression <span style="color:'+progCol+';font-size:14px;font-family:Bebas Neue,sans-serif;margin-left:4px;">'+(parseFloat(progPct)>0?'+':'')+progPct+'%</span></div>';
   }
