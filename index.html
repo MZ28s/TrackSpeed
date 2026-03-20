@@ -3150,6 +3150,40 @@ function athCompetTab(tab) {
   if (tab === 'calendar') athRenderCompetCalendar();
 }
 
+
+function athAddToIOSCalendar(data) {
+  // Générer un fichier .ics et déclencher le téléchargement
+  var date = data.date || data.evid;
+  var name = data.name || 'Compétition';
+  var lieu = data.lieu || '';
+  // Format ICS : YYYYMMDD
+  var icsDate = (date||'').replace(/-/g,'');
+  var uid = 'trackspeed-' + Date.now() + '@mz28s.github.io';
+  var ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//TrackSpeed//Compétition//FR',
+    'BEGIN:VEVENT',
+    'UID:'+uid,
+    'DTSTART;VALUE=DATE:'+icsDate,
+    'DTEND;VALUE=DATE:'+icsDate,
+    'SUMMARY:'+name,
+    'LOCATION:'+lieu,
+    'DESCRIPTION:Compétition planifiée par ton coach via TrackSpeed',
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ].join('\r\n');
+
+  var blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = name.replace(/[^a-zA-Z0-9]/g,'_') + '.ics';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+}
+
 function athRenderCompetCalendar() {
   var el = document.getElementById('athCompetCalendarList');
   if (!el || !_sb || !_athProfile || !_athCoachUid) {
@@ -3190,7 +3224,10 @@ function athRenderCompetCalendar() {
           html += '</div>';
           var dLabel = daysUntil===0 ? 'Auj.' : daysUntil===1 ? 'Demain' : 'J-'+daysUntil;
           var dCol = daysUntil<=7 ? '#ef4444' : daysUntil<=30 ? '#f59e0b' : 'var(--accent2)';
-          html += '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;color:'+dCol+';text-align:right;flex-shrink:0;">'+dLabel+'</div>';
+          html += '<div style="text-align:right;flex-shrink:0;">';
+          html += '<div style="font-family:Bebas Neue,sans-serif;font-size:22px;color:'+dCol+';">'+dLabel+'</div>';
+          html += '<button data-evid="'+ev.id+'" data-name="'+ev.name+'" data-date="'+ev.date+'" data-lieu="'+(ev.lieu||'')+'" onclick="athAddToIOSCalendar(this.dataset)" style="margin-top:6px;background:none;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-family:DM Mono,monospace;font-size:10px;color:var(--muted);cursor:pointer;white-space:nowrap;">📅 Calendrier</button>';
+          html += '</div>';
           html += '</div></div>';
         });
       }
