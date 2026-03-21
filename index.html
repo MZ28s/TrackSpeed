@@ -105,7 +105,7 @@ tr.is-ref .dist-cell { color:var(--accent2); }
 .profile-item { background:var(--surface2); border:1px solid var(--border); border-radius:2px; padding:16px 20px; display:flex; align-items:center; justify-content:space-between; transition:border-color .18s; }
 .profile-item.selected { border-color:var(--accent2); }
 .profile-name { font-family:'Bebas Neue',sans-serif; font-size:24px; letter-spacing:1px; }
-.profile-sub { font-family:'DM Mono',monospace; font-size:12px; color:var(--muted); margin-top:2px; }
+.profile-sub { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px; }
 .profile-actions { display:flex; gap:6px; }
 .icon-btn { width:40px; height:40px; background:transparent; border:1px solid var(--border); border-radius:6px; color:var(--muted); cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center; transition:all .15s; -webkit-tap-highlight-color:transparent; }
 .icon-btn:hover { border-color:var(--accent); color:var(--accent); }
@@ -346,6 +346,59 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
   .results-header { padding: 14px 16px; }
   th { padding: 10px 10px; font-size: 9px; }
   td { padding: 12px 10px; font-size: 13px; }
+
+  /* ── PROFILS : fix layout sur mobile ── */
+  .profile-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+  .profile-name { font-size: 20px; }
+  .profile-sub {
+    white-space: normal;
+    word-break: break-word;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .profile-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .profile-actions .icon-btn { flex: 1; min-width: 36px; }
+
+  /* ── PLANIF : titre planif compact ── */
+  .planif-card-nom {
+    font-size: 16px !important;
+    line-height: 1.2;
+    word-break: break-word;
+  }
+  .planif-card-btns {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .planif-card-btns button {
+    font-size: 10px !important;
+    padding: 4px 7px !important;
+    white-space: nowrap;
+  }
+
+  /* ── BILAN SAISON : RC badges wrap ── */
+  #bilanSaisonContent .rc-badge-row {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  /* ── SÉANCE : légende compact ── */
+  #multiLegend {
+    font-size: 11px;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  /* ── HEADER coach : compact ── */
+  .page-header h1 { font-size: clamp(32px, 10vw, 52px); }
 }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -3520,10 +3573,11 @@ function renderPlanifListe() {
       // Header nom + actions
       html += '<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:12px;">'
         + '<div style="flex:1;">'
-          + '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:var(--text);line-height:1;">' + p.nom + '</div>'
+          + '<div class="planif-card-nom" style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:var(--text);line-height:1;">' + p.nom + '</div>'
           + '<div style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--muted);margin-top:3px;">'
           + 'Saison ' + p.saison + ' · ' + athNames + '</div>'
         + '</div>'
+        + '<div class="planif-card-btns" style="display:flex;gap:4px;flex-shrink:0;">'
         + '<button onclick="activePlanifId=\'' + p.id + '\';switchPlanifTab(\'edit\');" '
           + 'style="background:none;border:1px solid var(--border);border-radius:3px;padding:5px 10px;'
           + 'font-family:\'DM Mono\',monospace;font-size:11px;color:var(--muted);cursor:pointer;white-space:nowrap;">✏️ Éditer</button>'
@@ -3535,7 +3589,7 @@ function renderPlanifListe() {
           + 'font-family:\'DM Mono\',monospace;font-size:11px;color:var(--accent);cursor:pointer;white-space:nowrap;">👥 Attribuer</button>'
         + '<button onclick="_delPlanif(' + _planifDeleteIds.push(p.id) + '-1)" '
           + 'style="background:none;border:none;padding:5px 6px;color:var(--accent2);cursor:pointer;font-size:14px;">✕</button>'
-        + '</div>';
+        + '</div></div>';
 
       // Stats 3 colonnes
       html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">';
@@ -11162,9 +11216,9 @@ function renderBilanSaison() {
         if (!ref) return;
         var diff = (bestTime - ref).toFixed(2);
         var col = parseFloat(diff) <= 0 ? '#22c55e' : '#f59e0b';
-        rcRow += '<span style="font-family:DM Mono,monospace;font-size:10px;background:'+cat.color+'18;border:1px solid '+cat.color+'44;border-radius:6px;padding:3px 8px;color:'+col+';margin-right:4px;">'+(cat.short||key)+' '+(parseFloat(diff)>0?'+':'')+diff+'s</span>';
+        rcRow += '<span style="font-family:DM Mono,monospace;font-size:10px;background:'+cat.color+'18;border:1px solid '+cat.color+'44;border-radius:6px;padding:3px 8px;color:'+col+';margin-right:4px;margin-bottom:4px;display:inline-block;">'+(cat.short||key)+' '+(parseFloat(diff)>0?'+':'')+diff+'s</span>';
       });
-      if (rcRow) html += '<div style="margin-bottom:6px;font-family:DM Mono,monospace;font-size:10px;color:var(--muted);margin-top:4px;">Red Curve '+mainDist+'m: '+rcRow+'</div>';
+      if (rcRow) html += '<div style="margin-bottom:6px;margin-top:4px;display:flex;flex-wrap:wrap;align-items:center;gap:2px;"><span style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);margin-right:4px;">Red Curve '+mainDist+'m:</span>'+rcRow+'</div>';
     }
 
     // Nb compéts + période
