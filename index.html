@@ -166,12 +166,15 @@ body.light-theme canvas { filter:invert(0); }
 
 /* CHRONOMÈTRE */
 #chronoOverlay {
-  position:fixed; bottom:16px; right:16px; z-index:999;
+  position:fixed; bottom:calc(16px + env(safe-area-inset-bottom, 0px)); right:16px; z-index:999;
   background:rgba(17,17,20,0.97); border:1px solid var(--accent);
-  border-radius:8px; padding:14px 16px; min-width:220px; max-width:280px;
+  border-radius:8px; padding:14px 16px; min-width:220px; max-width:min(280px, calc(100vw - 32px));
   box-shadow:0 4px 32px rgba(0,0,0,.7);
   display:flex; flex-direction:column; gap:6px;
   user-select:none; cursor:move;
+  /* Empêcher le chrono de déborder en haut sur iOS */
+  max-height:calc(100vh - env(safe-area-inset-top, 44px) - env(safe-area-inset-bottom, 0px) - 32px);
+  overflow-y:auto;
 }
 .hidden { display:none !important; }
 #chronoOverlay.hidden { display:none; }
@@ -407,7 +410,7 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
 
 <!-- ══ PAGE CALC ══ -->
 <!-- ══ CHRONOMÈTRE OVERLAY ══ -->
-<div id="chronoOverlay" class="hidden" onmousedown="chronoDragStart(event)">
+<div id="chronoOverlay" class="hidden" onmousedown="chronoDragStart(event)" ontouchstart="chronoDragStart(event)">
   <!-- En-tête : drag handle + fermer -->
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;cursor:move;">
     <span style="font-family:'DM Mono',monospace;font-size:11px;letter-spacing:2px;color:var(--accent);">⏱ CHRONO</span>
@@ -9652,10 +9655,23 @@ function chronoDragStart(e) {
   _chronoDragging = true;
   const el = document.getElementById('chronoOverlay');
   const rect = el.getBoundingClientRect();
-  _chronoDragOX = e.clientX - rect.left;
-  _chronoDragOY = e.clientY - rect.top;
+  const pt = e.touches ? e.touches[0] : e;
+  _chronoDragOX = pt.clientX - rect.left;
+  _chronoDragOY = pt.clientY - rect.top;
   document.addEventListener('mousemove', _chronoDragMove);
   document.addEventListener('mouseup',   _chronoDragEnd);
+  document.addEventListener('touchmove', _chronoDragMoveTouch, {passive:false});
+  document.addEventListener('touchend',  _chronoDragEnd);
+}
+function _chronoDragMoveTouch(e) {
+  e.preventDefault();
+  if (!_chronoDragging || !e.touches[0]) return;
+  const el = document.getElementById('chronoOverlay');
+  const safeTop = 50;
+  const x = Math.max(8, Math.min(e.touches[0].clientX - _chronoDragOX, window.innerWidth - el.offsetWidth - 8));
+  const y = Math.max(safeTop, Math.min(e.touches[0].clientY - _chronoDragOY, window.innerHeight - el.offsetHeight - 8));
+  el.style.left = x + 'px'; el.style.top = y + 'px';
+  el.style.right = 'auto'; el.style.bottom = 'auto';
 }
 function _chronoDragMove(e) {
   if (!_chronoDragging) return;
@@ -9669,6 +9685,8 @@ function _chronoDragEnd() {
   _chronoDragging = false;
   document.removeEventListener('mousemove', _chronoDragMove);
   document.removeEventListener('mouseup',   _chronoDragEnd);
+  document.removeEventListener('touchmove', _chronoDragMoveTouch);
+  document.removeEventListener('touchend',  _chronoDragEnd);
 }
 
 // ── Ouvrir / fermer ──
