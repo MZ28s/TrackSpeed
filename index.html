@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <!-- TrackSpeed v0.3 - build 20260318c -->
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TrackSpeed v0.4</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -1546,6 +1546,46 @@ function sbSyncBadgeSet(text, color, autoReset) {
 }
 
 // ── Sécurité : échapper les données utilisateur avant insertion HTML ──
+
+
+// ── Toast d'erreur global ─────────────────────────────────────
+function _showErrorToast(msg) {
+  var existing = document.getElementById('_errToast');
+  if (existing) existing.remove();
+  var toast = document.createElement('div');
+  toast.id = '_errToast';
+  toast.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:99999;'
+    + 'background:#ef4444;color:#fff;font-family:DM Mono,monospace;font-size:12px;letter-spacing:1px;'
+    + 'padding:10px 18px;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.5);'
+    + 'max-width:calc(100vw - 32px);text-align:center;pointer-events:none;';
+  toast.textContent = '⚠ ' + (msg || 'Erreur réseau — réessaie');
+  document.body.appendChild(toast);
+  setTimeout(function(){ if(toast.parentNode) toast.remove(); }, 4000);
+}
+
+function _showSuccessToast(msg) {
+  var existing = document.getElementById('_okToast');
+  if (existing) existing.remove();
+  var toast = document.createElement('div');
+  toast.id = '_okToast';
+  toast.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:99999;'
+    + 'background:#22c55e;color:#000;font-family:DM Mono,monospace;font-size:12px;letter-spacing:1px;'
+    + 'padding:10px 18px;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.5);'
+    + 'max-width:calc(100vw - 32px);text-align:center;pointer-events:none;';
+  toast.textContent = '✓ ' + (msg || 'Sauvegardé');
+  document.body.appendChild(toast);
+  setTimeout(function(){ if(toast.parentNode) toast.remove(); }, 2500);
+}
+
+// ── fmtDate — fonction globale unique ─────────────────────────
+function fmtDate(key) {
+  var d = new Date((key||'') + 'T12:00:00');
+  if (isNaN(d)) return key || '—';
+  var days   = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+  var months = ['jan.','fév.','mar.','avr.','mai','juin','juil.','aoû.','sep.','oct.','nov.','déc.'];
+  return days[d.getDay()] + ' ' + d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+}
+
 function esc(str) {
   if (!str) return '';
   return String(str)
@@ -1804,7 +1844,7 @@ function appRefresh() {
 
 function sbForcePull() {
   if (!_sbUser || !_sb) { sbSyncBadgeSet('non connecté', '#ef4444', true); return; }
-  sbPullAll().then(function() { renderProfiles(); renderHome(); loadCustomTemplates(); });
+  sbPullAll().then(function() { renderProfiles(); renderHome(); loadCustomTemplates(); }).catch(function(e){ _showErrorToast("Chargement échoué — vérifie ta connexion"); console.error(e); });
 }
 
 function sbForcePush() {
@@ -4168,7 +4208,7 @@ function _injectVacancesInView(planifId) {
   Object.keys(byAth).forEach(function(name) {
     var col = athColorMap[byAth[name][0].athlete_uid];
     panel.innerHTML += '<div style="margin-bottom:8px;">'
-      +'<div style="font-family:DM Mono,monospace;font-size:11px;color:'+col+';margin-bottom:4px;">'+name+'</div>'
+      +'<div style="font-family:DM Mono,monospace;font-size:11px;color:'+col+';margin-bottom:4px;">'+esc(name)+'</div>'
       +byAth[name].map(function(v) {
         return '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:'+col+'18;border:1px solid '+col+'44;border-radius:6px;margin-bottom:4px;">'
           +'<div style="width:10px;height:10px;border-radius:2px;background:'+col+';flex-shrink:0;"></div>'
@@ -7524,13 +7564,7 @@ function renderHistoryInline() {
     byDate[key].push(s);
   });
 
-  function fmtDate(key) {
-    var d = new Date(key + 'T12:00:00');
-    if (isNaN(d)) return key;
-    var days = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
-    var months = ['jan.','fév.','mar.','avr.','mai','juin','juil.','aoû.','sep.','oct.','nov.','déc.'];
-    return days[d.getDay()] + ' ' + d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
-  }
+  // fmtDate — utilise la fonction globale
 
   var html = '';
   dateOrder.forEach(function(dateKey) {
@@ -7595,12 +7629,7 @@ function _renderHistoryFromCS(container, sessions) {
     return;
   }
 
-  function fmtDate(key) {
-    var d = new Date((key||'')+'T12:00:00'); if(isNaN(d))return key;
-    var days=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
-    var months=['jan.','fév.','mar.','avr.','mai','juin','juil.','aoû.','sep.','oct.','nov.','déc.'];
-    return days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()]+' '+d.getFullYear();
-  }
+  // fmtDate — utilise la fonction globale
 
   // Grouper par date puis par blocs (même séance collective)
   var byDate = {}; var dateOrder = [];
@@ -13767,13 +13796,7 @@ function renderAthHistory() {
         byDate[key].push(s);
       });
 
-      function fmtDate(key) {
-        var d = new Date(key + 'T12:00:00');
-        if (isNaN(d)) return key;
-        var days = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
-        var months = ['jan.','fév.','mar.','avr.','mai','juin','juil.','aoû.','sep.','oct.','nov.','déc.'];
-        return days[d.getDay()] + ' ' + d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
-      }
+      // fmtDate — utilise la fonction globale
 
       var html = '';
 
