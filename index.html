@@ -20,7 +20,7 @@ body::before {
     repeating-linear-gradient(90deg,transparent,transparent 40px,rgba(255,255,255,.01) 40px,rgba(255,255,255,.01) 41px);
 }
 /* NAV */
-.nav { position:fixed; bottom:0; left:0; right:0; background:#111114; backdrop-filter:blur(12px); border-top:2px solid var(--accent); display:flex; z-index:9999; padding-bottom:env(safe-area-inset-bottom); min-height:60px; }
+.nav { position:fixed; bottom:0; left:0; right:0; background:#111114; backdrop-filter:blur(12px); border-top:2px solid var(--accent); display:flex; z-index:9999; padding-bottom:env(safe-area-inset-bottom); min-height:60px; overflow-x:auto; }
 .nav-btn { flex:1; padding:10px 4px 8px; background:none; border:none; color:#9b9baa; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-family:'DM Mono',monospace; font-size:12px; letter-spacing:1px; text-transform:uppercase; transition:color .2s; -webkit-tap-highlight-color:transparent; }
 .nav-btn .icon { font-size:22px; line-height:1; }
 .nav-btn.active { color:var(--accent); }
@@ -102,7 +102,7 @@ tr.is-ref .dist-cell { color:var(--accent2); }
 .btn-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
 /* PROFILES */
 .profile-list { display:flex; flex-direction:column; gap:10px; }
-.profile-item { background:var(--surface2); border:1px solid var(--border); border-radius:2px; padding:16px 20px; display:flex; align-items:center; justify-content:space-between; transition:border-color .18s; }
+.profile-item { background:var(--surface2); border:1px solid var(--border); border-radius:2px; padding:16px 20px; display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:8px; transition:border-color .18s; }
 .profile-item.selected { border-color:var(--accent2); }
 .profile-name { font-family:'Bebas Neue',sans-serif; font-size:24px; letter-spacing:1px; }
 .profile-sub { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px; }
@@ -248,7 +248,7 @@ body.light-theme canvas { filter:invert(0); }
 }
 .ath-header-name { font-family: 'Bebas Neue', sans-serif; font-size: 20px; color: var(--accent); letter-spacing: 2px; line-height: 1; }
 .ath-header-week { font-family: 'DM Mono', monospace; font-size: 8px; color: var(--muted); letter-spacing: 1px; margin-top: 2px; }
-.ath-page { display: none; overflow-y: auto; height: calc(100vh - 56px - 72px); padding: 20px 16px 32px; -webkit-overflow-scrolling: touch; }
+.ath-page { display: none; overflow-y: auto; height: calc(100vh - 56px - 72px - env(safe-area-inset-bottom, 0px)); padding: 20px 16px 32px; -webkit-overflow-scrolling: touch; }
 .ath-page.active { display: block; animation: fadeUp .25s ease both; }
 .ath-nav { position: relative; z-index: 9001; flex-shrink: 0; background: rgba(10,10,11,.97); backdrop-filter: blur(12px); border-top: 1px solid var(--border); display: flex; padding-bottom: env(safe-area-inset-bottom); height: 72px; }
 .ath-nav-btn { flex: 1; background: none; border: none; color: var(--muted); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-family: 'DM Mono', monospace; font-size: 8px; letter-spacing: .5px; text-transform: uppercase; transition: color .15s; -webkit-tap-highlight-color: transparent; }
@@ -342,27 +342,33 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
 .stab { font-size: 11px !important; letter-spacing: 0.5px !important; }
 .fb-athlete-card { padding: 18px 16px; }
 @media (max-width: 480px) {
+  /* ── GÉNÉRAL ── */
   .input-grid { grid-template-columns: 1fr; }
   .btn-row { flex-direction: column; }
   .btn-row .btn { width: 100%; text-align: center; }
-  h1 { font-size: clamp(44px, 13vw, 64px); }
-  .results-header { padding: 14px 16px; }
-  th { padding: 10px 10px; font-size: 9px; }
-  td { padding: 12px 10px; font-size: 13px; }
+  h1 { font-size: clamp(36px, 11vw, 56px); }
+  .results-header { padding: 12px 14px; }
+  th { padding: 8px 8px; font-size: 9px; }
+  td { padding: 10px 8px; font-size: 12px; }
+  .page { padding: 16px 14px 20px; }
 
-  /* ── PROFILS : fix layout sur mobile ── */
+  /* ── HEADER coach ── */
+  .page-header { margin-bottom: 16px; }
+
+  /* ── PROFILS ── */
   .profile-item {
     flex-direction: column;
     align-items: flex-start;
     gap: 10px;
     padding: 12px 14px;
   }
-  .profile-name { font-size: 20px; }
+  .profile-name { font-size: 18px; }
   .profile-sub {
     white-space: normal;
     word-break: break-word;
     font-size: 11px;
     line-height: 1.5;
+    max-width: 100%;
   }
   .profile-actions {
     width: 100%;
@@ -371,37 +377,66 @@ input[type="email"] { font-size: 16px !important; min-height: 52px; padding: 14p
   }
   .profile-actions .icon-btn { flex: 1; min-width: 36px; }
 
-  /* ── PLANIF : titre planif compact ── */
+  /* ── PLANIF liste ── */
   .planif-card-nom {
-    font-size: 16px !important;
-    line-height: 1.2;
+    font-size: 15px !important;
+    line-height: 1.2 !important;
     word-break: break-word;
   }
   .planif-card-btns {
-    flex-wrap: wrap;
-    gap: 4px;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+    margin-top: 8px;
+    width: 100%;
   }
   .planif-card-btns button {
     font-size: 10px !important;
-    padding: 4px 7px !important;
+    padding: 5px 8px !important;
     white-space: nowrap;
+    flex: 1;
   }
+
+  /* ── Tabs (stab) planif ── */
+  .stab { font-size: 10px !important; padding: 10px 4px !important; letter-spacing: 0 !important; }
 
   /* ── BILAN SAISON : RC badges wrap ── */
-  #bilanSaisonContent .rc-badge-row {
-    flex-wrap: wrap;
-    gap: 4px;
-  }
+  #bilanSaisonContent .rc-badge-row { flex-wrap: wrap; gap: 4px; }
 
-  /* ── SÉANCE : légende compact ── */
-  #multiLegend {
-    font-size: 11px;
-    flex-wrap: wrap;
-    gap: 4px;
-  }
+  /* ── SÉANCE multi-athlètes ── */
+  #multiLegend { font-size: 10px; flex-wrap: wrap; gap: 4px; }
+  #multiTimesGrid { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .ath-time-input { width: 58px !important; font-size: 13px !important; }
 
-  /* ── HEADER coach : compact ── */
-  .page-header h1 { font-size: clamp(32px, 10vw, 52px); }
+  /* ── SÉANCE timer bloc ── */
+  #multiChronoDisplay { font-size: 32px; min-width: 80px; }
+  #multiChronoBar { flex-wrap: wrap; gap: 8px; }
+
+  /* ── CALENDRIER athlète ── */
+  #athCalGrid { font-size: 10px !important; }
+
+  /* ── PLANIF vues ── */
+  #planifViewContent { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* ── FRISE planif ── */
+  .planif-frise-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* ── Compet résultats coach ── */
+  .saison-grid { grid-template-columns: 1fr 1fr !important; gap: 6px !important; }
+
+  /* ── Force / 1RM ── */
+  .force-grid { grid-template-columns: 1fr 1fr !important; gap: 8px !important; }
+
+  /* ── Athlète nav : texte encore plus petit si 7 onglets ── */
+  .ath-nav-btn { font-size: 7px; }
+  .ath-nav-btn .icon { font-size: 20px; }
+
+  /* ── Athlète page padding ── */
+  .ath-page { padding: 14px 12px 24px; }
+
+  /* ── Chrono overlay ── */
+  #chronoOverlay { min-width: 180px; padding: 10px 12px; }
+  #chronoDisplay { font-size: 52px; }
 }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -4282,7 +4317,7 @@ function _vueFrise(planif) {
   if (!sorted.length) return '<div style="padding:20px;font-family:\'DM Mono\',monospace;font-size:12px;color:var(--muted);">Aucune semaine planifiée.</div>';
 
   var MOIS = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'];
-  var html = '<div style="overflow-x:auto;padding:16px 16px 0;">';
+  var html = '<div class="planif-frise-wrap" style="overflow-x:auto;padding:16px 16px 0;-webkit-overflow-scrolling:touch;">';
 
   // Déterminer les mois traversés pour l'axe
   var months = {}, monthOrder = [];
